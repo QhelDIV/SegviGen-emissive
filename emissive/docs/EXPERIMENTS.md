@@ -8,10 +8,15 @@ this one (they are updated live during a run, this file is a point-in-time snaps
 
 ## Quick start (condensed — see root README.md for the full version)
 
-```
+```bash
+# bundled example, runs as-is (defaults: --draws 4 --thr 0.5, recommended ckpt)
 python emissive/infer/predict_emissive.py \
-    --glb YOUR.glb --out OUTDIR \
-    [--draws 4] [--thr 0.5] [--zero_cond | --image cond.png] [--ckpt /path/to/ckpt]
+    --glb data_toolkit/assets/example.glb --out results/example --zero_cond
+
+# your own mesh, explicit checkpoint
+python emissive/infer/predict_emissive.py \
+    --glb /path/to/your_mesh.glb --out results/your_mesh --zero_cond \
+    --ckpt /3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/emis_2k_bal/epoch_0008.ckpt
 ```
 Default `--ckpt` = the recommendation below (`emis_1k_w5` epoch 16 EMA). Outputs
 `OUTDIR/mask.npz` (`coords` int32 @512-res, `prob` float32, `mask` bool),

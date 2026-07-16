@@ -18,17 +18,38 @@ upstream's own files (`inference_full.py`, `inference_interactive.py`,
 (Not on the SFU cluster? All four paths above are cluster-specific — see
 "Cluster paths to adjust" further down for what to change.)
 
-**The command** (this exact invocation, minus `--zero_cond`/input path, is what
-passed the 2026-07-16 GPU smoke test — job 232600, see
-`emissive/docs/EXPERIMENTS.md`):
-```
+**Try it on the bundled example** (ships with the repo, runs as-is):
+```bash
 python emissive/infer/predict_emissive.py \
-    --glb YOUR.glb --out OUTDIR \
-    [--draws 4] [--thr 0.5] [--zero_cond | --image cond.png] [--ckpt /path/to/ckpt]
+    --glb data_toolkit/assets/example.glb --out results/example --zero_cond
 ```
-`--ckpt` defaults to the current recommended checkpoint (`emis_1k_w5`, epoch 16
-EMA); pass `--ckpt` to override. See `emissive/docs/EXPERIMENTS.md` for the
-full registry and why that one's the default.
+
+**Run on your own mesh** (defaults: `--draws 4 --thr 0.5`, recommended checkpoint):
+```bash
+python emissive/infer/predict_emissive.py \
+    --glb /path/to/your_mesh.glb --out results/your_mesh --zero_cond
+```
+
+**Fast preview** — this is the exact command that passed the 2026-07-16 GPU
+smoke test (job 232600, ~2 min on an L40S; see `emissive/docs/EXPERIMENTS.md`):
+```bash
+python emissive/infer/predict_emissive.py \
+    --glb dataset/overfit_10/ce28711b7d614918a7239b97c089d311/glb/ce28711b7d614918a7239b97c089d311_input.glb \
+    --out results/smoke --draws 2 --steps 12 --zero_cond
+```
+
+**Use a different checkpoint** (default is the recommended `emis_1k_w5` epoch-16
+EMA; see `emissive/docs/EXPERIMENTS.md` for the registry and why):
+```bash
+python emissive/infer/predict_emissive.py \
+    --glb /path/to/your_mesh.glb --out results/your_mesh --zero_cond \
+    --ckpt /3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/emis_2k_bal/epoch_0008.ckpt
+```
+
+Other flags: `--draws N` (samples averaged per shape, default 4), `--thr` (mask
+threshold, default 0.5), `--steps` (flow steps, default 12), `--seed`, and
+`--image cond.png` to condition on a real render instead of `--zero_cond`
+(⚠ untested on GPU so far — see "Honest expectations" below).
 
 **Input**: any textured `.glb`, from any source — it gets voxelized and
 normalized internally (`data_toolkit/glb_to_vxz.py`), so it doesn't need to be
