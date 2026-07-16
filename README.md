@@ -6,6 +6,64 @@ upstream file is modified; everything new lives under `emissive/` (reorganized
 upstream's own files (`inference_full.py`, `inference_interactive.py`,
 `trellis2/`, `data_toolkit/`, `assets/`) stay exactly where upstream put them.
 
+## Quick start: predict an emissive mask
+
+**Requirements:**
+- A GPU node (this does not run on CPU).
+- The `trellis2` conda env: `source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh && conda activate trellis2`
+- `export HF_HOME=/3dlg-jupiter-project/lightgen/hf_cache`
+- The repo present on cluster storage (checked out or rsynced — see the
+  deployment convention under "Layout" below).
+
+(Not on the SFU cluster? All four paths above are cluster-specific — see
+"Cluster paths to adjust" further down for what to change.)
+
+**The command** (this exact invocation, minus `--zero_cond`/input path, is what
+passed the 2026-07-16 GPU smoke test — job 232600, see
+`emissive/docs/EXPERIMENTS.md`):
+```
+python emissive/infer/predict_emissive.py \
+    --glb YOUR.glb --out OUTDIR \
+    [--draws 4] [--thr 0.5] [--zero_cond | --image cond.png] [--ckpt /path/to/ckpt]
+```
+`--ckpt` defaults to the current recommended checkpoint (`emis_1k_w5`, epoch 16
+EMA); pass `--ckpt` to override. See `emissive/docs/EXPERIMENTS.md` for the
+full registry and why that one's the default.
+
+**Input**: any textured `.glb`, from any source — it gets voxelized and
+normalized internally (`data_toolkit/glb_to_vxz.py`), so it doesn't need to be
+one of our own "somage" assets. A dataset-style `*_input.glb` (e.g. under
+`dataset/<split>/<sid>/glb/`) also works directly, unmodified — that's what
+the smoke test used. Runtime: ~2 min on an L40S at `--draws 2` (measured);
+scales roughly linearly with `--draws`.
+
+**Outputs** (in `OUTDIR/`): `mask.npz` — per-voxel prediction at the decode
+resolution (512):
+```python
+import numpy as np
+d = np.load("OUTDIR/mask.npz")
+coords, prob, mask = d["coords"], d["prob"], d["mask"]
+# coords: (N,3) int32, voxel indices @512-res
+# prob:   (N,)  float32, averaged predicted probability in ~[0,1]
+# mask:   (N,)  bool, prob > --thr
+```
+Plus `pred_mesh.glb` — the decoded mesh with the mask baked in as base color
+(white = emissive, black = not), and `meta.json` (ckpt, draws, threshold,
+timing).
+
+**SLURM route**: `emissive/slurm/predict_smoke.sbatch` is the template (the
+exact sbatch used for the passing smoke test above) — copy and edit its
+`--glb`/args for a new input.
+
+**Honest expectations**: the current best checkpoint scores ≈0.117 mean IoU on
+nonzero-glow val shapes under our eval protocol (K=4 averaged, @0.5 — see
+`emissive/docs/EXPERIMENTS.md`) — well short of even the non-deployable
+zero-shot oracle (0.219), and it specifically struggles on shapes with only a
+small emissive region (tiny-glow IoU 0.04–0.06 vs 0.32–0.43 on large-glow
+shapes), so expect it to miss or over/under-paint small emissive regions.
+`--zero_cond` is the validated path (job 232600); `--image`/real-image
+conditioning has not yet been smoke-tested on GPU.
+
 ## What this adds
 
 SegviGen's pretrained `full_seg` flow predicts per-voxel part-segmentation

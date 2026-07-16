@@ -6,6 +6,19 @@ Numbers are cross-checked against `notes/2026-07-07_autonomous_run_state.md` and
 `ROADMAP.md` in the parent `lightgen` project tree; those files win on any conflict with
 this one (they are updated live during a run, this file is a point-in-time snapshot).
 
+## Quick start (condensed — see root README.md for the full version)
+
+```
+python emissive/infer/predict_emissive.py \
+    --glb YOUR.glb --out OUTDIR \
+    [--draws 4] [--thr 0.5] [--zero_cond | --image cond.png] [--ckpt /path/to/ckpt]
+```
+Default `--ckpt` = the recommendation below (`emis_1k_w5` epoch 16 EMA). Outputs
+`OUTDIR/mask.npz` (`coords` int32 @512-res, `prob` float32, `mask` bool),
+`pred_mesh.glb` (white=emissive), `meta.json`. Template sbatch:
+`emissive/slurm/predict_smoke.sbatch`. GPU-tested 2026-07-16 (job 232600) — see
+"predict_emissive.py status" below for the full validation record.
+
 All checkpoint paths are on the `/3dlg-jupiter-project` NFS mount (jupiter cluster). Every
 serious run directory holds `epoch_NNNN.ckpt` + `epoch_NNNN_ema.ckpt` (~2.62 GB each) plus
 `best.ckpt` (symlink to the epoch selected by `--select_on`, see
