@@ -163,3 +163,49 @@ used `os.path.join(ROOT, "eval")` instead of `os.path.join(ROOT, "emissive", "ev
 Not yet exercised by this smoke test: the real-cond path (`--image` / render-from-glb,
 needs `bpy` in the trellis2 env) — this run used `--zero_cond`. Recommend a follow-up
 smoke test dropping `--zero_cond` before relying on real-cond inference.
+
+### Per-face mesh labels (`pred_mesh_labels.npz` / `--label_input_mesh`) — added + validated 2026-07-16
+
+**Job 232606** (first run of the feature, `feat/mesh-mask` branch, same input/ckpt/params
+as 232600 + `--label_input_mesh`): exit 0:0, 00:01:47. All shape/dtype/load checks passed
+(`pred_mesh_labels.npz` F matched `pred_mesh.glb`'s face count, `input_mesh_labels.npz` F
+matched the input glb's, `input_mesh_labeled.glb` loaded in trimesh) — but the deeper
+correctness check caught a real bug: **texture-vs-face_mask agreement = 0.428** (well
+under the ≥0.9 bar) with a 99.1% voxel-lookup fallback rate (871/98493 exact hits).
+
+**Root cause, found empirically then anchored analytically** (not just fit to one shape):
+comparing `pred_mesh.glb`'s bounding-box extents against the voxel-coords' bbox showed Y
+and Z swapped. An exhaustive search over the 48 axis-permutation × sign-flip candidates,
+scored against the mesh's own baked texture (ground truth), found one that jumps agreement
+to 0.9396: `(x,y,z) -> (x,-z,y)`. This was then LOCATED in the actual code that causes it:
+`o_voxel.postprocess.to_glb` (the function `inference_full.slat_to_glb` calls) — installed
+at `.../site-packages/o_voxel/postprocess.py` — ends with an unconditional coordinate
+conversion:
+```python
+# postprocess.py:312  # Swap Y and Z axes, invert Y (common conversion for GLB compatibility)
+# postprocess.py:313  vertices_np[:, 1], vertices_np[:, 2] = vertices_np[:, 2], -vertices_np[:, 1]
+# postprocess.py:314  normals_np[:, 1], normals_np[:, 2]  = normals_np[:, 2], -normals_np[:, 1]
+# postprocess.py:315  uvs_np[:, 1] = 1 - uvs_np[:, 1]  # Flip UV V-coordinate
+```
+Forward: `(x,y,z) -> (x,z,-y)`. Solving for the inverse gives `(x,y,z) = (X,-Z,Y)` —
+exactly the empirically-found correction (`PRED_MESH_AXES=(0,2,1)`,
+`PRED_MESH_SIGNS=(1,-1,1)` in `predict_emissive.py`). The same source lines' UV V-flip
+(`postprocess.py:315`) also independently confirms the `1 - v` UV-sampling convention
+`_texture_face_agreement` uses. This is a fixed, unconditional transform applied to every
+shape `to_glb` processes (not shape-dependent), so it isn't at risk of having been a
+false-positive fit to one near-symmetric shape.
+
+**Job 232608** (same input/ckpt/params, after the fix): exit 0:0, 00:01:32.
+`texture-vs-face_mask agreement = 0.9413 (PASS)`. 98468 faces (12586 exact / 85882
+nearest-fallback voxel lookups — decoded-mesh vertices from Dual Contouring + heavy
+simplification, ~3.3M faces down to ~100k target, essentially never land exactly on the
+dense 512³ grid the flow was sampled on, so the KDTree fallback doing the bulk of the work
+is expected, not a bug); face frac emissive=0.539 (voxel frac=0.411 — face-level and
+voxel-level fractions aren't required to match exactly, since faces sample the surface
+while voxel frac counts the full occupied grid, but both are the same "ballpark" order of
+magnitude). `input_mesh_labels`: 1745 faces, 1742 exact / 3 fallback (99.8% exact —
+confirms no correction is needed for the input-mesh path), face frac emissive=0.594.
+
+Not yet exercised: `--label_input_mesh` on a second, more asymmetric shape (only one shape
+tested so far) — the fix itself is anchored to source code rather than shape-specific, but
+a second shape would further confirm the KDTree-fallback behavior generalizes.

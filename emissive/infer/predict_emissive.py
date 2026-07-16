@@ -165,20 +165,30 @@ def _check_frame(lo, hi, tag):
               flush=True)
 
 
-# Empirically measured 2026-07-16 (see emissive/docs/EXPERIMENTS.md validation record):
-# inference_full.slat_to_glb's exported mesh (pred_mesh.glb) is NOT in the same axis
-# convention as glb_to_vxz's voxel grid / out_coords. Bounding-box extents alone showed it
-# (pred_mesh's Y/Z extents were swapped vs the input mesh's), and an exhaustive search over
-# the 48 axis-permutation x sign-flip candidates against the mesh's OWN baked texture (the
-# ground truth: which faces are ACTUALLY white) confirmed the one that matches:
-# corrected = vertices[:, (0,2,1)] * (1,-1,1)  i.e. (x,y,z) -> (x,-z,y). Baked-texture-vs-
-# face_mask agreement: 0.428 uncorrected -> 0.940 corrected. Likely cause: o_voxel's
-# internal mesh processing (Dual Contouring etc.) is Z-up, and `to_glb` converts to Y-up
-# only for its OWN exported mesh vertices (glTF requires Y-up) — but out_coords, built by
-# glb_to_vxz straight off the ALREADY-Y-up input glTF, never goes through that conversion.
-# This correction is needed ONLY for pred_mesh (the slat_to_glb output) — NOT for
-# _normalized_input_mesh, which is built by voxelizing the same Y-up input directly and
-# measured at 99.8% exact-voxel-hit rate with NO correction.
+# ANCHORED ANALYTICALLY, not just fit to one shape (2026-07-16, see EXPERIMENTS.md): found
+# empirically first (bbox-extent mismatch + a 48-candidate permutation/sign search scored
+# against the mesh's own baked texture — see the validation record), then located and
+# confirmed in the actual code that causes it. o_voxel.postprocess.to_glb -- the function
+# inference_full.slat_to_glb calls to produce pred_mesh.glb -- ends with this exact,
+# unconditional (every shape, not shape-dependent) coordinate-system conversion, in the
+# installed package at .../site-packages/o_voxel/postprocess.py:
+#
+#   o_voxel/postprocess.py:312  # Swap Y and Z axes, invert Y (common conversion for GLB compatibility)
+#   o_voxel/postprocess.py:313  vertices_np[:, 1], vertices_np[:, 2] = vertices_np[:, 2], -vertices_np[:, 1]
+#   o_voxel/postprocess.py:314  normals_np[:, 1], normals_np[:, 2]  = normals_np[:, 2], -normals_np[:, 1]
+#   o_voxel/postprocess.py:315  uvs_np[:, 1] = 1 - uvs_np[:, 1]  # Flip UV V-coordinate
+#
+# i.e. FORWARD (internal/voxel frame -> exported pred_mesh.glb frame): (x,y,z) -> (x,z,-y).
+# The inverse (exported -> internal, which is what we need: out_coords/glb_to_vxz's frame
+# never goes through this conversion, since it voxelizes the already-Y-up INPUT glb
+# directly) is, solving X=x,Y=z,Z=-y for (x,y,z): (x,y,z) = (X,-Z,Y) — EXACTLY the
+# `vertices[:, (0,2,1)] * (1,-1,1)` correction below. Baked-texture-vs-face_mask agreement
+# (job 232608): 0.428 uncorrected -> 0.9413 corrected — matches this derivation, not a
+# coincidental fit (the same source lines' UV V-flip also independently confirms the
+# `1 - v` convention used in _texture_face_agreement below). Needed ONLY for pred_mesh (the
+# slat_to_glb/to_glb output) — NOT for _normalized_input_mesh, which voxelizes the same
+# Y-up input directly and never goes through to_glb's conversion (measured 99.8%
+# exact-voxel-hit rate with no correction).
 PRED_MESH_AXES = (0, 2, 1)
 PRED_MESH_SIGNS = (1.0, -1.0, 1.0)
 
@@ -260,7 +270,9 @@ def _texture_face_agreement(mesh, face_mask):
     h, w = arr.shape[:2]
     face_uv = uv[mesh.faces].mean(axis=1)
     px = np.clip((face_uv[:, 0] * (w - 1)).astype(np.int64), 0, w - 1)
-    py = np.clip(((1 - face_uv[:, 1]) * (h - 1)).astype(np.int64), 0, h - 1)   # glTF V is flipped vs image rows
+    py = np.clip(((1 - face_uv[:, 1]) * (h - 1)).astype(np.int64), 0, h - 1)   # glTF V is flipped vs image
+    # rows -- confirmed against o_voxel/postprocess.py:315 (`uvs_np[:,1] = 1-uvs_np[:,1]`),
+    # the exact source of pred_mesh.glb's UV convention (see PRED_MESH_AXES/_SIGNS above)
     sampled = arr[py, px].mean(axis=1)
     tex_white = sampled > 0.5
     return float((tex_white == face_mask).mean())
