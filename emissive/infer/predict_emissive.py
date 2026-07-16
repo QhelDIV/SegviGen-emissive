@@ -36,7 +36,10 @@ logic):
      the predicted per-voxel probability/mask by nearest voxel in the shared [-0.5,0.5]^3 /
      512-res frame (glb_to_vxz's aabb == inference_full.slat_to_glb's aabb/origin — a
      mesh-bounds check + a baked-texture-vs-face_mask agreement check are printed at
-     runtime as an empirical, not assumed, verification of this). Written to
+     runtime as an empirical, not assumed, verification of this: it caught a REAL axis
+     mismatch — slat_to_glb's exported mesh isn't in the same axis convention as the raw
+     voxel coords, see PRED_MESH_AXES/_SIGNS/_to_voxel_frame for the measured correction
+     and emissive/docs/EXPERIMENTS.md for the before/after agreement numbers). Written to
      pred_mesh_labels.npz, always. With --label_input_mesh: the SAME lookup, but against
      the ORIGINAL input glb's faces (reproducing glb_to_vxz.py's own load+normalize so face
      order matches a plain trimesh.load(...).to_mesh() of the user's file — see
@@ -147,18 +150,45 @@ def _as_single_mesh(glb_obj):
     return geoms[0]
 
 
-def _check_frame(mesh, tag):
-    """Empirical (not assumed) check that `mesh`'s vertices actually live in VOXEL_AABB —
-    per owner request, since the voxel-lookup in _label_mesh_faces silently produces
-    garbage if this frame assumption is wrong. Prints bounds; warns (does not raise) if
-    they exceed the expected box by more than a hair (mesh simplification/Dual Contouring
-    could in principle overshoot slightly at the boundary)."""
-    lo, hi = mesh.bounds
+def _check_frame(lo, hi, tag):
+    """Empirical (not assumed) check that a mesh's vertex bounds (`lo`, `hi`) actually sit
+    in VOXEL_AABB — per owner request, since the voxel-lookup in _label_mesh_faces silently
+    produces garbage if this frame assumption is wrong. Prints bounds; warns (does not
+    raise) if they exceed the expected box by more than a hair. Bounds-matching alone is
+    NOT sufficient to confirm axis correspondence, though — see PRED_MESH_AXES/_SIGNS and
+    _texture_face_agreement for the check that actually caught the real mismatch below."""
+    import numpy as np
     print(f"[frame check:{tag}] bounds = {lo} .. {hi}  (expect within {VOXEL_AABB})", flush=True)
-    if (lo < -0.51).any() or (hi > 0.51).any():
-        print(f"[WARN] {tag} mesh bounds exceed the expected {VOXEL_AABB} frame by >0.01 — "
+    if (np.asarray(lo) < -0.51).any() or (np.asarray(hi) > 0.51).any():
+        print(f"[WARN] {tag} bounds exceed the expected {VOXEL_AABB} frame by >0.01 — "
               f"the voxel-lookup labels below may be WRONG. Investigate before trusting them.",
               flush=True)
+
+
+# Empirically measured 2026-07-16 (see emissive/docs/EXPERIMENTS.md validation record):
+# inference_full.slat_to_glb's exported mesh (pred_mesh.glb) is NOT in the same axis
+# convention as glb_to_vxz's voxel grid / out_coords. Bounding-box extents alone showed it
+# (pred_mesh's Y/Z extents were swapped vs the input mesh's), and an exhaustive search over
+# the 48 axis-permutation x sign-flip candidates against the mesh's OWN baked texture (the
+# ground truth: which faces are ACTUALLY white) confirmed the one that matches:
+# corrected = vertices[:, (0,2,1)] * (1,-1,1)  i.e. (x,y,z) -> (x,-z,y). Baked-texture-vs-
+# face_mask agreement: 0.428 uncorrected -> 0.940 corrected. Likely cause: o_voxel's
+# internal mesh processing (Dual Contouring etc.) is Z-up, and `to_glb` converts to Y-up
+# only for its OWN exported mesh vertices (glTF requires Y-up) — but out_coords, built by
+# glb_to_vxz straight off the ALREADY-Y-up input glTF, never goes through that conversion.
+# This correction is needed ONLY for pred_mesh (the slat_to_glb output) — NOT for
+# _normalized_input_mesh, which is built by voxelizing the same Y-up input directly and
+# measured at 99.8% exact-voxel-hit rate with NO correction.
+PRED_MESH_AXES = (0, 2, 1)
+PRED_MESH_SIGNS = (1.0, -1.0, 1.0)
+
+
+def _to_voxel_frame(vertices):
+    """Apply the pred_mesh -> out_coords axis correction documented above. Only call this
+    on the DECODED mesh (pred_mesh.glb / slat_to_glb's output); the input mesh needs no
+    correction."""
+    import numpy as np
+    return vertices[:, PRED_MESH_AXES] * np.array(PRED_MESH_SIGNS)
 
 
 def _label_mesh_faces(vertices, faces, voxel_coords, voxel_prob, voxel_mask, resolution=VOXEL_RES):
@@ -402,9 +432,14 @@ def main():
     voxel_prob_np = prob.numpy().astype(np.float32)
     voxel_mask_np = mask.numpy()
     mesh_pred = _as_single_mesh(glb)
-    _check_frame(mesh_pred, "pred_mesh")
+    _check_frame(*mesh_pred.bounds, "pred_mesh (raw slat_to_glb output)")
+    # slat_to_glb's exported vertices are NOT in the same axis convention as out_coords —
+    # see PRED_MESH_AXES/_SIGNS above for the empirical evidence and the fix.
+    pred_vertices_voxel_frame = _to_voxel_frame(mesh_pred.vertices)
+    _check_frame(pred_vertices_voxel_frame.min(0), pred_vertices_voxel_frame.max(0),
+                 "pred_mesh (axis-corrected, used for the lookup below)")
     pred_face_prob, pred_face_mask, pred_n_exact, pred_n_fallback = _label_mesh_faces(
-        mesh_pred.vertices, mesh_pred.faces, out_coords, voxel_prob_np, voxel_mask_np)
+        pred_vertices_voxel_frame, mesh_pred.faces, out_coords, voxel_prob_np, voxel_mask_np)
     print(f"[pred_mesh_labels] {len(pred_face_mask)} faces, {pred_n_exact} exact / "
           f"{pred_n_fallback} nearest-fallback voxel lookups; face frac emissive="
           f"{pred_face_mask.mean():.3f} (voxel frac={voxel_mask_np.mean():.3f})", flush=True)
@@ -432,7 +467,10 @@ def main():
             f"face count mismatch between normalized ({len(mesh_norm.faces)}) and raw "
             f"({len(mesh_raw.faces)}) loads of {args.glb} — can't attach labels to the "
             f"original mesh by face index (see _normalized_input_mesh docstring)")
-        _check_frame(mesh_norm, "input_mesh(normalized)")
+        _check_frame(*mesh_norm.bounds, "input_mesh(normalized)")
+        # NO axis correction here -- _normalized_input_mesh voxelizes the same Y-up input
+        # glb_to_vxz uses, so it already shares out_coords' frame (measured 99.8% exact-hit
+        # rate with no correction; see PRED_MESH_AXES/_SIGNS comment above for contrast).
         in_face_prob, in_face_mask, in_n_exact, in_n_fallback = _label_mesh_faces(
             mesh_norm.vertices, mesh_norm.faces, out_coords, voxel_prob_np, voxel_mask_np)
         print(f"[input_mesh_labels] {len(in_face_mask)} faces, {in_n_exact} exact / "
