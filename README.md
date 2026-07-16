@@ -38,8 +38,10 @@ python emissive/infer/predict_emissive.py \
     --out results/smoke --draws 2 --steps 12 --zero_cond
 ```
 
-**Use a different checkpoint** (default is the recommended `emis_1k_w5` epoch-16
-EMA; see `emissive/docs/EXPERIMENTS.md` for the registry and why):
+**Use a different checkpoint** — the default is the recommended `emis_1k_w5`
+epoch-16 EMA:
+`/3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/emis_1k_w5/epoch_0016_ema.ckpt`
+(see `emissive/docs/EXPERIMENTS.md` for the registry and why):
 ```bash
 python emissive/infer/predict_emissive.py \
     --glb /path/to/your_mesh.glb --out results/your_mesh --zero_cond \

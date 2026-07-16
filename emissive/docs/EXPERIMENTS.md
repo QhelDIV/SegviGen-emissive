@@ -18,7 +18,8 @@ python emissive/infer/predict_emissive.py \
     --glb /path/to/your_mesh.glb --out results/your_mesh --zero_cond \
     --ckpt /3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/emis_2k_bal/epoch_0008.ckpt
 ```
-Default `--ckpt` = the recommendation below (`emis_1k_w5` epoch 16 EMA). Outputs
+Default `--ckpt` = the recommendation below (`emis_1k_w5` epoch 16 EMA =
+`/3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/emis_1k_w5/epoch_0016_ema.ckpt`). Outputs
 `OUTDIR/mask.npz` (`coords` int32 @512-res, `prob` float32, `mask` bool),
 `pred_mesh.glb` (white=emissive), `meta.json`. Template sbatch:
 `emissive/slurm/predict_smoke.sbatch`. GPU-tested 2026-07-16 (job 232600) — see
