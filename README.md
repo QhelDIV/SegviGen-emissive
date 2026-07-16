@@ -23,6 +23,13 @@ upstream's own files (`inference_full.py`, `inference_interactive.py`,
 python emissive/infer/predict_emissive.py \
     --glb data_toolkit/assets/example.glb --out results/example --zero_cond
 ```
+`--out` is an output **directory** (created automatically). After the run:
+```
+results/example/
+├── mask.npz        # per-voxel prediction: coords (N,3) @512-res, prob (N,), mask (N,)
+├── pred_mesh.glb   # decoded mesh, white = emissive / black = not
+└── meta.json       # ckpt, draws, threshold, timing
+```
 
 **Run on your own mesh** (defaults: `--draws 4 --thr 0.5`, recommended checkpoint):
 ```bash
