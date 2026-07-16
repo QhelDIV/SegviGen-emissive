@@ -150,7 +150,7 @@ def main():
     # --- heavy imports deferred to here so `--help` above never needs torch/trellis2/o_voxel ---
     sys.path.insert(0, SEGVIGEN)
     sys.path.insert(0, os.path.join(SEGVIGEN, "data_toolkit"))
-    sys.path.insert(0, os.path.join(ROOT, "eval"))  # sibling dir holding eval_emissive.py
+    sys.path.insert(0, os.path.join(ROOT, "emissive", "eval"))  # sibling dir holding eval_emissive.py
     os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
