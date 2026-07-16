@@ -1,97 +1,113 @@
-# SegviGen: Repurposing 3D Generative Model for Part Segmentation
+# Emissive branch: binary emissive-mask fine-tuning for SegviGen
 
-![teaser](assets/teaser.png)
+This branch is a pure addition on top of upstream Nelipot-Lee/SegviGen. No
+upstream file is modified; everything below is new, added at the repo root
+so that scripts can `from inference_full import Gen3DSeg` directly (as if
+they were part of the original codebase).
 
-## 🏠 [Project Page](https://fenghora.github.io/SegviGen-Page/) | [Paper](https://arxiv.org/abs/2603.16869) | [Online Demo](https://huggingface.co/spaces/fenghora/SegviGen)
+## What this adds
 
-***SegviGen*** is a framework for 3D part segmentation that leverages the rich 3D structural and textural knowledge encoded in large-scale 3D generative models. 
-It learns to predict part-indicative colors while reconstructing geometry, and unifies three settings in one architecture: **interactive part segmentation**, **full segmentation**, and **2D segmentation map–guided full segmentation** with arbitrary granularity.
+SegviGen's pretrained `full_seg` flow predicts per-voxel part-segmentation
+colors. This branch repurposes that same `Gen3DSeg` wrapper and sampling
+convention to predict a **binary emissive mask** (white = emissive, black =
+not) instead of multi-class part colors, via a standalone fine-tuning loop
+that warm-starts from a SegviGen checkpoint.
 
+Pipeline stages:
+1. **Data prep** — build a dataset of (shape, DINOv3 image condition,
+   binary emissive target) triples from "somage" assets.
+2. **Fine-tune** — a standalone training loop for `Gen3DSeg` with a
+   per-voxel `pos_weight` (for class imbalance), EMA of weights, and
+   best-checkpoint selection on a held-out split.
+3. **Eval** — threshold sweep, Otsu thresholding, and stratified metrics
+   (by emissive-voxel prevalence) against the fine-tuned or baseline model.
 
-## 🌟 Features
-- **Repurposed 3D Generative Priors for Data Efficiency**: By reusing the rich structural and textural knowledge encoded in large-scale native 3D generative models, ***SegviGen*** learns 3D part segmentation with minimal task-specific supervision, requiring only **0.32%** training data.
-- **Unified and Flexible Segmentation Settings**: Supports **interactive part segmentation**, **full segmentation**, and **2D segmentation map–guided full segmentation** with arbitrary part granularity under a single architecture.
-- **State-of-the-Art Accuracy**: Consistently surpasses P3-SAM, delivering a **40%** gain in IoU@1 for single-click interaction on PartObjaverse-Tiny and PartNeXT, and a **15%** improvement in overall IoU for unguided full segmentation averaged across datasets.
+## Files added
 
+Data prep / conversion:
+- `somage_to_glb.py` — convert our "somage" asset format to GLB so
+  SegviGen's `data_toolkit` (glb_to_vxz etc.) can ingest it.
+- `make_emis_mask.py` — compute the binary per-voxel emissive mask from
+  source asset metadata.
+- `build_dataset.py` — end-to-end dataset builder: somage → GLB → voxel
+  grid → binary emissive target + DINOv3 conditioning, written to a
+  train/val split.
+- `gt_parts_extract.py` — extract ground-truth part labels from source
+  assets (used for stratified eval and sanity checks).
 
-## 🔨 Installation
+Training / eval:
+- `train_emissive.py` — standalone fine-tune loop for `Gen3DSeg`, warm-started
+  from a SegviGen checkpoint (`--init_ckpt`, defaults to `full_seg`).
+  Per-voxel `pos_weight`, EMA, and best-checkpoint-by-eval-metric selection.
+  Reuses `eval_emissive.py`'s `load_eval_models` / `evaluate_split` for
+  periodic validation during training.
+- `eval_emissive.py` — evaluation: loads a checkpoint (baseline or
+  fine-tuned), runs threshold sweep + Otsu, reports metrics stratified by
+  emissive-voxel prevalence.
+- `seg_covers_emissive.py` — exploratory script (no training): runs the
+  pretrained `full_seg.ckpt` as-is on a few assets to see how much of the
+  emissive mask its part-segmentation output already covers.
+- `seg_to_mesh.py` — renders full part-segmentation on the actual decoded
+  mesh surface (vertex-colored GLB) rather than coarsened voxel cubes, for
+  qualitative inspection.
+- `smoke_test.py` — loads TRELLIS.2-4B + SegviGen checkpoints from the HF
+  cache and introspects the flow's conditioning dims; used to verify the
+  environment before a real run.
 
-### Prerequisites
-- **System**: Linux
-- **GPU**: A NVIDIA GPU with at least 24GB of memory is necessary
-- **Python**: 3.10
+Batch scripts (`*.sbatch`, Slurm): one per script above (multiple dated
+variants exist for `train_emissive*` and `build_dataset*` — later `_v2`,
+`_v3`, `_v4` sbatch files reflect iterated hyperparameters/paths, not
+supersession; check the script body for what changed).
 
-### Installation Steps
-1. Create the environment of [TRELLIS.2](https://github.com/microsoft/TRELLIS.2)
-    ```sh
-    git clone -b main https://github.com/microsoft/TRELLIS.2.git --recursive
-    cd TRELLIS.2
-    ./setup.sh --new-env --basic --flash-attn --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm
-    ```
+Data:
+- `canon_overfit10.txt` — a 10-shape sid list used for a fast overfit
+  sanity-check split (referenced by `build_canon10.sbatch`).
 
-2. Install the rest of requirements
-    ```sh
-    pip install mathutils
-    pip install transformers==4.57.6 # https://github.com/microsoft/TRELLIS.2/issues/101
-    pip install bpy==4.0.0 --extra-index-url https://download.blender.org/pypi/
-    sudo apt-get install -y libsm6 libxrender1 libxext6
-    pip install --upgrade Pillow
-    ```
+## Import-path fix
 
+Upstream these scripts lived *next to* a separate `SegviGen/` clone, so they
+did `sys.path.insert(0, os.path.join(ROOT, "SegviGen"))` to reach
+`inference_full`. Now that they live inside the SegviGen repo itself, that
+path doesn't exist. Each script now does:
 
-### Pretrained Weights
-
-The checkpoints of **Interactive part-segmentation**, **Full segmentation** and **Full segmentation with 2D guidance** are available on [Hugging Face](https://huggingface.co/fenghora/SegviGen).
-
-## 📒 Usage
-
-- **Interactive part-segmentation**
-    ```sh
-    python inference_interactive.py \
-        --ckpt_path path/to/interactive_seg.ckpt \
-        --glb ./data_toolkit/assets/example.glb \
-        --input_vxz ./data_toolkit/assets/input.vxz \
-        --transforms ./data_toolkit/transforms.json \
-        --img ./data_toolkit/assets/img.png \
-        --export_glb ./data_toolkit/assets/output.glb \
-        --input_vxz_points 388 448 392
-    ```
-
-- **Full segmentation**
-    ```sh
-    python inference_full.py \
-        --ckpt_path path/to/full_seg.ckpt \
-        --glb ./data_toolkit/assets/example.glb \
-        --input_vxz ./data_toolkit/assets/input.vxz \
-        --transforms ./data_toolkit/transforms.json \
-        --img ./data_toolkit/assets/img.png \
-        --export_glb ./data_toolkit/assets/output.glb
-    ```
-
-- **Full segmentation with 2D guidance**
-    ```sh
-    python inference_full.py \
-        --ckpt_path path/to/full_seg_w_2d_map.ckpt \
-        --glb ./data_toolkit/assets/example.glb \
-        --input_vxz ./data_toolkit/assets/input.vxz \
-        --img ./data_toolkit/assets/full_seg_w_2d_map/2d_map.png \
-        --export_glb ./data_toolkit/assets/output.glb \
-        --two_d_map
-    ```
-
-## ⚖️ License
-
-This project is licensed under the [MIT License](https://github.com/Nelipot-Lee/SegviGen/blob/main/LICENSE).  
-However, please note that the code in **`trellis2`** originates from the [TRELLIS.2](https://github.com/Microsoft/TRELLIS.2) project and remains subject to its original license terms.  
-Users must comply with the licensing requirements of [TRELLIS.2](https://github.com/Microsoft/TRELLIS.2) when using or redistributing that portion of the code.
-
-## Citation
-
+```python
+SEGVIGEN = os.path.join(ROOT, "SegviGen")
+if os.path.isdir(SEGVIGEN):
+    sys.path.insert(0, SEGVIGEN)   # legacy: sits next to a separate clone
+else:
+    SEGVIGEN = ROOT                # new: lives inside the SegviGen repo root
+    sys.path.insert(0, ROOT)
 ```
-@article{li2026segvigen,
-      title = {SegviGen: Repurposing 3D Generative Model for Part Segmentation}, 
-      author = {Lin Li and Haoran Feng and Zehuan Huang and Haohua Chen and Wenbo Nie and Shaohua Hou and Keqing Fan and Pan Hu and Sheng Wang and Buyu Li and Lu Sheng},
-      journal = {arXiv preprint arXiv:2603.16869},
-      year = {2026}
-}
-``` 
+
+This keeps the scripts working unmodified if someone still runs them from
+the old side-by-side layout, while working correctly in this repo. Fixed in:
+`build_dataset.py`, `eval_emissive.py`, `seg_covers_emissive.py`,
+`seg_to_mesh.py`, `smoke_test.py`, `train_emissive.py`.
+
+## Cluster paths to adjust
+
+All hardcoded paths point at the SFU CS `/3dlg-jupiter-project` cluster
+mount (no `/local-scratch2` or `/localhome` paths were carried over).
+Teammates on a different cluster/environment need to update:
+
+- `/3dlg-jupiter-project/lightgen/hf_cache` — HF cache dir (`HF_HOME`),
+  referenced in every `.py` and most `.sbatch` files.
+- `/3dlg-jupiter-project/lightgen/segvigen_emissive/...` — working/output
+  dirs (dataset, checkpoints, logs), referenced throughout the `.sbatch`
+  files and in `make_emis_mask.py`.
+- `/3dlg-jupiter-project/lightgen/miniforge3/...` — conda env activation,
+  in every `.sbatch` file.
+- `/3dlg-jupiter-project/lightgen/diffusionnet_xg/...` — source label/split
+  files used by `build_dataset.py` (`labels_uv_74k`,
+  `data_splits_74k.json`).
+- HF checkpoint hash `.../models--fenghora--SegviGen/snapshots/<hash>/full_seg.ckpt`
+  in several `.sbatch` files — pin will drift if the HF repo is updated.
+
+## Relation to upstream
+
+Pure addition: no file from upstream `Nelipot-Lee/SegviGen` is modified.
+All new files sit at the repo root as siblings of `inference_full.py`.
+
+## Results
+
+https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/index.html
