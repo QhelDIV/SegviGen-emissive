@@ -2,11 +2,12 @@
 (for the zero-image-cond workaround), confirm o_voxel + SegviGen ckpt availability."""
 import os, sys, glob, json
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SEGVIGEN = os.path.join(ROOT, "SegviGen")
-if os.path.isdir(SEGVIGEN):
-    sys.path.insert(0, SEGVIGEN)   # legacy layout: script sits next to a separate SegviGen/ clone
-else:
-    sys.path.insert(0, ROOT)       # this script now lives inside the SegviGen repo root
+while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
+    parent = os.path.dirname(ROOT)
+    if parent == ROOT:
+        raise RuntimeError(f"could not locate SegviGen repo root (inference_full.py) above {__file__}")
+    ROOT = parent   # walk up: this script now lives nested under emissive/env/, not repo root
+sys.path.insert(0, ROOT)
 os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 
 import torch

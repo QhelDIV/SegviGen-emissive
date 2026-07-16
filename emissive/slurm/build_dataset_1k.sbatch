@@ -19,6 +19,6 @@ OUT_NAME_ARG=""
 if [ -n "$4" ]; then OUT_NAME_ARG="--out_split_name $4"; fi
 PBR_FLAG=""
 if [ "$5" = "pbr" ]; then PBR_FLAG="--pbr_only"; fi
-python code/build_dataset.py --split "${1:-val}" --n "${2:-16}" --start "${6:-0}" \
+python emissive/data_prep/build_dataset.py --split "${1:-val}" --n "${2:-16}" --start "${6:-0}" \
     --out_root /3dlg-jupiter-project/lightgen/segvigen_emissive/dataset \
     $COND_FLAG $OUT_NAME_ARG $PBR_FLAG

@@ -15,7 +15,7 @@ SEG_CKPT=/3dlg-jupiter-project/lightgen/hf_cache/hub/models--fenghora--SegviGen/
 SPLIT=${1:-overfit_10}
 DUMP=${2:-seg_vis_$SPLIT}
 cd /3dlg-jupiter-project/lightgen/segvigen_emissive
-python code/seg_covers_emissive.py \
+python emissive/eval/seg_covers_emissive.py \
   --dataset /3dlg-jupiter-project/lightgen/segvigen_emissive/dataset \
   --split "$SPLIT" --seg_ckpt "$SEG_CKPT" --steps 25 \
   --dump_vis /3dlg-jupiter-project/lightgen/segvigen_emissive/$DUMP

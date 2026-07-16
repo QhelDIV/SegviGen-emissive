@@ -13,12 +13,13 @@ Usage (GPU node, trellis2 env):
 """
 import os, sys, json, argparse
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SEGVIGEN = os.path.join(ROOT, "SegviGen")
-if os.path.isdir(SEGVIGEN):
-    sys.path.insert(0, SEGVIGEN)   # legacy layout: script sits next to a separate SegviGen/ clone
-else:
-    SEGVIGEN = ROOT                # this script now lives inside the SegviGen repo root
-    sys.path.insert(0, ROOT)
+while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
+    parent = os.path.dirname(ROOT)
+    if parent == ROOT:
+        raise RuntimeError(f"could not locate SegviGen repo root (inference_full.py) above {__file__}")
+    ROOT = parent   # walk up: this script now lives nested under emissive/eval/, not repo root
+SEGVIGEN = ROOT
+sys.path.insert(0, SEGVIGEN)
 os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 
 import torch

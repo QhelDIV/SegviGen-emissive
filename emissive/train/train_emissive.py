@@ -18,12 +18,14 @@ Usage (GPU node, trellis2 env):
 """
 import os, sys, json, argparse, glob
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SEGVIGEN = os.path.join(ROOT, "SegviGen")
-if os.path.isdir(SEGVIGEN):
-    sys.path.insert(0, SEGVIGEN)   # legacy layout: script sits next to a separate SegviGen/ clone
-else:
-    SEGVIGEN = ROOT                # this script now lives inside the SegviGen repo root
-    sys.path.insert(0, ROOT)
+while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
+    parent = os.path.dirname(ROOT)
+    if parent == ROOT:
+        raise RuntimeError(f"could not locate SegviGen repo root (inference_full.py) above {__file__}")
+    ROOT = parent   # walk up: this script now lives nested under emissive/train/, not repo root
+SEGVIGEN = ROOT
+sys.path.insert(0, SEGVIGEN)
+sys.path.insert(0, os.path.join(ROOT, "emissive", "eval"))  # sibling dir holding eval_emissive.py
 os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 
 import torch
@@ -139,17 +141,38 @@ def main():
     ap.add_argument("--pos_weight", type=float, default=5.0,
                     help="per-voxel flow-loss weight w=1+(pos_weight-1)*emis_mask, mean-normalized per "
                          "sample so lr semantics are unchanged. Requires emis_mask.pth (make_emis_mask.py) "
-                         "for every training sample UNLESS pos_weight==1.0 (fully off, old unweighted MSE).")
+                         "for every training sample UNLESS pos_weight==1.0 (fully off, old unweighted MSE). "
+                         "Ignored when --balanced_pos_weight > 0.")
+    ap.add_argument("--balanced_pos_weight", type=float, default=0.0,
+                    help="0=off (use the fixed --pos_weight scalar instead). Per-SHAPE adaptive weight: "
+                         "W_shape = min(CAP, (1-p)/p) where p = this sample's mean emis_mask coverage "
+                         "(clamped p>=1e-4); per-voxel w=1+(W_shape-1)*m_i, then the same mean-"
+                         "normalization as --pos_weight. Fixes the flat-mean-per-voxel scheme's blind "
+                         "spot: a fixed pos_weight upweights emissive VOXELS within a shape but does "
+                         "nothing for shapes that are almost entirely non-emissive (p tiny) relative to "
+                         "shapes that are half-emissive — this makes W scale with how rare emissive is "
+                         "FOR THAT SHAPE. Requires emis_mask.pth.")
+    ap.add_argument("--lr_schedule", choices=["const", "cosine"], default="const",
+                    help="const (default) = fixed --lr for the whole run (old behavior). cosine = "
+                         "torch CosineAnnealingLR from --lr down to --lr/20 over the full run "
+                         "(epochs * steps/epoch total optimizer steps).")
     ap.add_argument("--ema", type=float, default=0.999,
                     help="EMA decay for a shadow copy of the flow weights, saved alongside the regular "
                          "ckpt as epoch_XXXX_ema.ckpt. 0 = off (no EMA file written).")
     ap.add_argument("--val_quick", type=int, default=8,
                     help="after each save, run a quick N-sample val IoU (12-step sampling) on "
                          "--val_split and track best.ckpt + train_curve.json. 0 = off.")
+    ap.add_argument("--select_on", choices=["all", "nonzero"], default="nonzero",
+                    help="best.ckpt selection criterion from quick-val. 'nonzero' (default) = mean IoU "
+                         "restricted to quick-val shapes with GT coverage>0 — timidity-proof, a ckpt "
+                         "can't win by predicting all-black on empty-glow shapes and diluting the flat "
+                         "mean. 'all' = mean IoU over every quick-val shape (old behavior). Both "
+                         "aggregates are always computed and logged regardless of which one gates "
+                         "best.ckpt.")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
     device = "cuda"
-    require_mask = args.pos_weight != 1.0
+    require_mask = args.pos_weight != 1.0 or args.balanced_pos_weight > 0
 
     # model: flow + Gen3DSeg wrapper, warm-started from a SegviGen ckpt
     init_ckpt = resolve_init_ckpt(args.init_ckpt)
@@ -183,11 +206,20 @@ def main():
 
     ds = EmisDataset(args.dataset, args.train_split, cond_mode=args.cond, require_mask=require_mask)
     print(f"[data] {len(ds)} samples from '{args.train_split}' (cond={args.cond}, "
-          f"oversample={args.emis_oversample}, pos_weight={args.pos_weight})", flush=True)
+          f"oversample={args.emis_oversample}, pos_weight={args.pos_weight}, "
+          f"balanced_pos_weight={args.balanced_pos_weight})", flush=True)
     samp_w = torch.tensor([(f + 0.1) ** args.oversample_pow for f in ds.fracs]) if args.emis_oversample else None
+
+    scheduler = None
+    if args.lr_schedule == "cosine":
+        total_steps = max(1, args.epochs * (args.n_per_epoch or len(ds)))
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=total_steps, eta_min=args.lr / 20.0)
+        print(f"[lr] cosine schedule: {args.lr:.2e} -> {args.lr / 20.0:.2e} over {total_steps} steps", flush=True)
+
     log = []
     curve = []
     best_iou = -1.0
+    n_wshape_logged = 0
 
     for epoch in range(1, args.epochs + 1):
         n_draw = args.n_per_epoch or len(ds)
@@ -215,7 +247,18 @@ def main():
             t_model = (t * 1000).expand(1)
 
             v_pred = gen(x_t_st, itx_st, shp_st, t_model, cond, [coords.shape[0]])
-            if args.pos_weight != 1.0:
+            if args.balanced_pos_weight > 0:
+                mask_dev = mask.to(device)
+                p = mask_dev.mean().clamp(min=1e-4)
+                W_shape = torch.clamp((1 - p) / p, max=args.balanced_pos_weight)
+                w = 1 + (W_shape - 1) * mask_dev
+                w = w / w.mean().clamp(min=1e-8)
+                loss = (w[:, None] * (v_pred.feats - v_target) ** 2).mean()
+                if n_wshape_logged < 3:
+                    print(f"[balanced_pos_weight] sample {j} sid={os.path.basename(ds.dirs[j])} "
+                          f"p={p.item():.4f} W_shape={W_shape.item():.2f}", flush=True)
+                    n_wshape_logged += 1
+            elif args.pos_weight != 1.0:
                 w = 1 + (args.pos_weight - 1) * mask.to(device)
                 w = w / w.mean().clamp(min=1e-8)
                 loss = (w[:, None] * (v_pred.feats - v_target) ** 2).mean()
@@ -225,13 +268,16 @@ def main():
             opt.zero_grad(); loss.backward()
             torch.nn.utils.clip_grad_norm_(gen.parameters(), 1.0)
             opt.step()
+            if scheduler is not None:
+                scheduler.step()
             if ema_state is not None:
                 ema_update(ema_state, gen, args.ema)
             ep_loss += loss.item()
 
         ep_loss /= max(1, len(idxs))
-        log.append({"epoch": epoch, "loss": ep_loss})
-        print(f"epoch {epoch:4d} | flow_loss {ep_loss:.5f}", flush=True)
+        cur_lr = opt.param_groups[0]["lr"]
+        log.append({"epoch": epoch, "loss": ep_loss, "lr": cur_lr})
+        print(f"epoch {epoch:4d} | flow_loss {ep_loss:.5f} | lr {cur_lr:.2e}", flush=True)
 
         if epoch % args.save_every == 0 or epoch == args.epochs:
             save_ckpt(gen.state_dict(), os.path.join(args.out_dir, "last.ckpt"))
@@ -244,25 +290,33 @@ def main():
             json.dump(log, open(os.path.join(args.out_dir, "log.json"), "w"), indent=2)
 
             val_iou = None
+            val_iou_all = val_iou_nonzero = None
             per_sample = None
             if eval_models is not None:
                 gen.eval()
                 result = evaluate_split(gen, eval_models, args.dataset, args.val_split, args.cond,
                                         device=device, steps=12, thrs=THRS, n=args.val_quick, verbose=False)
                 gen.train()
-                val_iou = result["best_iou"]
+                val_iou_all = result["best_iou"]
+                val_iou_nonzero = result["best_iou_nonzero"]
+                val_iou = val_iou_nonzero if args.select_on == "nonzero" else val_iou_all
                 per_sample = result["per_sample"]
                 per_sample_s = " ".join(f"{p['sid'][:8]}={p['best_iou']:.3f}" for p in per_sample)
                 print(f"[val_quick] epoch {epoch:4d} | {args.val_split}[:{args.val_quick}] "
-                      f"best IoU {val_iou:.4f} @thr={result['best_thr']} | per-sample: {per_sample_s}", flush=True)
+                      f"best IoU(all)={val_iou_all:.4f}@thr={result['best_thr']} "
+                      f"best IoU(nonzero,n={result['n_nonzero']})={val_iou_nonzero:.4f}@thr={result['best_thr_nonzero']} "
+                      f"[selecting on {args.select_on}] | per-sample: {per_sample_s}", flush=True)
                 if val_iou > best_iou:
                     best_iou = val_iou
                     best_link = os.path.join(args.out_dir, "best.ckpt")
                     if os.path.islink(best_link) or os.path.exists(best_link):
                         os.remove(best_link)
                     os.symlink(os.path.basename(ep_path), best_link)
-                    print(f"[val_quick] new best ({val_iou:.4f}) → best.ckpt -> {os.path.basename(ep_path)}", flush=True)
-            curve.append({"epoch": epoch, "train_loss": ep_loss, "val_iou": val_iou, "per_sample": per_sample})
+                    print(f"[val_quick] new best ({args.select_on}={val_iou:.4f}) → best.ckpt -> "
+                          f"{os.path.basename(ep_path)}", flush=True)
+            curve.append({"epoch": epoch, "train_loss": ep_loss, "lr": cur_lr, "val_iou": val_iou,
+                         "val_iou_all": val_iou_all, "val_iou_nonzero": val_iou_nonzero,
+                         "select_on": args.select_on, "per_sample": per_sample})
             json.dump(curve, open(os.path.join(args.out_dir, "train_curve.json"), "w"), indent=2)
 
     print("DONE", flush=True)

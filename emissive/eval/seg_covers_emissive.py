@@ -20,12 +20,13 @@ Usage (GPU node, trellis2 env):
 """
 import os, sys, json, argparse
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SEGVIGEN = os.path.join(ROOT, "SegviGen")
-if os.path.isdir(SEGVIGEN):
-    sys.path.insert(0, SEGVIGEN)   # legacy layout: script sits next to a separate SegviGen/ clone
-else:
-    SEGVIGEN = ROOT                # this script now lives inside the SegviGen repo root
-    sys.path.insert(0, ROOT)
+while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
+    parent = os.path.dirname(ROOT)
+    if parent == ROOT:
+        raise RuntimeError(f"could not locate SegviGen repo root (inference_full.py) above {__file__}")
+    ROOT = parent   # walk up: this script now lives nested under emissive/eval/, not repo root
+SEGVIGEN = ROOT
+sys.path.insert(0, SEGVIGEN)
 os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 
 import torch
@@ -62,8 +63,22 @@ def quantize_parts(rgb, levels=6, min_frac=0.01):
 
 
 def iou(a, b):
+    """Same zero-glow convention as eval_emissive: union==0 (both empty) -> IoU=1.0."""
     inter = (a & b).sum(); union = (a | b).sum()
     return inter / union if union > 0 else 1.0
+
+
+def bucket_frac_for(d):
+    """Voxel-coverage bucketing fraction, same convention as eval_emissive.bucket_frac_for
+    with bucket_by='voxel': mean of emis_mask.pth (built from surface-voxel occupancy, not
+    tessellation-biased). Falls back to meta.json's face-frac (with a warning) if missing.
+    Returns (frac, used_fallback)."""
+    mp = os.path.join(d, "emis_mask.pth")
+    if os.path.exists(mp):
+        return float(torch.load(mp, map_location="cpu").mean().item()), False
+    mj = os.path.join(d, "meta.json")
+    frac = json.load(open(mj)).get("emissive_frac", 0.0) if os.path.exists(mj) else 0.0
+    return float(frac), True
 
 
 def main():
@@ -75,6 +90,10 @@ def main():
     ap.add_argument("--levels", type=int, default=6, help="color quantization bins per channel")
     ap.add_argument("--zero_cond", action="store_true", default=False)
     ap.add_argument("--dump_vis", default=None)
+    ap.add_argument("--out_json", default=None,
+                    help="output json path (default: <dataset>/seg_covers_<split>.json)")
+    ap.add_argument("--shard_idx", type=int, default=0, help="process shard shard_idx of num_shards (0-based)")
+    ap.add_argument("--num_shards", type=int, default=1, help="split the split's sids into this many shards")
     args = ap.parse_args()
     device = "cuda"
     COND_T, COND_D = 1024, 1024
@@ -98,8 +117,13 @@ def main():
     sp_params = pa["tex_slat_sampler"]["params"]; sp_params["steps"] = args.steps
 
     sdir = os.path.join(args.dataset, args.split)
-    oracle_ious, best_part_ious, nparts_list, fracs = [], [], [], []
-    for sid in sorted(os.listdir(sdir)):
+    all_sids = sorted(os.listdir(sdir))
+    if args.num_shards > 1:
+        all_sids = all_sids[args.shard_idx::args.num_shards]
+        print(f"[shard] {args.shard_idx}/{args.num_shards} -> {len(all_sids)} sids", flush=True)
+    oracle_ious, best_part_ious, nparts_list, fracs, bucket_fracs, sids_done = [], [], [], [], [], []
+    warned_fallback = False
+    for sid in all_sids:
         d = os.path.join(sdir, sid)
         if not os.path.exists(os.path.join(d, "output_tex_slat.pth")):
             continue
@@ -142,8 +166,14 @@ def main():
             bi = iou(m, gt_e)
             best_single = max(best_single, bi)
         oiou = iou(pred_e, gt_e)
+        bfrac, used_fallback = bucket_frac_for(d)
+        if used_fallback and not warned_fallback:
+            print(f"[warn] emis_mask.pth missing for {sid} — falling back to face-frac "
+                  f"(meta.json) for bucketing", flush=True)
+            warned_fallback = True
         oracle_ious.append(oiou); best_part_ious.append(best_single)
         nparts_list.append(nparts); fracs.append(float(gt_e.mean()))
+        bucket_fracs.append(bfrac); sids_done.append(sid)
         print(f"{sid} gt_frac={gt_e.mean():.3f} nparts={nparts:3d} "
               f"oracle_IoU={oiou:.3f} best_single_part_IoU={best_single:.3f}", flush=True)
 
@@ -154,17 +184,44 @@ def main():
                                 labels=labels.astype(np.int16),
                                 gt_e=gt_e)
 
-    print(f"\n=== {args.split} ({len(fracs)} samples) — does pretrained part-seg cover emissive? ===", flush=True)
-    print(f"  mean ORACLE part-labeling IoU = {np.mean(oracle_ious):.4f}  "
-          f"(upper bound for 'segment → label parts'; DiffusionNet per-voxel ~0.259)", flush=True)
+    oracle_ious = np.array(oracle_ious); fracs_a = np.array(fracs)
+    nonzero_mask = fracs_a > 0
+    oracle_iou_nz = float(oracle_ious[nonzero_mask].mean()) if nonzero_mask.any() else 0.0
+    n_nonzero = int(nonzero_mask.sum())
+
+    print(f"\n=== {args.split} ({len(fracs)} samples, {n_nonzero} with GT coverage>0) "
+          f"— does pretrained part-seg cover emissive? ===", flush=True)
+    print(f"  HEADLINE mean ORACLE part-labeling IoU          = {np.mean(oracle_ious):.4f}  "
+          f"(upper bound for 'segment -> label parts'; DiffusionNet per-voxel ~0.259; "
+          f"the >50%%-majority part label is this oracle's @0.5-analog)", flush=True)
+    print(f"  HEADLINE mean ORACLE IoU, nonzero-only           = {oracle_iou_nz:.4f}", flush=True)
     print(f"  mean best-single-part IoU     = {np.mean(best_part_ious):.4f}", flush=True)
     print(f"  mean #parts                   = {np.mean(nparts_list):.1f}", flush=True)
+
+    buckets = [("0", lambda f: f == 0), ("(0,0.05]", lambda f: 0 < f <= 0.05),
+               ("(0.05,0.3]", lambda f: 0.05 < f <= 0.3), (">0.3", lambda f: f > 0.3)]
+    print(f"\n  --- stratified by GT coverage (bucket_by=voxel, emis_mask.pth) ---", flush=True)
+    strat_out = {}
+    for name, pred in buckets:
+        ious = [o for o, bf in zip(oracle_ious, bucket_fracs) if pred(bf)]
+        mean_iou = float(np.mean(ious)) if ious else None
+        strat_out[name] = {"n": len(ious), "mean_iou": mean_iou}
+        print(f"  {name:12s} n={len(ious):3d}  mean IoU={'n/a' if mean_iou is None else f'{mean_iou:.4f}'}", flush=True)
+
+    out_json = args.out_json or os.path.join(args.dataset, f"seg_covers_{args.split}.json")
     json.dump({"oracle_iou": float(np.mean(oracle_ious)),
+               "oracle_iou_nonzero": oracle_iou_nz,
+               "n": len(fracs), "n_nonzero": n_nonzero,
                "best_single_part_iou": float(np.mean(best_part_ious)),
                "mean_nparts": float(np.mean(nparts_list)),
-               "per_sample": [{"oracle": o, "best_single": b, "nparts": int(n), "gt_frac": f}
-                              for o, b, n, f in zip(oracle_ious, best_part_ious, nparts_list, fracs)]},
-              open(os.path.join(args.dataset, f"seg_covers_{args.split}.json"), "w"), indent=2)
+               "stratified": strat_out, "bucket_by": "voxel",
+               "shard_idx": args.shard_idx, "num_shards": args.num_shards,
+               "per_sample": [{"sid": s, "oracle": float(o), "best_single": b, "nparts": int(n),
+                              "gt_frac": f, "bucket_frac": bf}
+                              for s, o, b, n, f, bf in zip(sids_done, oracle_ious, best_part_ious,
+                                                            nparts_list, fracs, bucket_fracs)]},
+              open(out_json, "w"), indent=2)
+    print(f"\n[out] wrote {out_json}", flush=True)
 
 
 if __name__ == "__main__":

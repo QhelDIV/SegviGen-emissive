@@ -10,4 +10,4 @@ source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh
 conda activate trellis2
 export HF_HOME=/3dlg-jupiter-project/lightgen/hf_cache
 cd /3dlg-jupiter-project/lightgen/segvigen_emissive
-python code/smoke_test.py
+python emissive/env/smoke_test.py
