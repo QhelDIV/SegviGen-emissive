@@ -32,19 +32,30 @@ logic):
   6. threshold @ --thr, then decode to mesh via inference_full.slat_to_glb — the same
      function make_pred_glb.py imports and calls, with the identical hard-threshold-to-
      white/black glue (lifted from make_pred_glb.py's main(), see comment at the call).
+  7. per-face labels (`_label_mesh_faces`): map the DECODED mesh's faces (pred_mesh.glb) to
+     the predicted per-voxel probability/mask by nearest voxel in the shared [-0.5,0.5]^3 /
+     512-res frame (glb_to_vxz's aabb == inference_full.slat_to_glb's aabb/origin — a
+     mesh-bounds check + a baked-texture-vs-face_mask agreement check are printed at
+     runtime as an empirical, not assumed, verification of this). Written to
+     pred_mesh_labels.npz, always. With --label_input_mesh: the SAME lookup, but against
+     the ORIGINAL input glb's faces (reproducing glb_to_vxz.py's own load+normalize so face
+     order matches a plain trimesh.load(...).to_mesh() of the user's file — see
+     `_normalized_input_mesh`), written to input_mesh_labels.npz plus a per-face-colored
+     input_mesh_labeled.glb for eyeballing.
 
-VALIDATION — untested on GPU as of this commit (see emissive/docs/EXPERIMENTS.md). What
-IS verified locally (no GPU/trellis2 env available on this workstation): `python -m
-py_compile` is clean, and `--help` runs (all heavy imports — torch/trellis2/inference_full/
-data_toolkit/o_voxel — are deferred until after argparse, specifically so `--help` never
-needs them). Smoke-test on the cluster once a GPU node is available:
+VALIDATION — GPU-tested 2026-07-16 for the base pipeline (job 232600, see
+emissive/docs/EXPERIMENTS.md) and again for the per-face mesh-label feature added on top
+(see EXPERIMENTS.md's "predict_emissive.py status" for both jobs' pass/fail numbers,
+including the texture-vs-face_mask agreement %). `python -m py_compile` clean and `--help`
+runs standalone (all heavy imports — torch/trellis2/inference_full/data_toolkit/o_voxel —
+are deferred until after argparse). Smoke-test command:
 
     salloc -p 3dlg-hcvc-lab-debug --gres=gpu:l40s:1 --time=0:30:00 --cpus-per-task=8 --mem=64G
     source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh && conda activate trellis2
     cd <repo root, after rsync>   # emissive/slurm/*.sbatch document this convention
     export HF_HOME=/3dlg-jupiter-project/lightgen/hf_cache
     python emissive/infer/predict_emissive.py --glb assets/example.glb \
-        --out /tmp/predict_smoke --draws 4 --thr 0.5 --zero_cond
+        --out /tmp/predict_smoke --draws 4 --thr 0.5 --zero_cond --label_input_mesh
     # then, to also exercise the real-cond render path (needs bpy in the trellis2 env):
     python emissive/infer/predict_emissive.py --glb assets/example.glb \
         --out /tmp/predict_smoke_realcond --draws 4 --thr 0.5
@@ -54,6 +65,7 @@ Usage:
   python predict_emissive.py --glb mesh.glb --out out_dir/ --draws 8 --thr 0.4
   python predict_emissive.py --glb mesh.glb --out out_dir/ --image render.png
   python predict_emissive.py --glb mesh.glb --out out_dir/ --zero_cond --ckpt /path/to/other.ckpt
+  python predict_emissive.py --glb mesh.glb --out out_dir/ --label_input_mesh
 """
 import os
 import sys
@@ -76,6 +88,12 @@ SEGVIGEN = ROOT
 # registry and the tie with emis_2k_bal (0.114) that this default breaks.
 DEFAULT_CKPT = "/3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/emis_1k_w5/epoch_0016_ema.ckpt"
 DEFAULT_TRANSFORMS = os.path.join(SEGVIGEN, "data_toolkit", "transforms.json")
+
+# Shared by glb_to_vxz.py's o_voxel.convert.mesh_to_flexible_dual_grid (grid_size=512,
+# hardcoded there) and inference_full.slat_to_glb's default `resolution=512` /
+# aabb=[[-0.5]*3,[0.5]*3] — every mesh<->voxel lookup in this file assumes this one frame.
+VOXEL_RES = 512
+VOXEL_AABB = ((-0.5, -0.5, -0.5), (0.5, 0.5, 0.5))
 
 
 def _common_coords_2(slat_a, slat_b):
@@ -115,6 +133,128 @@ def _render_cond_image(glb_path, out_img_path, transforms_json):
     render_from_transforms(glb_path, transforms_json, out_img_path)
 
 
+def _as_single_mesh(glb_obj):
+    """inference_full.slat_to_glb / o_voxel.postprocess.to_glb returns a single baked mesh
+    in practice (one UV atlas from `to_glb`'s xatlas pass), but trimesh represents a
+    just-loaded/just-built glb as either a Trimesh or a Scene depending on the exporter —
+    normalize to a plain Trimesh so face-label code doesn't need to special-case both."""
+    import trimesh
+    if isinstance(glb_obj, trimesh.Trimesh):
+        return glb_obj
+    geoms = list(glb_obj.geometry.values())
+    if len(geoms) != 1:
+        print(f"[warn] expected 1 geometry from slat_to_glb, got {len(geoms)} — using the first", flush=True)
+    return geoms[0]
+
+
+def _check_frame(mesh, tag):
+    """Empirical (not assumed) check that `mesh`'s vertices actually live in VOXEL_AABB —
+    per owner request, since the voxel-lookup in _label_mesh_faces silently produces
+    garbage if this frame assumption is wrong. Prints bounds; warns (does not raise) if
+    they exceed the expected box by more than a hair (mesh simplification/Dual Contouring
+    could in principle overshoot slightly at the boundary)."""
+    lo, hi = mesh.bounds
+    print(f"[frame check:{tag}] bounds = {lo} .. {hi}  (expect within {VOXEL_AABB})", flush=True)
+    if (lo < -0.51).any() or (hi > 0.51).any():
+        print(f"[WARN] {tag} mesh bounds exceed the expected {VOXEL_AABB} frame by >0.01 — "
+              f"the voxel-lookup labels below may be WRONG. Investigate before trusting them.",
+              flush=True)
+
+
+def _label_mesh_faces(vertices, faces, voxel_coords, voxel_prob, voxel_mask, resolution=VOXEL_RES):
+    """Map each mesh face to the predicted per-voxel probability/mask. Assumes `vertices`
+    live in VOXEL_AABB at `resolution` — see `_check_frame`, called by the caller before
+    this.
+
+    Voxel-lookup rule: for each face, take its centroid (mean of its 3 vertices), convert
+    to a voxel index `idx = floor((centroid + 0.5) * resolution)` clipped to
+    `[0, resolution-1]` (voxel i's CENTER sits at `(i+0.5)/resolution - 0.5`, the same
+    convention glb_to_vxz/slat_to_glb use), then look up that EXACT voxel index in the
+    predicted voxel set (`voxel_coords`). Faces whose centroid voxel has no prediction —
+    expected for faces from Dual Contouring / mesh simplification, whose vertices don't
+    sit exactly on the dense grid the flow was sampled on — fall back to the nearest
+    predicted voxel CENTER by Euclidean distance (cKDTree, unlimited radius: every face
+    gets an answer). Returns (face_prob (F,) float32, face_mask (F,) bool, n_exact,
+    n_fallback) — n_fallback is a diagnostic, not an error signal by itself."""
+    import numpy as np
+    centroids = vertices[faces].mean(axis=1)
+    idx = np.clip(np.floor((centroids + 0.5) * resolution).astype(np.int64), 0, resolution - 1)
+
+    def _key(c):
+        c = c.astype(np.int64)
+        return (c[:, 0] * resolution + c[:, 1]) * resolution + c[:, 2]
+
+    vox_keys = _key(voxel_coords)
+    order = np.argsort(vox_keys)
+    vox_keys_sorted = vox_keys[order]
+    face_keys = _key(idx)
+    pos = np.clip(np.searchsorted(vox_keys_sorted, face_keys), 0, len(vox_keys_sorted) - 1)
+    hit = vox_keys_sorted[pos] == face_keys
+
+    face_prob = np.zeros(len(faces), dtype=np.float32)
+    face_mask = np.zeros(len(faces), dtype=bool)
+    orig_idx = order[pos[hit]]
+    face_prob[hit] = voxel_prob[orig_idx]
+    face_mask[hit] = voxel_mask[orig_idx]
+
+    n_fallback = int((~hit).sum())
+    if n_fallback > 0:
+        from scipy.spatial import cKDTree   # available in the trellis2 env (verified)
+        voxel_centers = (voxel_coords.astype(np.float64) + 0.5) / resolution - 0.5
+        tree = cKDTree(voxel_centers)
+        miss = np.where(~hit)[0]
+        _, nn = tree.query(centroids[miss])
+        face_prob[miss] = voxel_prob[nn]
+        face_mask[miss] = voxel_mask[nn]
+
+    return face_prob, face_mask, int(hit.sum()), n_fallback
+
+
+def _texture_face_agreement(mesh, face_mask):
+    """Diagnostic only (not saved to disk): independently samples `mesh`'s baked
+    base_color texture at each face's UV centroid and compares "is it white" against
+    `face_mask`, as an empirical cross-check of _label_mesh_faces's frame assumption
+    (rather than trusting it) — per owner request. Returns the agreement fraction, or
+    None if the mesh has no UV/texture to check against."""
+    import numpy as np
+    vis = mesh.visual
+    uv = getattr(vis, "uv", None)
+    material = getattr(vis, "material", None)
+    img = None
+    if material is not None:
+        img = getattr(material, "baseColorTexture", None) or getattr(material, "image", None)
+    if uv is None or img is None:
+        return None
+    img = img.convert("RGB")
+    arr = np.asarray(img, dtype=np.float32) / 255.0
+    h, w = arr.shape[:2]
+    face_uv = uv[mesh.faces].mean(axis=1)
+    px = np.clip((face_uv[:, 0] * (w - 1)).astype(np.int64), 0, w - 1)
+    py = np.clip(((1 - face_uv[:, 1]) * (h - 1)).astype(np.int64), 0, h - 1)   # glTF V is flipped vs image rows
+    sampled = arr[py, px].mean(axis=1)
+    tex_white = sampled > 0.5
+    return float((tex_white == face_mask).mean())
+
+
+def _normalized_input_mesh(glb_path):
+    """Reproduces data_toolkit/glb_to_vxz.py's glb_to_vxz() load+normalize EXACTLY (its
+    `asset = trimesh.load(...); center/scale by bounding_box.bounds; to_mesh()` block) —
+    lifted rather than imported because glb_to_vxz() only writes a .vxz file and doesn't
+    return the intermediate mesh we need here. Returns a mesh in the same VOXEL_AABB frame
+    voxel lookups use, so its face order/positions match a plain
+    `trimesh.load(glb_path).to_mesh()` of the same file (asserted by the caller against a
+    second, untransformed load, since --label_input_mesh writes labels onto that raw mesh
+    by face index)."""
+    import trimesh
+    asset = trimesh.load(glb_path, force="scene")
+    aabb = asset.bounding_box.bounds
+    center = (aabb[0] + aabb[1]) / 2
+    scale = 0.99999 / (aabb[1] - aabb[0]).max()
+    asset.apply_translation(-center)
+    asset.apply_scale(scale)
+    return asset.to_mesh()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1],
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -139,6 +279,11 @@ def main():
     ap.add_argument("--transforms", default=DEFAULT_TRANSFORMS,
                      help="camera transforms.json for the render-from-glb cond path (default: "
                           "the same file build_dataset.py's --real_cond uses)")
+    ap.add_argument("--label_input_mesh", action="store_true", default=False,
+                     help="also write input_mesh_labels.npz (per-face prob/mask over the "
+                          "ORIGINAL --glb's faces, same voxel-lookup as pred_mesh_labels.npz) "
+                          "and input_mesh_labeled.glb (the original geometry, face-colored "
+                          "white/black for eyeballing). Off by default (extra trimesh loads).")
     args = ap.parse_args()
 
     if args.zero_cond and args.image:
@@ -253,6 +398,63 @@ def main():
     glb_path = os.path.join(args.out, "pred_mesh.glb")
     glb.export(glb_path)
 
+    # --- 5. per-face labels on the decoded mesh (step 7 in the module docstring) ---
+    voxel_prob_np = prob.numpy().astype(np.float32)
+    voxel_mask_np = mask.numpy()
+    mesh_pred = _as_single_mesh(glb)
+    _check_frame(mesh_pred, "pred_mesh")
+    pred_face_prob, pred_face_mask, pred_n_exact, pred_n_fallback = _label_mesh_faces(
+        mesh_pred.vertices, mesh_pred.faces, out_coords, voxel_prob_np, voxel_mask_np)
+    print(f"[pred_mesh_labels] {len(pred_face_mask)} faces, {pred_n_exact} exact / "
+          f"{pred_n_fallback} nearest-fallback voxel lookups; face frac emissive="
+          f"{pred_face_mask.mean():.3f} (voxel frac={voxel_mask_np.mean():.3f})", flush=True)
+    agreement = _texture_face_agreement(mesh_pred, pred_face_mask)
+    if agreement is not None:
+        verdict = "PASS" if agreement >= 0.9 else "CHECK FRAME/LOOKUP"
+        print(f"[pred_mesh_labels] texture-vs-face_mask agreement = {agreement:.4f} ({verdict})", flush=True)
+    else:
+        print("[pred_mesh_labels] no baked texture/UV on decoded mesh — skipped agreement check", flush=True)
+    np.savez_compressed(
+        os.path.join(args.out, "pred_mesh_labels.npz"),
+        face_prob=pred_face_prob, face_mask=pred_face_mask,
+        n_faces=np.int64(len(pred_face_mask)), thr=np.float32(args.thr),
+        resolution=np.int64(VOXEL_RES), aabb=np.array(VOXEL_AABB, dtype=np.float32))
+
+    outputs = {"mask": "mask.npz", "mesh": "pred_mesh.glb", "mesh_labels": "pred_mesh_labels.npz"}
+
+    # --- 6. optional: labels on the ORIGINAL input mesh's faces ---
+    input_mesh_diag = None
+    if args.label_input_mesh:
+        import trimesh
+        mesh_norm = _normalized_input_mesh(args.glb)
+        mesh_raw = trimesh.load(args.glb, force="scene").to_mesh()
+        assert len(mesh_norm.faces) == len(mesh_raw.faces), (
+            f"face count mismatch between normalized ({len(mesh_norm.faces)}) and raw "
+            f"({len(mesh_raw.faces)}) loads of {args.glb} — can't attach labels to the "
+            f"original mesh by face index (see _normalized_input_mesh docstring)")
+        _check_frame(mesh_norm, "input_mesh(normalized)")
+        in_face_prob, in_face_mask, in_n_exact, in_n_fallback = _label_mesh_faces(
+            mesh_norm.vertices, mesh_norm.faces, out_coords, voxel_prob_np, voxel_mask_np)
+        print(f"[input_mesh_labels] {len(in_face_mask)} faces, {in_n_exact} exact / "
+              f"{in_n_fallback} nearest-fallback voxel lookups; face frac emissive="
+              f"{in_face_mask.mean():.3f}", flush=True)
+        np.savez_compressed(
+            os.path.join(args.out, "input_mesh_labels.npz"),
+            face_prob=in_face_prob, face_mask=in_face_mask,
+            n_faces=np.int64(len(in_face_mask)), thr=np.float32(args.thr),
+            resolution=np.int64(VOXEL_RES), aabb=np.array(VOXEL_AABB, dtype=np.float32))
+
+        face_colors = np.zeros((len(in_face_mask), 4), dtype=np.uint8)
+        face_colors[in_face_mask] = (255, 255, 255, 255)
+        face_colors[~in_face_mask] = (0, 0, 0, 255)
+        mesh_raw.visual = trimesh.visual.ColorVisuals(mesh_raw, face_colors=face_colors)
+        mesh_raw.export(os.path.join(args.out, "input_mesh_labeled.glb"))
+
+        outputs["input_mesh_labels"] = "input_mesh_labels.npz"
+        outputs["input_mesh_labeled"] = "input_mesh_labeled.glb"
+        input_mesh_diag = {"n_faces": int(len(in_face_mask)), "n_exact": in_n_exact,
+                            "n_fallback": in_n_fallback, "frac_emissive": float(in_face_mask.mean())}
+
     meta = {
         "glb_in": os.path.abspath(args.glb),
         "ckpt": args.ckpt,
@@ -263,8 +465,12 @@ def main():
         "cond_mode": "zero" if args.zero_cond else ("image" if args.image else "render"),
         "n_voxels": int(out_coords.shape[0]),
         "frac_emissive": float(mask.float().mean().item()),
+        "pred_mesh_labels": {"n_faces": int(len(pred_face_mask)), "n_exact": pred_n_exact,
+                             "n_fallback": pred_n_fallback, "frac_emissive": float(pred_face_mask.mean()),
+                             "texture_agreement": agreement},
+        "input_mesh_labels": input_mesh_diag,
         "elapsed_sec": round(time.time() - t0, 1),
-        "outputs": {"mask": "mask.npz", "mesh": "pred_mesh.glb"},
+        "outputs": outputs,
     }
     json.dump(meta, open(os.path.join(args.out, "meta.json"), "w"), indent=2)
     print(f"[done] {args.out} ({meta['elapsed_sec']}s)", flush=True)
