@@ -113,8 +113,29 @@ All "headline nonzero IoU" numbers above use the protocol in
 
 ## predict_emissive.py status
 
-`emissive/infer/predict_emissive.py` is **untested on GPU as of this commit** — this
-workstation has no `trellis2`/`o_voxel` env to run it end-to-end. What IS verified: clean
-`python -m py_compile`, and `--help` runs standalone (all heavy imports are deferred past
-argparse). See the script's own docstring for the exact `salloc`/run command to smoke-test
-it on a cluster GPU node once available.
+**Tested on GPU 2026-07-16** (job 232600, `3dlg-hcvc-lab-debug` partition, l40s, exit
+0:0, 00:01:52 elapsed). Command run (from a repo clone rsynced to
+`/3dlg-jupiter-project/lightgen/segvigen_emissive/repo_reorg_smoke/`, a scratch dir — the
+live `code/`/`outputs/` dirs were untouched):
+```
+cd /3dlg-jupiter-project/lightgen/segvigen_emissive/repo_reorg_smoke
+python emissive/infer/predict_emissive.py \
+  --glb /3dlg-jupiter-project/lightgen/segvigen_emissive/dataset/overfit_10/ce28711b7d614918a7239b97c089d311/glb/ce28711b7d614918a7239b97c089d311_input.glb \
+  --out /3dlg-jupiter-project/lightgen/segvigen_emissive/repo_reorg_smoke/smoke_out \
+  --draws 2 --steps 12 --zero_cond
+```
+(uses the default ckpt, `emis_1k_w5/epoch_0016_ema.ckpt`.) Ran end-to-end in 109.9s:
+glb_to_vxz → shape/tex slat encode → 2-draw sample → decode → threshold → `slat_to_glb`
+remesh+bake. Verified output, not just exit code: `mask.npz` has 890,597 voxels
+(coords int32, prob float32 in [0.46, 1.03], mask bool, 41.1% emissive — not degenerate),
+`pred_mesh.glb` loads in trimesh (1 geometry, 80,878 vertices, 98,788 faces).
+
+First attempt (job 232599) caught a real bug: the sibling-`eval/`-dir `sys.path` insert
+used `os.path.join(ROOT, "eval")` instead of `os.path.join(ROOT, "emissive", "eval")`
+(`ROOT` is the repo root after the walk-up shim runs, not `emissive/infer/`) —
+`ModuleNotFoundError: No module named 'eval_emissive'`. Fixed, re-verified `py_compile`
++ `--help` locally, re-ran clean on 232600.
+
+Not yet exercised by this smoke test: the real-cond path (`--image` / render-from-glb,
+needs `bpy` in the trellis2 env) — this run used `--zero_cond`. Recommend a follow-up
+smoke test dropping `--zero_cond` before relying on real-cond inference.
