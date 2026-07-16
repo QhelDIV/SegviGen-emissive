@@ -31,9 +31,10 @@ emissive/
   train/       train_emissive.py
   eval/        eval_emissive.py  seg_covers_emissive.py  seg_to_mesh.py  make_pred_glb.py
   infer/       predict_emissive.py            # agent-facing: glb in -> mask + mesh out
-  slurm/       *_v5.sbatch, eval_val96.sbatch, build_dataset*.sbatch, make_pred_glb.sbatch,
-               seg_covers_*.sbatch, dl_weights.sbatch, gpu_smoke.sbatch, build_canon10.sbatch
-  slurm/archive/  superseded train_emissive*/eval_emissive.sbatch variants (kept for history)
+  slurm/       *_v5.sbatch, eval_emissive.sbatch, eval_val96.sbatch, build_dataset*.sbatch,
+               make_pred_glb.sbatch, seg_covers_*.sbatch, dl_weights.sbatch, gpu_smoke.sbatch,
+               build_canon10.sbatch
+  slurm/archive/  superseded train_emissive* variants (kept for history, not for use)
   env/         setup_trellis_env.sh  resume_env.sh  smoke_test.py
   docs/        EXPERIMENTS.md                 # run/checkpoint registry — read this first
   canon_overfit10.txt
@@ -92,8 +93,12 @@ Batch scripts (`emissive/slurm/*.sbatch`): one per script above (multiple
 dated variants exist for `train_emissive*` and `build_dataset*` — later
 `_v2`, `_v3`, `_v4`, `_v5` sbatch files reflect iterated
 hyperparameters/paths, not supersession; check the script body for what
-changed). Superseded `train_emissive*`/`eval_emissive.sbatch` variants are
-archived under `emissive/slurm/archive/` (kept for history, not for use).
+changed). Superseded `train_emissive*` variants (older hyperparameter/path
+iterations of the same launcher, since replaced by `train_emissive_v5.sbatch`)
+are archived under `emissive/slurm/archive/` (kept for history, not for use).
+`eval_emissive.sbatch` itself is NOT superseded — it's iterated in place
+(same filename, current v5-era args) — so it stays in the active `slurm/`
+dir alongside `eval_val96.sbatch`.
 **Deployment convention:** the whole repo is rsynced to the cluster and every
 sbatch script is submitted from the repo root (`cd`'d to inside the script,
 then `python emissive/<sub>/<script>.py ...` — repo-root-relative paths, not
