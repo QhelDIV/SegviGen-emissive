@@ -26,9 +26,14 @@ python emissive/infer/predict_emissive.py \
 `--out` is an output **directory** (created automatically). After the run:
 ```
 results/example/
-├── mask.npz        # per-voxel prediction: coords (N,3) @512-res, prob (N,), mask (N,)
-├── pred_mesh.glb   # decoded mesh, white = emissive / black = not
-└── meta.json       # ckpt, draws, threshold, timing
+├── mask.npz               # per-voxel prediction: coords (N,3) @512-res, prob (N,), mask (N,)
+├── pred_mesh.glb          # decoded mesh, white = emissive / black = not (baked texture)
+├── pred_mesh_labels.npz   # SAME prediction, per-FACE of pred_mesh.glb (machine-readable)
+└── meta.json              # ckpt, draws, threshold, timing, per-face label diagnostics
+
+# with --label_input_mesh, also:
+├── input_mesh_labels.npz   # per-FACE prediction over the ORIGINAL --glb's faces
+└── input_mesh_labeled.glb  # the original geometry, face-colored white/black
 ```
 
 **Run on your own mesh** (defaults: `--draws 4 --thr 0.5`, recommended checkpoint):
@@ -58,7 +63,9 @@ python emissive/infer/predict_emissive.py \
 Other flags: `--draws N` (samples averaged per shape, default 4), `--thr` (mask
 threshold, default 0.5), `--steps` (flow steps, default 12), `--seed`, and
 `--image cond.png` to condition on a real render instead of `--zero_cond`
-(⚠ untested on GPU so far — see "Honest expectations" below).
+(⚠ untested on GPU so far — see "Honest expectations" below). `--label_input_mesh`
+additionally labels the ORIGINAL mesh's faces, not just the decoded one — see
+"Outputs" below.
 
 **Input**: any textured `.glb`, from any source — it gets voxelized and
 normalized internally (`data_toolkit/glb_to_vxz.py`), so it doesn't need to be
@@ -78,8 +85,31 @@ coords, prob, mask = d["coords"], d["prob"], d["mask"]
 # mask:   (N,)  bool, prob > --thr
 ```
 Plus `pred_mesh.glb` — the decoded mesh with the mask baked in as base color
-(white = emissive, black = not), and `meta.json` (ckpt, draws, threshold,
-timing).
+(white = emissive, black = not) — and, always, `pred_mesh_labels.npz`, the
+SAME prediction attached per-FACE of `pred_mesh.glb` (for anything that wants
+machine-readable labels instead of parsing a baked texture):
+```python
+import numpy as np
+d = np.load("OUTDIR/pred_mesh_labels.npz")
+face_prob, face_mask = d["face_prob"], d["face_mask"]   # (F,) float32 / bool, one per pred_mesh.glb face
+# d["n_faces"], d["thr"], d["resolution"], d["aabb"] — header info for reproducing the lookup
+```
+Face labels come from the SAME voxel prediction as `mask.npz`, mapped onto
+each mesh face by nearest voxel in the shared `[-0.5,0.5]^3` / 512-res frame
+(exact index at the face centroid, falling back to nearest predicted voxel
+center for faces that land off-grid after mesh simplification — see
+`_label_mesh_faces` in the script for the precise rule). The frame assumption
+is checked empirically at runtime, not just assumed: a mesh-bounds check plus
+an independent baked-texture-vs-`face_mask` agreement check are printed to
+the log and stored in `meta.json` — see `emissive/docs/EXPERIMENTS.md` for
+the measured agreement % from GPU validation.
+
+With `--label_input_mesh`, the same per-face lookup additionally runs against
+the **original** `--glb`'s faces (before any of the pipeline's internal
+voxelization/remeshing), written to `input_mesh_labels.npz` (same
+`face_prob`/`face_mask`/header layout) plus `input_mesh_labeled.glb` — the
+original geometry, face-colored white/black, for eyeballing without needing
+to parse the npz.
 
 **SLURM route**: `emissive/slurm/predict_smoke.sbatch` is the template (the
 exact sbatch used for the passing smoke test above) — copy and edit its

@@ -21,9 +21,14 @@ python emissive/infer/predict_emissive.py \
 Default `--ckpt` = the recommendation below (`emis_1k_w5` epoch 16 EMA =
 `/3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/emis_1k_w5/epoch_0016_ema.ckpt`). Outputs
 `OUTDIR/mask.npz` (`coords` int32 @512-res, `prob` float32, `mask` bool),
-`pred_mesh.glb` (white=emissive), `meta.json`. Template sbatch:
-`emissive/slurm/predict_smoke.sbatch`. GPU-tested 2026-07-16 (job 232600) — see
-"predict_emissive.py status" below for the full validation record.
+`pred_mesh.glb` (white=emissive) + `pred_mesh_labels.npz` (the SAME prediction,
+per-FACE of `pred_mesh.glb` — `face_prob` float32, `face_mask` bool, always
+written), `meta.json`. Add `--label_input_mesh` for `input_mesh_labels.npz` +
+`input_mesh_labeled.glb` (same per-face labels, but over the ORIGINAL input
+glb's faces). Template sbatch: `emissive/slurm/predict_smoke.sbatch`.
+GPU-tested 2026-07-16 (job 232600; mesh-label feature added and re-tested
+same day) — see "predict_emissive.py status" below for the full validation
+record.
 
 All checkpoint paths are on the `/3dlg-jupiter-project` NFS mount (jupiter cluster). Every
 serious run directory holds `epoch_NNNN.ckpt` + `epoch_NNNN_ema.ckpt` (~2.62 GB each) plus
