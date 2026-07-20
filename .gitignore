@@ -1,0 +1,49 @@
+# ===== lightgen-ops: personal console/xgpage/notes tooling =====
+# Everything not explicitly the ops layer is ignored. Dev code lives in the
+# dongchen-yang/lightgen team repo + the SegviGen-emissive submodule, NOT here.
+
+# venvs (rebuildable)
+.venv/
+.venv_console/
+.venv_itables/
+**/.venv/
+**/__pycache__/
+*.pyc
+
+# nested external repos — separately versioned, never vendor here
+/lightgen_repo/
+/TEXGen/
+/diffusion-net/
+/lightgen_overleaf/
+/diffusionnet_light/
+/cluster_skill/
+/render_texverse/
+/segvigen_emissive/code/
+
+# heavy / generated / reproducible
+/segvigen_emissive/vis_data/
+/segvigen_emissive/direct_pilot/
+/segvigen_emissive/pred_glb/
+/segvigen_emissive/dump_*/
+/segvigen_emissive/dataset/
+/segvigen_emissive/outputs/
+/segvigen_emissive/__pycache__/
+
+# ad-hoc QA screenshots + binaries at the project root and elsewhere
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+/*.tar.gz
+*.glb
+*.ckpt
+*.pth
+*.npz
+*.blend
+
+# secrets — never commit
+*.env
+.env*
+*token*
+*secret*
+*.credentials.json

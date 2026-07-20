@@ -1,0 +1,391 @@
+/* theme3.css — xgpage design-language v3 ("workspace" shell), 2026-07-16.
+   Loaded AFTER theme.css and theme2.css, ONLY by pages built with
+   xgpage.page(theme="v3") (<body class="xg2 xg3">). v2's entire component
+   library and palette render unchanged via the .xg2 class; this file adds
+   1. the three-column workspace shell: left curated page tree, center
+      content column, right per-page outline (scrollspy in xg3.js),
+   2. a DENSITY pass: v2's editorial style at v1's information density,
+      sourced ENTIRELY from vertical rhythm, component padding, and the
+      wider 820px measure — NEVER from glyph size (user directive
+      2026-07-16, after a ~15px first cut: smaller type invites verbosity
+      because more words fit before the page pushes back; density serves
+      concision only if the type stays readable, so compact space with
+      readable type is the intended pressure on the writer). Body type
+      stays within a half-step of v2's (1rem on the root clamp = 16-17.5px
+      effective; v2 is 1.02rem), line-height 1.55 (v2: 1.68), section
+      rhythm about 2/3 of v2's,
+   3. compact re-skins of v1's verdict_box() and stat_tiles() as first-class
+      v3 components in the v2 palette,
+   4. the version-picker slot (top-right of the content column, quiet mono):
+      living pages carry a Version N dropdown fed by ./versions.json
+      ([{"v","date","note","sha"}], menu built by xg3.js at runtime);
+      date-frozen pages (daily reports) show their date, no picker.
+
+   GEOMETRY (user-ratified vision, wide screens first): at >=1321px the
+   shell is [tree 232px | content track | outline 216px]; the content
+   column (.page, max 868px = 820px measure + 2x24 padding) centers in its
+   own track, Google-Docs style: rails pinned to the viewport edges, the
+   document centered between them. 1200-1320px drops the outline;
+   below 1200px both rails collapse (tree behind a top-bar toggle as a
+   fixed drawer, outline gone) and the content column is the page.
+
+   D-LAW SCOPE (see SKILL.md version registry): D1-D10 apply unchanged.
+   D11 (breakout figures center) is inherited relative to the CONTENT
+   COLUMN: figures keep their unconditional auto margins and the column is
+   the containing block, so "center" means the column's axis, not the
+   viewport's. D12 (680px prose measure centered at wide viewports) is
+   SUPERSEDED on v3 pages: the rails are earned (nav + outline carry the
+   width), which was D12's explicit reversal condition, and running text
+   fills the 820px measure directly (max-width overrides below).
+   --breakout-max is remapped to the 820px column; method_matrix() callers
+   on v3 pages pass page_inner=820 so tile math matches (see xgpage.py).
+
+   ANNOTATION (hypothes.is) COLLISION: the hypothes.is sidebar docks at the
+   viewport's right edge, exactly where the outline rail lives. Two
+   deliberate measures: (a) the outline reserves 44px right padding so the
+   COLLAPSED hypothes.is toggle bubble never covers outline text; (b) when
+   the sidebar OPENS, xg3.js sets body.v3-annot-open and the outline fades
+   out (below) — annotation mode temporarily replaces the outline rail,
+   the two never fight for the same pixels. */
+
+/* ---------------------------------------------------------------- shell */
+body.xg3 { font-size: 1rem; line-height: 1.55; --breakout-max: 820px; }
+.xg3 .v3-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr) 216px;
+  min-height: 100vh; }
+.xg3 .v3-main { min-width: 0; }
+.xg3 .v3-main .page { max-width: 868px; margin: 0 auto; padding: 0 24px 3.5rem; }
+
+/* left rail: curated page tree */
+.xg3 .v3-tree { position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  border-right: 1px solid var(--line); background: var(--bg2);
+  padding: 20px 14px 40px 20px; font-size: .82rem; }
+.xg3 .v3-tree-head { margin-bottom: 6px; }
+.xg3 .v3-brand { font-family: "Iowan Old Style", "Palatino Nova", Palatino,
+  Georgia, serif; font-size: 1.02rem; color: var(--ink); }
+.xg3 .v3-brand-sub { font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: .62rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-3); margin-top: 2px; }
+/* zone switcher: the console's quiet cross-zone links (one-way rule: only
+   the operator console carries this block; workspace trees never do) */
+.xg3 .v3-zone-switch { margin: 8px 0 6px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--line); }
+.xg3 .v3-zone-link { display: block; text-decoration: none;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .68rem;
+  letter-spacing: .06em; color: var(--ink-3); padding: 3px 8px; }
+.xg3 .v3-zone-link:hover { color: var(--accent-ink); }
+/* zone-sticky exit control (xg3.js mounts it when a workspace page renders
+   the console tree for an operator arriving from the console) */
+.xg3 .v3-zone-exit .v3-zone-link::before { content: "\2190\00a0"; /* left arrow */ }
+.xg3 .v3-tree-list, .xg3 .v3-tree-sublist { list-style: none; margin: 0; padding: 0; }
+.xg3 .v3-tree-group { margin-top: 4px; }
+.xg3 .v3-tree-grouplabel { font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: .66rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-3); margin: 18px 0 5px; }
+.xg3 .v3-tree-link { display: block; color: var(--ink-2); text-decoration: none;
+  padding: 4px 8px; border-radius: 6px; line-height: 1.45; }
+.xg3 .v3-tree-link:hover { color: var(--ink); background: var(--surface); }
+.xg3 .v3-tree-link.active { color: var(--accent-ink); background: var(--surface);
+  font-weight: 600; }
+.xg3 .v3-tree-link .v3-leaf-meta { display: block; font-size: .7rem;
+  color: var(--ink-3); font-weight: 400; }
+
+/* right rail: outline of the current page (scrollspy: xg3.js) */
+.xg3 .v3-outline { position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  padding: 26px 44px 40px 0; transition: opacity .15s; }
+.xg3 .v3-ol-title { font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: .64rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 10px; padding-left: 12px; }
+.xg3 .v3-ol-list { list-style: none; margin: 0; padding: 0; }
+.xg3 .v3-ol-link { display: block; font-size: .76rem; color: var(--ink-3);
+  text-decoration: none; padding: 3px 0 3px 10px; line-height: 1.45;
+  border-left: 2px solid var(--line); }
+.xg3 .v3-ol-link:hover { color: var(--ink); }
+.xg3 .v3-ol-link.active { color: var(--accent-ink); border-left-color: var(--accent); }
+body.v3-annot-open .v3-outline { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .xg3 .v3-outline { transition: none; } }
+
+/* mobile top bar (hidden on desktop) + drawer tree + scrim */
+.xg3 .v3-topbar { display: none; }
+.xg3 .v3-scrim { display: none; }
+
+@media (max-width: 1320px) {
+  .xg3 .v3-shell { grid-template-columns: 232px minmax(0, 1fr); }
+  .xg3 .v3-outline { display: none; }
+}
+@media (max-width: 1199px) {
+  .xg3 .v3-shell { display: block; }
+  .xg3 .v3-topbar { display: flex; position: sticky; top: 0; z-index: 30;
+    align-items: center; gap: 12px; padding: 9px 14px;
+    background: var(--bg2); border-bottom: 1px solid var(--line); }
+  .xg3 .v3-menu { width: 36px; height: 32px; flex: none; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--tile);
+    display: flex; align-items: center; justify-content: center; padding: 0; }
+  .xg3 .v3-menu:hover { border-color: var(--accent); }
+  /* three-bar glyph: one span + box-shadow copies (crisp at any dpr) */
+  .xg3 .v3-menu-bars { display: block; width: 14px; height: 2px;
+    border-radius: 1px; background: var(--ink-2);
+    box-shadow: 0 -5px 0 var(--ink-2), 0 5px 0 var(--ink-2); }
+  .xg3 .v3-menu:hover .v3-menu-bars { background: var(--accent-ink);
+    box-shadow: 0 -5px 0 var(--accent-ink), 0 5px 0 var(--accent-ink); }
+  .xg3 .v3-topbar-title { font-size: .8rem; color: var(--ink-2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .xg3 .v3-tree { position: fixed; top: 0; left: 0; bottom: 0; height: auto;
+    width: 280px; max-width: 84vw; z-index: 40; transform: translateX(-102%);
+    transition: transform .22s ease; }
+  body.v3-tree-open .v3-tree { transform: none;
+    box-shadow: 0 0 30px rgba(0, 0, 0, .25); }
+  body.v3-tree-open .v3-scrim { display: block; position: fixed; inset: 0;
+    z-index: 35; background: rgba(20, 18, 14, .38); }
+  @media (prefers-reduced-motion: reduce) { .xg3 .v3-tree { transition: none; } }
+}
+
+/* ---------------------------------------------------------------- density
+   v2's style at v1's density: same palette, serif display, figure craft.
+   Density comes from RHYTHM (section padding, margins, component padding,
+   line-height 1.55) and the wider 820px measure; body glyph size stays
+   readable (1rem, see header comment). Selectors repeat theme2's
+   (.xg2-scoped) properties at .xg3 scope; equal specificity, later file
+   wins — theme2.css itself is untouched (v2 pages stay byte-identical). */
+.xg3 h1 { font-size: clamp(1.65rem, 2.4vw, 2.3rem); line-height: 1.12; }
+.xg3 h2 { font-size: 1.38rem; margin: 0 0 12px; }
+.xg3 h3 { font-size: 1.05rem; margin: 24px 0 10px; }
+.xg3 header { padding: 34px 0 0; }
+.xg3 .eyebrow { margin-bottom: 12px; }
+.xg3 .kicker { margin-bottom: 8px; }
+.xg3 .dek { font-size: 1.08rem; max-width: 720px; margin: 14px 0 0; line-height: 1.5; }
+.xg3 .statband { margin: 26px 0 0; }
+.xg3 .sb-item { padding: 12px 16px 10px; }
+.xg3 .sb-n { font-size: 1.3rem; }
+.xg3 .sb-l { font-size: .68rem; }
+.xg3 section { padding: 34px 0 4px; }
+.xg3 section + section, .xg3 section ~ section { margin-top: 22px; }
+.xg3 footer { margin-top: 48px; padding: 20px 0 8px; }
+
+/* the 820px content column IS the measure on v3 (D12 superseded: rails
+   earned the width); the auto margins from theme2 resolve to 0 */
+.xg3 .prose { max-width: none; }
+.xg3 section > .kicker, .xg3 section > h2, .xg3 section > h3 { max-width: none; }
+.xg3 .prose p { margin: 0 0 .95em; }
+
+.xg3 figure { margin: 24px 0; }
+.xg3 figure img { border-radius: 10px; }
+.xg3 figcaption { font-size: .8rem; margin-top: 9px; line-height: 1.5; }
+.xg3 figure.mm { margin: 24px 0; }
+.xg3 .panel-label { font-size: .68rem; margin: 6px 0 3px; }
+/* method_matrix row-label hang: theme2 pulls .mm-scroll 32px left at
+   >=1060px viewports so the rotated gutter hangs outside the tile span.
+   With page_inner=820 the column's slack covers the hang in every shell
+   state EXCEPT the narrowest 3-col band: slack left of the content box is
+   (vw-868)/2 in drawer mode (>=96px at 1060), (vw-1100)/2 in the 2-col
+   band (>=50px at 1200), but (vw-1316)/2 in the 3-col shell — under 32px
+   until 1380px. Suppress the hang only in that band; the gutter then
+   rides inside the scroll box exactly like theme2's sub-1060 behavior. */
+@media (min-width: 1321px) and (max-width: 1379px) {
+  .xg3 .mm .mm-scroll { margin-left: 0; }
+}
+
+.xg3 .callout { padding: 14px 18px; margin: 20px auto; max-width: none;
+  font-size: .96rem; border-radius: 10px; }
+.xg3 .chart { margin: 24px auto; }
+.xg3 .chartnote { font-size: .8rem; }
+.xg3 pre.codeblock, .xg3 pre.pseudo { font-size: .74rem; padding: 14px 18px;
+  margin: 22px auto; max-width: none; }
+.xg3 details.expand { margin: 20px 0; }
+.xg3 details.expand > summary { padding: 10px 2px; font-size: .7rem; }
+.xg3 .appendix { margin-top: 36px; padding-top: 20px; grid-template-columns: 110px 1fr;
+  gap: 22px; }
+.xg3 .apx-list { font-size: .8rem; }
+.xg3 table { font-size: .82rem; }
+.xg3 table.results th, .xg3 table.results td { padding: .42rem .5rem; }
+
+/* ---------------------------------------------------------------- v3 components
+   v1's verdict box and stat cards, ported into the v2 palette at v3 density
+   (theme2 already token-remaps their colors; this tightens their shape). */
+.xg3 .verdict { font-size: .95rem; padding: 12px 16px; margin: 16px 0 20px;
+  border-radius: 10px; }
+.xg3 .stat-row { gap: 8px; margin: 14px 0 18px; }
+.xg3 .stat { background: var(--tile); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 12px; }
+.xg3 .stat b { font-size: 1.15rem; color: var(--ink);
+  font-family: "Iowan Old Style", "Palatino Nova", Palatino, Georgia, serif;
+  font-variant-numeric: tabular-nums; }
+.xg3 .stat span { font-size: .68rem; color: var(--ink-3); letter-spacing: .05em;
+  text-transform: uppercase; }
+
+/* ---------------------------------------------------------------- version slot
+   Artifact-style page versioning (user-ratified 2026-07-16; shell UI +
+   manifest contract only — minting and /v/N/ snapshots are post-
+   ratification publish tooling). A quiet mono element floated at the
+   top-right of the content column, on the eyebrow band: living pages get
+   a <details> dropdown whose menu xg3.js fills from ./versions.json;
+   date-frozen pages (daily reports) show their date as plain text. A
+   float (not absolute positioning) so the hero title can never overlap
+   it — long titles wrap around the slot instead. */
+.xg3 .v3-vslot { float: right; margin: 38px 0 4px 24px; position: relative;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .7rem;
+  letter-spacing: .04em; color: var(--ink-3); }
+.xg3 details.v3-vpick > summary { list-style: none; cursor: pointer;
+  display: flex; gap: 6px; align-items: baseline; }
+.xg3 details.v3-vpick > summary::-webkit-details-marker { display: none; }
+.xg3 details.v3-vpick > summary::after { content: "\25BE"; /* ▾ */
+  color: var(--accent-ink); }
+.xg3 details.v3-vpick > summary:hover { color: var(--accent-ink); }
+.xg3 .v3-vmenu { position: absolute; right: 0; top: calc(100% + 6px);
+  z-index: 20; min-width: 240px; background: var(--tile);
+  border: 1px solid var(--line); border-radius: 8px; padding: 5px;
+  margin: 0; list-style: none; box-shadow: 0 6px 22px rgba(0, 0, 0, .14); }
+.xg3 .v3-vmenu li { padding: 6px 9px; border-radius: 6px; color: var(--ink-2);
+  white-space: nowrap; }
+.xg3 .v3-vmenu li.current { color: var(--accent-ink); background: var(--surface); }
+.xg3 .v3-vmenu li a { color: inherit; text-decoration: none; display: block;
+  cursor: pointer; }
+.xg3 .v3-vmenu li a:hover { color: var(--accent-ink); }
+/* pre-tooling history rows have no snapshot to open: visibly inert (muted,
+   no pointer), never styled like their linked siblings */
+.xg3 .v3-vmenu li.nolink { color: var(--ink-3); cursor: default; }
+.xg3 .v3-vmenu li .v3-vnote { color: var(--ink-3); }
+.xg3 .v3-vmenu li.v3-verr { color: var(--ink-3); font-style: italic; }
+/* not-current banner: inserted at RUNTIME by xg3.js on a superseded /v/N/
+   snapshot (content bytes stay immutable; the banner is chrome) */
+.xg3 .v3-vbanner { margin: 18px 0 -8px; padding: 10px 14px; border-radius: 8px;
+  background: var(--surface); border-left: 3px solid var(--accent2);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .72rem;
+  letter-spacing: .04em; color: var(--ink-2); }
+.xg3 .v3-vbanner a { color: var(--accent-ink); }
+
+/* ---------------------------------------------------------------- clist re-skin
+   theme.css hardcodes .ci-title { color: #fff } (dark v1 chrome); on the v3
+   light background the note/card titles were near-invisible (user review,
+   2026-07-17). theme.css stays byte-stable; override at .xg3 scope. */
+.xg3 .clist-item .ci-title { color: var(--ink); }
+.xg3 a.ci-link:hover .ci-title, .xg3 .clist-item .ci-title a:hover { color: var(--accent-ink); }
+.xg3 .clist-item .ci-title a { color: inherit; text-decoration: none; }
+/* same class of defect: theme.css hardcodes the filter box's dark ground */
+.xg3 .filter-box { background: var(--tile); color: var(--ink); border-color: var(--line); }
+
+/* ---------------------------------------------------------------- wide variant
+   page(wide=True): full-page database/table pages (console Pages tab).
+   The shell drops the outline track; the content column fills the space
+   between the rails. D3's 820px measure is a PROSE law; a table page has
+   no prose measure to keep. */
+.xg3 .v3-shell.v3-wide { grid-template-columns: 232px minmax(0, 1fr); }
+.xg3 .v3-main .page.page-wide { max-width: none; margin: 0; padding: 0 36px 3.5rem; }
+@media (max-width: 1199px) { .xg3 .v3-main .page.page-wide { padding: 0 20px 3rem; } }
+
+/* database table (.dbwrap around an itables/DataTables widget) */
+.xg3 .dbwrap { font-size: .85rem; }
+.xg3 .dbwrap table.dbtable { font-size: .85rem; }
+/* text columns read left (theme2's results re-skin centers everything;
+   numeric columns opt into .dt-right below) */
+.xg3 .dbwrap table.dbtable th, .xg3 .dbwrap table.dbtable td { text-align: left; }
+.xg3 .dbwrap .dt-scroll-head { position: sticky; top: 0; z-index: 6;
+  background: var(--bg2); box-shadow: 0 1px 0 var(--line); }
+@media (max-width: 1199px) { .xg3 .dbwrap .dt-scroll-head { top: 51px; } } /* below the mobile topbar */
+/* frozen name column (first col) inside DataTables' own scroll container */
+.xg3 .dbwrap .dt-scroll-body td:first-child,
+.xg3 .dbwrap .dt-scroll-body th:first-child,
+.xg3 .dbwrap .dt-scroll-head th:first-child { position: sticky; left: 0;
+  background: var(--bg2); z-index: 2; }
+.xg3 .dbwrap tbody tr:hover td { background: var(--surface); }
+.xg3 .dbwrap tbody tr:hover td:first-child { background: var(--surface); }
+.xg3 .dbwrap td a { color: var(--accent-ink); text-decoration: none; }
+.xg3 .dbwrap td a:hover { text-decoration: underline; }
+.xg3 .dbwrap .dt-right { text-align: right; font-variant-numeric: tabular-nums; }
+.xg3 .dbwrap .db-note { display: inline-block; max-width: 300px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
+  color: var(--ink-2); }
+.xg3 .dbwrap .badge.tier-root { background: var(--surface); color: var(--good); }
+.xg3 .dbwrap .badge.tier-preview { background: var(--surface); color: var(--blue-ink); }
+/* lightgen-only tier (2026-07-19): daily-report / team-update pages, scanned
+   one level deeper (PUBLISH_DEST/updates/<date>/) — see inventory_pages.py. */
+.xg3 .dbwrap .badge.tier-update { background: var(--surface); color: var(--accent); }
+/* curation layer: tag chips (click filters), star, important-only toggle */
+.xg3 .dbwrap .db-tag { display: inline-block; cursor: pointer; margin: 0 3px 2px 0;
+  padding: 1px 8px; border-radius: 99px; background: var(--surface);
+  border: 1px solid var(--line); color: var(--ink-2);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .68rem; }
+.xg3 .dbwrap .db-tag:hover { color: var(--accent-ink); border-color: var(--accent); }
+.xg3 .dbwrap a.db-imp::before { content: "\2605\00a0"; color: var(--accent); }
+.xg3 .dbwrap .db-imp-toggle { margin-left: 10px; cursor: pointer;
+  background: var(--tile); border: 1px solid var(--line); border-radius: 6px;
+  padding: .3rem .6rem; color: var(--ink-2); font-size: .78rem; }
+.xg3 .dbwrap .db-imp-toggle:hover { color: var(--accent-ink); border-color: var(--accent); }
+.xg3 .dbwrap .db-imp-toggle.on { background: var(--surface); color: var(--accent-ink);
+  border-color: var(--accent); }
+
+/* quiet DataTables chrome in the shell's vocabulary */
+.xg3 .dbwrap .dt-search input, .xg3 .dbwrap .dt-length select {
+  background: var(--tile); border: 1px solid var(--line); border-radius: 6px;
+  padding: .3rem .6rem; color: var(--ink); font-size: .82rem; }
+.xg3 .dbwrap .dt-search input:focus { outline: none; border-color: var(--accent); }
+.xg3 .dbwrap .dt-info { color: var(--ink-3); font-size: .76rem; }
+.xg3 .dbwrap .dt-paging .dt-paging-button { color: var(--ink-2); border-radius: 6px; }
+.xg3 .dbwrap .dt-paging .dt-paging-button.current { background: var(--surface);
+  color: var(--accent-ink); border: 1px solid var(--line); }
+.xg3 .dbwrap .dt-paging .dt-paging-button:hover:not(.disabled) {
+  background: var(--surface); color: var(--accent-ink); }
+
+/* mobile */
+@media (max-width: 640px) {
+  .xg3 .v3-main .page { padding: 0 16px 3rem; }
+  .xg3 .v3-vslot { margin-top: 26px; }
+  .xg3 header { padding-top: 24px; }
+  .xg3 h2 { font-size: 1.25rem; }
+  .xg3 .dek { font-size: 1rem; }
+  .xg3 section { padding: 28px 0 4px; }
+  .xg3 section + section, .xg3 section ~ section { margin-top: 18px; }
+}
+
+/* ==================================================================
+   jday — daily-report content blocks, ported from somages (2026-07-19).
+   Source: build_daily.py's per-day <section class="jday"> markup, which
+   somages page-inlines as a <style> tag on its continuous journal page
+   (web/daily/index.html) rather than shipping in theme3.css. Promoted
+   here to a shared component because lightgen keeps ONE STANDALONE PAGE
+   PER DAY (updates/<date>/index.html, per the original assignment) rather
+   than somages' single-page journal — a page-inlined <style> would repeat
+   ~100 lines per day; a shared component does not. Verbatim CSS, zero
+   zone/tree assumptions (confirmed against workspace_zone.py before
+   porting — nothing here references a workspace URL or the console).
+   ================================================================== */
+.xg3 .jday { padding-top: 30px; margin-top: 30px; border-top: 1px solid var(--line); }
+.xg3 .jday:first-of-type { border-top: 0; margin-top: 6px; padding-top: 0; }
+.xg3 .jday-kicker { font-family: var(--mono, ui-monospace, monospace); font-size: .72rem;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+.xg3 .jday-date { font-family: var(--serif, Georgia, serif); font-weight: 600;
+  font-size: 1.5rem; line-height: 1.2; letter-spacing: -.01em; margin: 0 0 18px; color: var(--ink); }
+.xg3 .jblock { margin: 0 0 20px; }
+.xg3 .jlabel { font-family: var(--mono, ui-monospace, monospace); font-size: .7rem;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+.xg3 ul.jtodos, .xg3 ul.jdone, .xg3 ul.jbullets { list-style: none; margin: 0; padding: 0; }
+.xg3 ul.jtodos li, .xg3 ul.jdone li, .xg3 ul.jbullets li { position: relative;
+  padding-left: 26px; margin: 0 0 7px; line-height: 1.5; color: var(--ink-2); max-width: 680px; }
+.xg3 ul.jbullets li { margin-bottom: 11px; line-height: 1.55; max-width: 730px; }
+.xg3 ul.jtodos li::before { content: ""; position: absolute; left: 0; top: .2em;
+  width: 14px; height: 14px; border: 1.5px solid var(--ink-3); border-radius: 4px;
+  box-sizing: border-box; }
+.xg3 ul.jtodos li.done { color: var(--ink-3); }
+.xg3 ul.jtodos li.done::before { border-color: var(--accent); background: var(--accent); }
+.xg3 ul.jtodos li.done::after { content: ""; position: absolute; left: 4.5px; top: .3em;
+  width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0;
+  transform: rotate(45deg); box-sizing: border-box; }
+.xg3 ul.jdone li::before, .xg3 ul.jbullets li::before { content: ""; position: absolute;
+  left: 5px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); }
+.xg3 ul.jdone li a, .xg3 ul.jbullets li a, .xg3 .jreflect a, .xg3 .jarchive a { color: var(--accent);
+  text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); }
+.xg3 ul.jdone li a:hover, .xg3 ul.jbullets li a:hover, .xg3 .jreflect a:hover, .xg3 .jarchive a:hover { border-bottom-color: var(--accent); }
+.xg3 .jreflect { margin: 0; line-height: 1.6; color: var(--ink-2); max-width: 680px; font-style: italic; }
+.xg3 .jfine { margin: 14px 0 0; padding-left: 13px; max-width: 660px;
+  border-left: 2px solid color-mix(in srgb, var(--ink-3) 26%, transparent); }
+.xg3 .jfine p { margin: 0 0 3px; font-size: .8rem; line-height: 1.42; color: var(--ink-3); }
+.xg3 .jfine p:last-child { margin-bottom: 0; }
+.xg3 .jfine a { color: color-mix(in srgb, var(--accent) 75%, var(--ink-3));
+  text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); }
+.xg3 .jfine a:hover { border-bottom-color: var(--accent); }
+.xg3 .jarchive { margin-top: 48px; padding-top: 18px; border-top: 2px solid var(--line); }
+.xg3 .jarchive-label { font-family: var(--mono, ui-monospace, monospace); font-size: .72rem;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+.xg3 .jarch-item { margin: 0 0 12px; line-height: 1.55; color: var(--ink-2);
+  font-size: .93rem; max-width: 720px; }
+.xg3 .jarch-item .jarch-date { font-family: var(--mono, ui-monospace, monospace);
+  color: var(--ink); font-size: .85rem; margin-right: .5em; }

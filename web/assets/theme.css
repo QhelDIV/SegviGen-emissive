@@ -1,0 +1,727 @@
+/* lightgen shared page theme — design-system source of truth.
+   Extracted 2026-07-06 from build_finetune_page.py (the first page built with the
+   outline/preview/collapsible mechanic) + build_dataset_gallery_page.py (funnel,
+   stat tiles, SVG chart wrapper, gallery grid). Consumed by tools/lightpage.py.
+
+   Published (merge-copy, never rmtree) to PUBLISH_DEST/assets/theme.css; pages
+   reference it as "../assets/theme.css". Do not hand-edit a per-page copy —
+   edit here and republish the assets bundle so every page picks it up.
+*/
+
+:root {
+  --bg: #12151a; --panel: #171b22; --panel2: #1b2028; --border: #262c36;
+  --text: #d8dde6; --muted: #8b96a5; --accent: #5cc8ff; --accent2: #ffb454;
+  --good: #4ade80; --bad: #f87171;
+}
+* { box-sizing: border-box; }
+
+/* NOTE: overflow-x:hidden must be on ONE of html/body, never both. Setting it on
+   both makes the browser treat <body> as its own scroll container (distinct from
+   the viewport), which silently breaks `position: sticky` for any descendant (e.g.
+   the outline sidebar below) — it computes as sticky but never actually engages.
+   Found + fixed 2026-07-06 on finetune_binary_v1. If you don't have any genuinely
+   overflowing content (check via `document.documentElement.scrollWidth >
+   clientWidth` before assuming you need this at all), prefer leaving overflow-x
+   unset entirely and let individual scrollable components (.table-scroll,
+   .eq-row .eqbox, .strip, .flow-wrap, the mobile .outline bar) own their own
+   overflow-x:auto instead. */
+/* Typography scale: rem units resolve against the ROOT (html) element's font-size.
+   The old rule below set `font-size: 15px` on the compound selector `html, body`
+   (applying to both) — rem WAS resolving correctly against it, but 15px is simply
+   too small a base: secondary text at .66-.72rem rendered at 9.9-10.8px, well under
+   any comfortable reading floor. Fixed 2026-07: give html a slightly larger, fluid
+   base size (so text isn't identical at 390px and 2560px) and leave body's font-size
+   unset (it just inherits from html) rather than duplicating the declaration.
+   Rule of thumb: no reading text below ~12.5px effective on this dark background —
+   identifiers (monospace sids) are the one accepted exception, ~.7rem. */
+html { font-size: clamp(16px, 15.2px + 0.15vw, 17.5px); }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.55; }
+
+/* ---------------- page + layout shell ---------------- */
+/* .layout wraps an optional .outline sidebar + the .page content column (see
+   lightpage.page(outline=True)). Plain pages with no outline can skip .layout
+   and just use .page directly — both work with this stylesheet. */
+.layout { display: flex; align-items: flex-start; max-width: 1400px; margin: 0 auto; gap: 1.5rem; }
+.page { flex: 1 1 auto; min-width: 0; max-width: 1180px; padding: 1.6rem 1.2rem 4rem; }
+.layout > .page { margin: 0; }
+body > .page { max-width: 1180px; margin: 0 auto; } /* page with no sidebar */
+
+h1 { font-size: 1.55rem; margin: 0 0 .3rem; letter-spacing: -.01em; }
+h2 { font-size: 1.1rem; margin: 0 0 .6rem; color: #fff; }
+h2 .num { color: var(--accent); margin-right: .35rem; }
+h3 { font-size: .95rem; color: #fff; margin: 1.6rem 0 .6rem; }
+h4 { font-size: .88rem; color: #fff; margin: 1.3rem 0 .4rem; }
+.sub { color: var(--muted); margin: 0 0 1.1rem; font-size: .92rem; max-width: 72ch; }
+p { margin: .5rem 0; }
+strong { color: #fff; }
+a { color: var(--accent); }
+/* overflow-wrap:anywhere lets long unbroken path/filename text (no spaces or
+   hyphens to break on, e.g. "research/arxiv_sprint/figures/fig2_metric/build_fig2.py")
+   wrap within a narrow column instead of forcing a few px of real page overflow
+   at mobile widths — found on mock_results_xgpage 2026-07-07. */
+code { background: #0d1014; border: 1px solid var(--border); border-radius: .25rem;
+       padding: .05rem .3rem; font-size: .88em; color: var(--accent); overflow-wrap: anywhere; }
+
+/* full-path file mentions: hover (title attr) shows the real cluster path, click
+   copies it (see ui.js). Dotted underline + trailing glyph make "clickable" visible
+   without another color in the mix; .copied is a transient class toggled by JS for
+   the brief flash. Only for cluster/local paths — GitHub/arXiv mentions stay plain
+   <a> links, not this component. */
+code.fpath { cursor: pointer; border-bottom: 1px dotted var(--muted); }
+code.fpath::after { content: ' \29C9'; font-size: .85em; color: var(--muted); }
+code.fpath:hover { border-bottom-color: var(--accent); color: var(--accent); }
+code.fpath.copied { color: var(--good) !important; border-bottom-color: var(--good); border-bottom-style: solid; }
+section { margin: 2.1rem 0; padding-top: .2rem; }
+section + section { border-top: 1px solid var(--border); padding-top: 1.9rem; }
+
+/* generic callout box; add a modifier via inline style="border-left-color:var(--accent2)"
+   for a warning-toned variant (used e.g. for stochasticity/honesty notes) */
+.callout { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: .4rem; padding: .85rem 1rem; margin: 1rem 0 1.6rem; font-size: .95rem; }
+
+/* ---------------- pills / tags ---------------- */
+.tag { display: inline-block; font-size: .78rem; padding: .1rem .4rem; border-radius: .8rem;
+       border: 1px solid var(--border); color: var(--muted); margin-left: .4rem; }
+.tag.w5 { color: var(--accent); border-color: rgba(92,200,255,.4); }
+.tag.w1 { color: var(--accent2); border-color: rgba(255,180,84,.4); }
+
+/* ---------------- figure strip (e.g. "how one sample is made") ---------------- */
+.strip { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding: .5rem 0 1rem; }
+.strip-stage { flex: 0 0 auto; width: 172px; background: var(--panel); border: 1px solid var(--border);
+               border-radius: .5rem; padding: .8rem .7rem .8rem; margin-right: .5rem; position: relative; }
+.strip-stage img { width: 100%; aspect-ratio: 1/1; object-fit: contain; background: #e8e9ec;
+                    border-radius: .35rem; display: block; }
+.strip-stage .imgpair { display: flex; gap: 3px; }
+.strip-stage .imgpair img { width: calc(50% - 1.5px); }
+.strip-stage .n { position: absolute; top: -.6rem; left: -.6rem; width: 1.7rem; height: 1.7rem;
+                   border-radius: 50%; background: var(--accent); color: #04121c; font-weight: 700;
+                   font-size: .85rem; display: flex; align-items: center; justify-content: center; }
+.strip-stage .t { font-size: .8rem; font-weight: 700; color: #fff; margin: .55rem 0 .25rem; }
+.strip-stage .d { font-size: .8rem; color: var(--muted); }
+.strip-arrow { flex: 0 0 auto; display: flex; align-items: center; padding: 0 .35rem;
+               color: var(--muted); font-size: 1.3rem; align-self: center; }
+
+/* ---------------- results table (appearance/GT/prediction grid) ---------------- */
+.table-scroll { overflow-x: auto; margin-top: .6rem; -webkit-overflow-scrolling: touch; }
+table.results { border-collapse: collapse; font-size: .85rem; width: 100%; min-width: 960px; }
+table.results th, table.results td { padding: .55rem .6rem; border-bottom: 1px solid var(--border);
+                                      text-align: center; vertical-align: top; }
+table.results th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase;
+                   letter-spacing: .03em; background: var(--panel2); }
+table.results td.rowhead { text-align: left; min-width: 210px; font-size: .8rem; }
+table.results td.rowhead .sid { font-family: ui-monospace, monospace; font-size: .7rem;
+                                 color: #9aa4b2; word-break: break-all; display: block; margin-bottom: .35rem; }
+table.results td.rowhead .frac { font-size: 1.0rem; font-weight: 700; color: #fff; }
+table.results td.rowhead .bucketlbl { font-size: .78rem; color: var(--muted); margin-left: .4rem; }
+table.results td.rowhead .iourow { margin-top: .45rem; font-size: .78rem; }
+table.results td.rowhead .iourow div { margin-top: .2rem; }
+table.results img { width: 150px; height: 150px; border-radius: .4rem; background: #000; object-fit: contain; }
+table.results .cap { font-size: .78rem; color: var(--muted); margin-top: .3rem; }
+table.results td.rawinput { background: var(--panel2); }
+table.results td.rawinput img { width: 130px; height: 130px; margin: 8px; border: 1px dashed #454e5c;
+                                 border-radius: .3rem; }
+table.results td.rawinput .cap { color: #6e7889; }
+table.results td.rawinput .cap b { color: #8b96a5; font-weight: 600; }
+.bucket-large td.rowhead .frac { color: var(--good); }
+.bucket-tiny td.rowhead .frac, .bucket-zero td.rowhead .frac { color: var(--bad); }
+.iou-hi { color: var(--good); font-weight: 700; }
+.iou-lo { color: var(--bad); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: .8rem; color: var(--muted);
+          margin-top: .9rem; }
+.legend span.sw { display: inline-block; width: .7rem; height: .7rem; border-radius: .15rem;
+                  margin-right: .35rem; vertical-align: -1px; }
+/* overflow-wrap:anywhere: footers often carry plain-text (not <code>-wrapped) long
+   paths/filenames as a single unbroken "word" — same page-overflow failure mode
+   as the <code> fix above, just outside a <code> tag. Found on mock_results_xgpage
+   2026-07-07: a footer sourcing line was the actual page-overflow cause, not the
+   outline nav (which the scrollWidth numbers coincidentally pointed toward first —
+   verified by binary-search hiding each section, not by scrollWidth alone). */
+footer { margin-top: 2.5rem; color: var(--muted); font-size: .8rem; text-align: center; overflow-wrap: anywhere; }
+
+/* ---------------- tensor / generic data table ---------------- */
+.tensor-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: .5rem;
+               padding: 1rem 1.1rem 1.2rem; margin: .8rem 0 1.2rem; }
+table.tensors { border-collapse: collapse; font-size: .82rem; width: 100%; min-width: 480px; }
+table.tensors th, table.tensors td { padding: .4rem .6rem; border-bottom: 1px solid var(--border);
+                                      text-align: left; vertical-align: top; }
+table.tensors th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase;
+                   letter-spacing: .03em; }
+table.tensors td.tname { font-family: ui-monospace, monospace; font-size: .78rem; color: var(--accent); }
+table.tensors td.tshape { font-family: ui-monospace, monospace; font-size: .78rem; color: #d8dde6;
+                          white-space: nowrap; }
+table.tensors tr.target td.tname { color: var(--accent2); }
+table.tensors tr.aux td.tname { color: var(--muted); }
+
+/* ---------------- concat / block diagrams ---------------- */
+.concat-diagram { display: flex; align-items: center; gap: .5rem; margin: 1rem 0 .3rem;
+                   font-size: .74rem; color: var(--muted); flex-wrap: wrap; }
+.concat-diagram .cblock { display: flex; }
+.concat-diagram .ccell { width: 9px; height: 22px; border-right: 1px solid var(--bg); }
+.concat-diagram .ccell.noisy { background: var(--accent2); }
+.concat-diagram .ccell.ref { background: var(--accent); }
+.concat-diagram .clabel { font-size: .78rem; color: var(--text); text-align: center; margin-top: .25rem; }
+.concat-col { display: flex; flex-direction: column; align-items: center; }
+
+/* ---------------- equations (KaTeX) ---------------- */
+.loss-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: .5rem;
+             padding: .9rem 1.05rem 1.05rem; margin: .9rem 0 1rem; }
+.eq-row { display: flex; align-items: center; gap: 1.1rem; flex-wrap: wrap; margin: .7rem 0; }
+.eq-row .eqbox { background: #0d1014; border: 1px solid var(--border); border-radius: .4rem;
+                  padding: .6rem .9rem; overflow-x: auto; -webkit-overflow-scrolling: touch;
+                  flex: 0 1 auto; max-width: 100%; }
+.eq-row .eqcomment { color: var(--muted); font-size: .76rem; flex: 1 1 220px; line-height: 1.5; }
+.eq-tag { font-size: .78rem; padding: .1rem .4rem; border-radius: .8rem; border: 1px solid var(--border);
+          color: var(--muted); margin-right: .6rem; display: inline-block; vertical-align: middle; }
+.loss-bullets { margin: .8rem 0 0; padding-left: 1.15rem; font-size: .82rem; }
+.loss-bullets li { margin-bottom: .55rem; }
+/* KaTeX on a dark page: force light ink so glyphs aren't black-on-black */
+.katex { color: #d8dde6 !important; font-size: 1.02em; }
+
+/* ---------------- provenance / pick-list funnel ----------------
+   Reads HORIZONTALLY (row, left-to-right) by default -- a pipeline should
+   read like a pipeline (user feedback, 2026-07-09, somages visual-
+   provenance retrofit: the original column-only layout spent ~5 box-heights
+   of scroll with empty width beside each stage). Falls back to the original
+   vertical stack ONLY at <=480px, where a row of 5+ stages has no room to
+   read left-to-right at all. Same markup for both orientations -- flow_arrow()
+   always emits one down-arrow glyph; the horizontal case rotates it -90deg
+   (down -> right) via CSS rather than needing a second component/param, so
+   existing callers (the original vertical desktop funnel use case, e.g.
+   dataset-stage-count diagrams) need no code changes, just wider stages. */
+.flow-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: .5rem;
+             padding: 1.1rem 1.2rem 1.3rem; overflow-x: auto; }
+/* Stage sizing tuned so a 5-stage pipeline (the common case) fits a
+   details_block's ~753px column with ZERO internal flow-wrap scroll (user
+   feedback, 2026-07-09: the first horizontal version needed internal scroll
+   at 1400px, hiding the highlighted final "Outputs" stage by default -- the
+   punchline off-screen defeats the point). Budget at 753px: 5 stages x
+   ~120px + 4 arrows x ~24px + 8 gaps x .4rem(~6px) ~= 600+96+48 = 744px,
+   fits with margin. 6+ stage pipelines (e.g. motivation_topology's longer
+   one) may still need internal scroll -- acceptable, matches grid-figure's
+   own self-contained-scroll precedent; 5 is the case this was tuned for. */
+.flow { display: flex; flex-direction: row; align-items: stretch; gap: .4rem; width: 100%; min-width: 0; }
+.flow-stage { flex: 1 1 0; min-width: 110px; max-width: 200px; background: #0d1014; border: 1px solid var(--border);
+              border-radius: .5rem; padding: .55rem .5rem; text-align: center;
+              display: flex; flex-direction: column; justify-content: center; }
+.flow-stage .fnum { font-size: 1.15rem; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+.flow-stage .flbl { font-size: .8rem; color: var(--text); margin-top: .15rem; }
+.flow-stage .fsub { font-size: .74rem; color: var(--muted); margin-top: .25rem; overflow-wrap: anywhere; }
+.flow-stage .fcode, .fcode { font-size: .72rem; color: var(--muted); margin-top: .3rem;
+                              font-family: ui-monospace, monospace; text-align: left; overflow-wrap: anywhere; }
+.flow-stage .fcode { text-align: center; }
+.pbr-legend .fcode { width: 100%; text-align: center; margin-top: .1rem; }
+.flow-stage.highlight { border-color: var(--accent); border-width: 1.5px; }
+.flow-stage.highlight .fnum { color: var(--accent); }
+.flow-arrow { display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; justify-content: center;
+              color: var(--muted); font-size: .78rem; text-align: center; line-height: 1.3; padding: 0 .1rem; }
+.flow-arrow .arrowglyph { font-size: 1rem; display: block; color: #454e5c; transform: rotate(-90deg); }
+.flow-branch { display: flex; gap: .6rem; width: 100%; max-width: 560px; flex-wrap: wrap; }
+.flow-branch .flow-stage { flex: 1 1 150px; padding: .55rem .6rem; }
+.flow-branch .flow-stage .fnum { font-size: 1.05rem; }
+.flow-branch .flow-stage.test { opacity: .55; }
+.flow-branch .flow-stage.train { border-color: #3987e5; }
+/* Below 480px a row of 5+ stages has nowhere to go -- revert to the original
+   vertical stack (full-width stages, unrotated down-arrows). Found 2026-07-09
+   during the somages visual-provenance retrofit (first flow_wrap use inside a
+   details_block); superseded by the horizontal-default rule above once the
+   user asked for horizontal reading on desktop the same day. */
+@media (max-width: 480px) {
+  .flow { flex-direction: column; align-items: center; min-width: 0; width: 100%; }
+  .flow-stage { width: 100%; max-width: 560px; flex: 0 0 auto; min-width: 0; }
+  .flow-arrow { flex-direction: row; margin: .1rem 0; }
+  .flow-arrow .arrowglyph { transform: none; }
+}
+.flow-branch .flow-stage.val2 { border-color: #d95926; }
+.honesty-box { width: 100%; max-width: 560px; background: #241a0d; border: 1px solid #6b4a1f;
+               border-radius: .4rem; padding: .5rem .75rem; margin: .5rem 0; font-size: .76rem;
+               color: #e0b878; text-align: left; }
+.pbr-legend { width: 100%; max-width: 560px; display: flex; gap: .5rem; flex-wrap: wrap;
+              justify-content: center; margin: .3rem 0 .1rem; font-size: .78rem; color: var(--muted); }
+.pbr-legend span.pass { color: var(--good); }
+.pbr-legend span.fail { color: var(--bad); }
+.flow-side { width: 100%; max-width: 560px; background: #171b22; border: 1px dashed #454e5c;
+             border-radius: .4rem; padding: .55rem .8rem; margin-top: .8rem; font-size: .8rem;
+             text-align: left; }
+pre.flow-code { background: #0d1014; border: 1px solid var(--border); border-radius: .5rem;
+                padding: .9rem 1rem; font-size: .76rem; line-height: 1.55; overflow-x: auto;
+                color: #b3d4ff; }
+pre.flow-code .c { color: #6e7889; }
+pre.flow-code .n { color: #4ade80; }
+
+/* ---------------- stat tiles (KPI rows, used in Overview sections) ---------------- */
+.stat-row { display: flex; flex-wrap: wrap; gap: .6rem; margin: .8rem 0; }
+.stat { background: #0d1014; border: 1px solid var(--border); border-radius: .4rem;
+        padding: .55rem .8rem; flex: 1 1 140px; }
+.stat b { display: block; font-size: 1.25rem; color: #fff; }
+.stat span { font-size: .78rem; color: var(--muted); }
+.stat.train { border-left: 3px solid #3987e5; }
+.stat.val { border-left: 3px solid #d95926; }
+
+/* ---------------- SVG chart container ---------------- */
+.chart-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: .5rem;
+              padding: .9rem 1rem 1rem; overflow-x: auto; }
+.chart-wrap svg, svg.chart { width: 100%; max-width: 640px; height: auto; display: block; }
+.caption { color: var(--muted); font-size: .82rem; margin-top: .5rem; }
+
+/* ---------------- interactive chart cards (hover tooltip line charts) ----------------
+   Added 2026-07-06 porting training_curves_v1: a 2-up chart-card grid + a generic
+   crosshair/tooltip pattern for client-side-drawn (JS) SVG line charts, as opposed to
+   .chart-wrap's server-rendered static SVGs above. See dataviz skill re: hover layers. */
+.panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+@media (max-width: 860px) { .panel-grid { grid-template-columns: 1fr; } }
+.chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: .5rem;
+              padding: .9rem 1rem 1rem; position: relative; min-width: 0; }
+.chart-card h3 { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; flex-wrap: wrap;
+                 margin: 0 0 .3rem; }
+.chart-card h3 .hint { font-size: .72rem; color: var(--muted); font-weight: 400; }
+.diagram-wrap.wide-diagram { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: .5rem; }
+.wide-diagram svg { width: 600px; max-width: none; display: block; }
+svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+.legend span.ln { display: inline-block; width: 1.1rem; height: 0; border-top: 2px dashed var(--muted);
+                   margin-right: .35rem; vertical-align: 3px; }
+.chart-tt { position: absolute; pointer-events: none; background: #05070a; border: 1px solid var(--border);
+            border-radius: .35rem; padding: .4rem .55rem; font-size: .74rem; color: var(--text);
+            white-space: nowrap; opacity: 0; transition: opacity .08s; z-index: 5; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+.chart-tt b { display: block; color: #fff; font-size: .78rem; margin-bottom: .15rem; }
+.chart-tt .row { display: flex; gap: .4rem; align-items: center; }
+.chart-tt .row .d { width: .55rem; height: .55rem; border-radius: 50%; display: inline-block; }
+table.results td.num, table.results th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.note { background: var(--panel2); border: 1px solid var(--border); border-radius: .4rem;
+        padding: .7rem .9rem; font-size: .84rem; color: var(--muted); margin-top: .8rem; }
+.note strong { color: var(--text); }
+
+/* ---------------- badges (solid-fill, dense per-row metadata) ----------------
+   Added 2026-07-06 (somages contact_statistics pilot): distinct from .tag (an
+   outlined pill for section-level labels like W5/W1) — .badge is a small
+   solid chip meant to be repeated many times per row (e.g. 5 per-class scores
+   + a chart count next to a shape name). Default bg is neutral; pages override
+   per-call via badge(text, bg=...) for a per-class color coding. */
+.badge { display: inline-block; padding: .1rem .4rem; border-radius: .3rem; font-size: .7rem;
+         margin-left: .3rem; background: var(--panel2); color: var(--text); }
+
+/* ---------------- collapsible About asides (native <details>) ----------------
+   Added 2026-07-06: small reference asides (purpose/data/method blurbs) nested
+   INSIDE a section, as opposed to section()'s own preview/expand mechanic which
+   trades off a whole section's evidence. Native <details> — no ui.js dependency,
+   degrades safely with JS disabled. Stack several for a multi-aside cluster. */
+.xdetails { background: var(--panel); border: 1px solid var(--border); border-radius: .4rem;
+            padding: .5rem .8rem; margin: .6rem 0; font-size: .88rem; }
+.xdetails > summary { cursor: pointer; color: var(--accent); font-size: .82rem; font-weight: 600;
+                       list-style: none; }
+.xdetails > summary::-webkit-details-marker { display: none; }
+.xdetails > summary::before { content: "▸ "; color: var(--muted); }
+.xdetails[open] > summary::before { content: "▾ "; }
+/* overflow-wrap:anywhere (mirrors the code{}/footer{} precedent, 2026-07-07): an
+   xdetails-body is exactly the free-prose container where authors write a raw
+   path/filename inline without remembering to wrap it in <code> (e.g. a
+   parenthetical file list in a provenance block's "Gaps" note) -- word-break:
+   normal treats "/"-joined paths as a single unbroken token in some layout
+   paths, and unlike <code> or <footer>, xdetails-body never had this rule.
+   Found 2026-07-08/09 on somages' motivation_topology page: opening its
+   provenance details_block at 390px pushed page-level scrollWidth to 483px
+   (a genuine page scroll, not just an internal-scroller artifact) purely from
+   one unbroken path run outside any <code> tag; toggling this property alone
+   (no other change) brought scrollWidth back to 390 in a live repro. */
+.xdetails-body { margin-top: .5rem; line-height: 1.6; color: var(--text); max-width: 78ch;
+                 overflow-wrap: anywhere; }
+.xdetails-body b, .xdetails-body strong { color: #fff; }
+
+/* ---------------- pseudo-code / annotated code blocks ----------------
+   Added 2026-07-06: generic monospace block chrome + 3 pre-styled generic
+   token classes (keyword/comment/number). Domain-specific token colors (e.g. 5
+   class-name colors in a classifier's pseudo-code) are inline style="color:..."
+   per code_token() — deliberately not enumerated here; a 3-class generic
+   taxonomy covers most pseudo-code, a per-project palette does not belong in
+   the shared stylesheet. */
+pre.pseudo { background: #0a0a0a; border: 1px solid var(--border); border-radius: .4rem;
+             padding: .7rem .8rem; font-size: .78rem; line-height: 1.55; overflow-x: auto;
+             color: #d8d8d8; font-family: ui-monospace, monospace; }
+pre.pseudo .kw { color: var(--accent); font-weight: 700; }
+pre.pseudo .cm { color: var(--muted); }
+pre.pseudo .num { color: var(--accent2); }
+
+/* ---------------- wide single-image row gallery ----------------
+   Added 2026-07-06: N full-width rows of ONE (often multi-panel) image each,
+   as opposed to gallery_card/gallery_grid's fixed image-PAIR grid cards below.
+   Use for long sorted lists (e.g. per-shape score-sorted montages) where each
+   item is one wide composited image, not a left/right pair. */
+.wide-gallery { display: flex; flex-direction: column; }
+.wide-row { padding: .5rem 0 .8rem; border-bottom: 1px solid var(--border); }
+.wide-row-head { font-size: .82rem; font-weight: 600; color: var(--text); margin-bottom: .35rem;
+                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wide-row-imgwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.wide-row-imgwrap img { display: block; min-width: 800px; width: 100%; height: auto; border-radius: .3rem; }
+/* Mobile: single-line ellipsis (the desktop default above) clips most of a
+   row's badges — on a narrow screen there usually isn't a second wide-row
+   detail worth truncating FOR, so let the head wrap instead and keep every
+   badge visible. Found + fixed 2026-07-06/07 on the somages contact_statistics
+   page (79 rows x 7 badge SPANS each). IMPORTANT: do NOT add display:flex here
+   — a wide_row header is sometimes plain running text (one anonymous text
+   node, e.g. mock_results' "<b>cap</b> &mdash; xatlas: N charts..."), and a
+   lone flex child does not wrap by width the way normal inline content does;
+   found overflowing at 390px on mock_results_xgpage 2026-07-07 after an
+   earlier version of this fix added flex here for the badge case. Plain
+   white-space:normal wraps BOTH cases correctly: badge spans wrap like words
+   in a normal block, and running text wraps via ordinary line-breaking. */
+@media (max-width: 480px) {
+  .wide-row-imgwrap img { min-width: 620px; }
+  .wide-row-head { white-space: normal; overflow: visible; text-overflow: clip; }
+}
+
+/* colored-square legend entries (distinct from the line-style .sw already used
+   in the chart legend() calls — this is a filled square, for class-color keys) */
+.lg-sw { display: inline-block; width: .7rem; height: .7rem; border-radius: .15rem;
+         margin-right: .3rem; vertical-align: -1px; }
+
+/* ---------------- gallery grid (image-pair cards) ---------------- */
+.bucket-block h3 { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.bucketrange { font-size: .75rem; color: var(--muted); font-weight: 400; }
+.cardgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .6rem; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: .4rem; padding: .4rem; }
+.card .pair { display: flex; gap: 2px; }
+.card .pair img { width: 50%; aspect-ratio: 1/1; object-fit: contain; background: #e8e9ec; border-radius: .25rem; }
+.cardcap { display: flex; justify-content: space-between; margin-top: .35rem; font-size: .78rem; color: var(--muted); }
+.csid { font-family: ui-monospace, monospace; font-size: .7rem; } /* identifier exception, see type-scale note above */
+.cfrac { color: #d8dde6; font-weight: 600; }
+
+/* single-thumbnail card (xgpage.thumb_card) -- one image + title + tag pills, as
+   opposed to .pair's fixed left/right image pair. Added 2026-07-07 for pbr_filter_v1's
+   kept/dropped gallery (24 cards/group); .kept/.dropped modifiers give each group a
+   quiet top-border color cue so the two groups read apart while scrolling. */
+.thumb-card { display: flex; flex-direction: column; border-top: 2px solid transparent; }
+.thumb-card.kept { border-top-color: var(--good); }
+.thumb-card.dropped { border-top-color: var(--accent2); }
+.thumb-card-img { width: 100%; aspect-ratio: 1/1; object-fit: contain; background: #e8e9ec;
+                   border-radius: .25rem; }
+.thumb-card-title { font-size: .78rem; color: var(--text); margin-top: .4rem; line-height: 1.3;
+                     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+                     overflow: hidden; }
+.thumbtags { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .35rem; }
+.thumbtag { font-size: .7rem; color: var(--muted); background: rgba(255,255,255,.05);
+            border: 1px solid var(--border); border-radius: .25rem; padding: .1rem .4rem; }
+
+/* ---------------- labeled comparison grid (xgpage.grid_figure) ----------------
+   Replaces PIL-baked composite comparison PNGs (2026-07-07 convention): real-text
+   row/col labels instead of baked text, per-cell captions, "not run" cells as an
+   explicit placeholder tile. Scrolls in its OWN wrapper on narrow viewports (never
+   the page) — min-width floor on .grid-figure forces the scrollbar to appear on
+   .grid-figure-scroll, not on html/body; see SKILL.md rules 5/10 (the .layout flex
+   ancestor already carries min-width:0 from rule 10, needed for this to work when
+   the grid sits inside the sidebar-nav .page column). */
+.grid-figure-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: .6rem; min-width: 0; }
+.grid-figure { display: grid; gap: 2px; background: var(--border); border: 1px solid var(--border);
+               border-radius: .3rem; min-width: 640px; }
+.gf-cell { background: var(--panel); padding: .4rem; }
+.gf-corner { background: transparent; }
+.gf-colhead { font-size: .82rem; font-weight: 600; color: var(--text); text-align: center; align-self: center; }
+.gf-rowhead { font-size: .82rem; font-weight: 600; color: var(--text); display: flex;
+              align-items: center; white-space: nowrap; }
+.gf-imgcell { text-align: center; }
+.gf-imgcell img { width: 100%; height: auto; aspect-ratio: 1/1; object-fit: cover; border-radius: .2rem; display: block; }
+.gf-cap { font-size: .72rem; color: var(--muted); margin-top: .25rem; line-height: 1.3; }
+.gf-cap .gf-sig { color: var(--bad); font-weight: 600; } /* significant/flagged count highlight */
+.gf-placeholder { display: flex; align-items: center; justify-content: center; aspect-ratio: 1/1;
+                   color: var(--muted); font-size: .75rem; font-style: italic;
+                   border: 1px dashed var(--border); border-radius: .2rem; }
+.grid-figure-export { margin-top: .4rem; font-size: .82rem; }
+.gf-caption { font-size: .82rem; color: var(--muted); margin-top: .5rem; }
+/* Mobile: let cells shrink to ~2-up rather than holding the 640px floor — the
+   scroll wrapper still catches anything narrower than that, per rule 9's lesson
+   (confirm scrollX stays 0 on the PAGE, not just that this element looks fine). */
+@media (max-width: 480px) {
+  .grid-figure { min-width: 480px; }
+}
+
+/* ---------------- overview hero figures ---------------- */
+.verdict { font-size: 1.02rem; font-weight: 600; color: #fff; background: var(--panel);
+           border: 1px solid var(--border); border-left: 3px solid var(--accent);
+           border-radius: .4rem; padding: .8rem 1rem; margin: .8rem 0 1.2rem; }
+.hero-figs { display: flex; align-items: flex-start; gap: 1.2rem; flex-wrap: wrap; margin: 1rem 0 1.3rem; }
+.hero-fig { flex: 1 1 320px; background: var(--panel); border: 1px solid var(--border);
+            border-radius: .5rem; padding: .8rem .9rem; }
+.hero-fig .hf-title { font-size: .76rem; color: var(--muted); text-transform: uppercase;
+                       letter-spacing: .03em; margin-bottom: .5rem; }
+.hero-fig img { width: 100%; border-radius: .35rem; display: block; }
+.hero-row { display: flex; gap: 4px; }
+.hero-row .hrcell { flex: 1 1 0; text-align: center; }
+.hero-row img { width: 100%; aspect-ratio: 1/1; object-fit: contain; background: #000;
+                 border-radius: .3rem; }
+.hero-row .hrcap { font-size: .78rem; color: var(--muted); margin-top: .2rem; }
+.next-bullets { margin: .6rem 0 0; padding-left: 1.15rem; font-size: .88rem; }
+.next-bullets li { margin-bottom: .4rem; }
+.takeaway { font-size: .92rem; font-weight: 600; color: #fff; margin: 0 0 .8rem; }
+
+/* ---------------- outline sidebar ---------------- */
+.outline { flex: 0 0 200px; position: sticky; top: 1.4rem; align-self: flex-start;
+           max-height: calc(100vh - 2.8rem); overflow-y: auto; padding: .2rem .2rem .2rem 0; }
+.expand-all-btn { width: 100%; background: var(--panel); border: 1px solid var(--border);
+                   color: var(--text); border-radius: .4rem; padding: .5rem .6rem; font-size: .78rem;
+                   cursor: pointer; margin-bottom: .9rem; }
+.expand-all-btn:hover { border-color: var(--accent); }
+.outline-list, .outline-sub { list-style: none; margin: 0; padding: 0; }
+.outline-list > li { margin-bottom: .15rem; }
+.outline-sub { padding-left: .8rem; margin-bottom: .4rem; }
+.ol-link, .ol-sublink { display: block; padding: .32rem .5rem; border-radius: .3rem; font-size: .82rem;
+                         color: var(--muted); text-decoration: none; border-left: 2px solid transparent; }
+.ol-sublink { font-size: .78rem; }
+.ol-link:hover, .ol-sublink:hover { color: var(--text); background: var(--panel); }
+.ol-link.active, .ol-sublink.active { color: var(--accent); border-left-color: var(--accent);
+                                        background: var(--panel); font-weight: 600; }
+
+/* ---------------- collapsible / Medium-style preview sections ---------------- */
+.collapsible { position: relative; }
+.collapsible .section-body { overflow: hidden; }
+.collapsible:not(.expanded) .section-body { max-height: var(--preview-h, 30rem); }
+.collapsible.expanded .section-body { max-height: none; overflow: visible; }
+.fade-overlay { position: absolute; left: 0; right: 0; bottom: 0; height: 6.5rem;
+                background: linear-gradient(to bottom, rgba(18,21,26,0) 0%, var(--bg) 75%);
+                display: flex; align-items: flex-end; justify-content: center; padding-bottom: .9rem; }
+.collapsible.expanded .fade-overlay { position: static; height: auto; background: none;
+                                        padding: 1.1rem 0 0; }
+.expand-btn { background: var(--panel); border: 1px solid var(--border); color: var(--text);
+              border-radius: 1.2rem; padding: .45rem 1.1rem; font-size: .82rem; cursor: pointer; }
+.expand-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+@media print {
+  .outline, .fade-overlay, .expand-btn, .expand-all-btn { display: none !important; }
+  .collapsible .section-body { max-height: none !important; overflow: visible !important; }
+  .layout { display: block; }
+}
+
+/* Mobile breakpoint for the layout/outline: the sidebar becomes a sticky compact
+   top bar (section pills + expand-all toggle). IMPORTANT — .layout uses
+   `align-items: flex-start` on desktop so the (short) sidebar doesn't get
+   stretched to the (tall) content column's height. That same align-items value
+   also applies once .layout switches to flex-direction:column here, and in
+   column mode it makes flex items size to their own intrinsic content width
+   instead of stretching to fill the container — so .page silently renders at
+   its widest child's content width (e.g. a min-width:960px table) instead of
+   the viewport width, causing real horizontal page overflow. Found + fixed
+   2026-07-06 on finetune_binary_v1 at 390px. Fix: force align-items:stretch and
+   page max-width:100% inside this breakpoint. If you add more breakpoint rules
+   here, re-check `document.documentElement.scrollWidth <= clientWidth` at 390px
+   before shipping — don't just eyeball a screenshot.
+*/
+@media (max-width: 900px) {
+  .layout { flex-direction: column; align-items: stretch; gap: 0; }
+  .page { max-width: 100%; }
+  /* min-width:0 is required, not decorative: .outline is a flex item of .layout
+     (flex-direction:column here), and flex items default to min-width:auto (their
+     content's min-content size), NOT 0 — so when the pill row's un-wrapped content
+     (outline-list, flex-wrap:nowrap below) is wider than the viewport, that content
+     size can bubble up through the width:100% flex item and inflate .layout/body's
+     scrollWidth even though .outline's own overflow-x:auto visually clips it fine.
+     Invisible at a glance (rect widths all read correct) — only shows up as an
+     actual page-level horizontal scroll (confirmed via window.scrollTo + a second
+     screenshot, not just scrollWidth). Found 2026-07-07 on mock_results_xgpage,
+     whose outline labels ("xatlas comparison") are long enough to need the pill
+     bar's internal scroll — contact_statistics's short labels never triggered it. */
+  .outline { position: sticky; top: 0; z-index: 50; width: 100%; min-width: 0; max-height: none;
+             background: var(--bg); border-bottom: 1px solid var(--border);
+             padding: .5rem .8rem; overflow-x: auto; overflow-y: hidden;
+             display: flex; align-items: center; gap: .5rem; }
+  .expand-all-btn { width: auto; margin: 0; flex: 0 0 auto; white-space: nowrap; }
+  .outline-list { display: flex; align-items: center; flex-wrap: nowrap; gap: .3rem; flex: 0 0 auto; }
+  .outline-sub { display: none; }
+  .ol-link { white-space: nowrap; padding: .35rem .6rem; }
+}
+
+@media (max-width: 480px) {
+  .eq-row { flex-direction: column; align-items: flex-start; gap: .4rem; }
+  .eq-row .eqbox { width: 100%; }
+  .eq-row .eqcomment { flex: none; width: 100%; }
+  /* NOT `body { font-size: 14px }` here — same anti-pattern as the old 15px base
+     removed above: it would shrink only unstyled/inherited text on mobile while every
+     rem-based element keeps scaling off html's (larger) clamped size, undoing the
+     fix. Mobile already gets a smaller root via clamp()'s 16px floor; that's enough. */
+  .page { padding: 1.1rem .8rem 3rem; }
+  h1 { font-size: 1.3rem; }
+  .strip-stage { width: 140px; }
+  table.results img { width: 120px; height: 120px; }
+  table.tensors { min-width: 0; font-size: .78rem; }
+  .hero-figs { flex-direction: column; }
+  .cardgrid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}
+
+
+/* ==================================================================
+   v11 additions (2026-07-10) — somages console rebuild on xgpage,
+   retiring MkDocs. New: cross-page nav shell, console list/filter
+   items, pipeline status strip (inlined roadmap tab), a couple of
+   small component-reuse modifiers (.stat.soon, .card-link).
+   ================================================================== */
+
+/* ---------------- cross-page console nav (xgpage.nav_tabs/nav_subtabs) ----------------
+   One responsive markup for both "desktop tab bar" and "phone pill bar" — no JS,
+   no separate mobile nav. Sticky like .outline's mobile mode (same z-index/top:0
+   precedent) but console pages never carry an .outline sidebar, so there's no
+   collision between the two sticky bars. */
+.nav-tabs { position: sticky; top: 0; z-index: 60; background: rgba(13,16,20,.94);
+            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+            border-bottom: 1px solid var(--border); }
+.nav-tabs-inner { max-width: 1180px; margin: 0 auto; display: flex; gap: .1rem;
+                   overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0 1.2rem; }
+.nav-tab { flex: 0 0 auto; padding: .85rem 1rem; color: var(--muted); text-decoration: none;
+           font-size: .86rem; font-weight: 600; border-bottom: 2px solid transparent;
+           white-space: nowrap; }
+.nav-tab:hover { color: var(--text); }
+.nav-tab.active { color: #fff; border-bottom-color: var(--accent); }
+.nav-subtabs { background: var(--panel); border-bottom: 1px solid var(--border); }
+.nav-subtabs-inner { max-width: 1180px; margin: 0 auto; display: flex; gap: .1rem;
+                      overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0 1.2rem; }
+.nav-subtab { flex: 0 0 auto; padding: .5rem .7rem; color: var(--muted); text-decoration: none;
+              font-size: .78rem; border-bottom: 2px solid transparent; white-space: nowrap; }
+.nav-subtab:hover { color: var(--text); }
+.nav-subtab.active { color: var(--accent); border-bottom-color: var(--accent); }
+@media (max-width: 640px) {
+  /* pill-bar treatment: chips instead of underline-tabs, same markup */
+  .nav-tabs-inner { padding: .45rem .6rem; gap: .4rem; }
+  .nav-tab { border: 1px solid var(--border); border-radius: 999px; background: var(--panel);
+             padding: .4rem .8rem; }
+  .nav-tab.active { background: rgba(92,200,255,.15); border-color: var(--accent); color: var(--accent); }
+  .nav-subtabs-inner { padding: .3rem .6rem; gap: .3rem; }
+  .nav-subtab { border: 1px solid var(--border); border-radius: 999px; padding: .3rem .65rem; }
+  .nav-subtab.active { background: rgba(92,200,255,.12); }
+}
+
+/* ---------------- console header (Overview's own H1, since page() header_html
+   is unused there — the KPI/decision cards need to sit between H1 and Brief body) */
+.console-header { margin-bottom: 1.2rem; }
+
+/* ---------------- console list items (Pages / Agent notes tabs) ----------------
+   A clickable card list, reusing .badge for status chips. `.stale` dims + strikes
+   the title (superseded/archived notes) instead of hiding the entry — completeness
+   over tidiness, matching the old MkDocs strikethrough treatment. */
+.clist-group { margin: .6rem 0 1.6rem; }
+.clist-group h2 { margin-top: 0; }
+.clist-item { display: block; background: var(--panel); border: 1px solid var(--border);
+              border-radius: .5rem; padding: .7rem .9rem; margin-bottom: .5rem;
+              text-decoration: none; color: inherit; }
+/* Two shapes share this class: the Agent-notes tab uses .clist-item directly ON
+   the <a> (no extras, so no nesting risk — text-decoration/color reset above is
+   FOR THIS CASE, since <a> defaults to underlined link-blue otherwise); the
+   Pages tab uses .clist-item as a plain <div> wrapping a nested a.ci-link,
+   because a page's "extras" (e.g. fragment.html) must be a SIBLING of the main
+   link, never nested inside it — nested <a> is invalid HTML and silently
+   truncates the outer link (see scan_pages()'s item_html comment for the
+   incident this fixes, 2026-07-10; the notes-tab underline regression was
+   caught in the same round of screenshot QA). Both hover rules below cover
+   their respective shape without relying on :has(). */
+.clist-item:hover { border-color: var(--accent); }
+a.ci-link { display: block; text-decoration: none; color: inherit; }
+a.ci-link:hover .ci-title { color: var(--accent); }
+.clist-item .ci-title { font-size: .95rem; font-weight: 600; color: #fff; display: flex;
+                         align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.clist-item .ci-meta { font-size: .74rem; color: var(--muted); font-weight: 400; }
+/* Note statuses are free text (e.g. "active — SOTA-generator topology validity,
+   8 CurEvalSet anchor shapes."), not always the short single-word tag the
+   .badge component was designed for — a long one wrapped INSIDE the flex title
+   row and visually collided with .ci-blurb below it (found 2026-07-10 screenshot
+   QA on the Agent notes tab: an "active — ..." badge's wrapped second line sat
+   on top of the blurb text). Fix: status gets its own block-level line, never
+   sharing the title's flex row. */
+.clist-item .ci-status { margin: .3rem 0 0; }
+.clist-item .ci-status .badge { margin-left: 0; }
+/* overflow-wrap:anywhere: blurbs are free text straight from pages.yaml/note TL;DRs
+   and routinely carry an unbroken path/filename (e.g. a CurEvalSet.yaml path) with
+   no spaces to wrap on — same bug class as the code{}/footer{}/.xdetails-body
+   precedents (SKILL.md rules 9/12). Found 2026-07-10 mobile QA on the Pages tab:
+   story_set's blurb alone pushed page scrollWidth to 490 at a 390px viewport. */
+.clist-item .ci-blurb { font-size: .84rem; color: var(--muted); margin-top: .3rem; line-height: 1.5;
+                         overflow-wrap: anywhere; }
+.clist-item .ci-extras { font-size: .74rem; color: var(--muted); margin-top: .45rem; }
+.clist-item .ci-extras a { color: var(--muted); }
+.clist-item .ci-extras a:hover { color: var(--accent); }
+.clist-item.stale { opacity: .6; }
+.clist-item.stale .ci-title, a.ci-link.stale .ci-title { text-decoration: line-through; }
+.clist-empty { color: var(--muted); font-size: .86rem; padding: .6rem 0; }
+
+/* ---------------- filter box (Pages / Agent notes client-side filter) ---------------- */
+.filter-box { display: block; width: 100%; max-width: 420px; margin: .6rem 0 1.1rem;
+              padding: .55rem .85rem; background: #0d1014; border: 1px solid var(--border);
+              border-radius: .4rem; color: var(--text); font-size: .86rem; }
+.filter-box::placeholder { color: var(--muted); }
+.filter-box:focus { outline: none; border-color: var(--accent); }
+
+/* ---------------- component-reuse modifiers ---------------- */
+.stat.soon { border-left: 3px solid var(--accent2); }
+.stat.soon b { color: var(--accent2); }
+.card-link { display: block; text-decoration: none; color: inherit; }
+.card-link:hover { border-color: var(--accent); }
+
+/* ---------------- pipeline status strip (Roadmap tab, inlined at build time) ----------------
+   Same visual language as tools/build_roadmap.py's standalone /roadmap/ page, which
+   keeps its own inline px-converted copy of this CSS for its Shadow-DOM fragment
+   embed (rem is unsafe across a shadow boundary — see that file's docstring). This
+   copy is unscoped rem-based, for the console's inline (non-shadow) roadmap tab. */
+.pipe { display: flex; flex-wrap: wrap; gap: .35rem; align-items: stretch; margin: .4rem 0 1rem; }
+.pnode { display: flex; flex-direction: column; justify-content: center; border: 1px solid var(--border);
+         border-radius: .4rem; padding: .4rem .6rem; font-size: .82rem; min-width: 0; position: relative; }
+.pnode .ic { font-size: .72rem; margin-bottom: .1rem; letter-spacing: .02em; text-transform: uppercase; opacity: .85; }
+.pnode.done { background: #12251a; border-color: #2ea04355; color: #b9e7c6; }
+.pnode.done .ic { color: var(--good); }
+.pnode.doing { background: #2a1f0a; border-color: #ffb45488; color: #ffe0ad; }
+.pnode.doing .ic { color: var(--accent2); animation: pipepulse 1.6s infinite; }
+.pnode.todo { background: #161b22; color: var(--muted); }
+.pnode.todo .ic { color: #6e7681; }
+.pnode.wait { background: #0d1d2e; border-color: #1f6feb88; color: #bcd8ff; }
+.pnode.wait .ic { color: var(--accent); }
+.parr { align-self: center; color: #3a4250; font-size: .9rem; }
+.plegend { font-size: .74rem; color: var(--muted); margin: -.4rem 0 1rem; }
+@keyframes pipepulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+@media (max-width: 480px) {
+  .nav-tabs-inner, .nav-subtabs-inner { padding-left: .5rem; padding-right: .5rem; }
+}
+
+/* ---------------- long-form project-docs prose (LOG/DECISIONS/ARXIV_SPRINT) ----------------
+   These are large, largely-unreviewed free-text markdown files (commit-message-style
+   glob/path mentions like "{detector_v3,visualizer_v3,run_v3}.py" routinely appear
+   OUTSIDE any <code> span) — same overflow bug class as the code{}/footer{}/
+   .xdetails-body/.ci-blurb precedents, but here it can land on any inline text node,
+   so this is broad rather than component-scoped. Found 2026-07-10 mobile QA on
+   log.html: one LOG.md paragraph alone pushed page scrollWidth to 601-676px at a
+   390px viewport (confirmed as a real scroll via window.scrollTo + scrollX, not just
+   a metric artifact). Plain (non-xgpage) fenced code blocks from python-markdown's
+   pymdownx.superfences (the ``` blocks project docs use) also have no built-in
+   horizontal-scroll containment, unlike pre.pseudo/pre.flow-code (xgpage's own
+   components, which already carry overflow-x:auto) — a listing-style block pushed
+   scrollWidth to 989-1002px in the same pass. */
+.page p, .page li { overflow-wrap: anywhere; }
+.page pre, .page .highlight { overflow-x: auto; max-width: 100%; }
+/* Plain markdown tables (python-markdown's `tables` extension, used by e.g. the
+   Legacy runs experiments table) have no built-in scroll wrapper the way
+   xgpage's own table.results/table.tensors do (those get an explicit
+   .table-scroll div from their component functions) — display:block lets a
+   <table> take the horizontal-scroll role itself without needing one. */
+.page table:not(.results):not(.tensors) { display: block; overflow-x: auto; max-width: 100%; }
+
+/* -------------------------------------------------- interactive 3D lightbox
+   Click-to-load model-viewer (xgpage.viewer_img / model_viewer_modal + ui.js).
+   Styles no-op unless a page actually emits .v3d thumbnails / the #mv3d modal. */
+img.v3d { cursor: pointer; transition: outline-color .12s, box-shadow .12s; outline: 2px solid transparent; }
+img.v3d:hover { outline-color: #58a6ff; box-shadow: 0 0 0 4px rgba(88,166,255,.12); }
+.v3d-badge { display: inline-block; font-size: .68rem; color: #9fb4cc;
+  background: rgba(88,166,255,.12); border: 1px solid rgba(88,166,255,.30);
+  border-radius: 4px; padding: 0 .3em; margin-left: .25em; white-space: nowrap; }
+.mv3d-modal { position: fixed; inset: 0; z-index: 90; display: none;
+  background: rgba(4,6,10,.86); backdrop-filter: blur(3px);
+  flex-direction: column; align-items: center; justify-content: center; padding: 2vh 2vw; }
+.mv3d-modal.open { display: flex; }
+.mv3d-modal model-viewer { width: min(92vw, 900px); height: min(84vh, 900px);
+  background: #11161d; border: 1px solid #2a313c; border-radius: 12px; }
+.mv3d-bar { display: flex; gap: 1rem; align-items: center; color: #d8dde6;
+  font-size: .84rem; margin-bottom: .6rem; max-width: min(92vw, 900px); }
+.mv3d-bar #mv3d-title { font-family: ui-monospace, monospace; font-size: .76rem;
+  color: #aeb6c2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.mv3d-dl { color: #7db8f5; text-decoration: none; font-size: .76rem; white-space: nowrap; }
+.mv3d-dl:hover { text-decoration: underline; }
+.mv3d-close { background: #1f6feb; color: #fff; border: 0; border-radius: 6px;
+  padding: .35rem .8rem; cursor: pointer; font-size: .78rem; white-space: nowrap; }
+.mv3d-close:hover { background: #388bfd; }
+@media (max-width: 760px) {
+  .mv3d-modal model-viewer { width: 96vw; height: 78vh; }
+}

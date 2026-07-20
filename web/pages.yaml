@@ -1,0 +1,136 @@
+# lightgen web/pages.yaml — curated page registry (v11 convention, migrated
+# 2026-07-19 from the old top-level `groups:` list format).
+#
+# Per-page entries only: {name, tags, important?, blurb}. tools/build_console.py
+# joins this onto an auto-scan of the published directory (PUBLISH_DEST) for the
+# Pages tab (grouped by each entry's first tag; unregistered scanned pages fall
+# into "New / uncurated" so nothing hides) and for the Overview's "Current
+# highlights" list (pages with important: true). A page present here but no
+# longer found in the scan is silently dropped (no dangling links); a page found
+# in the scan but missing here surfaces as uncurated — add an entry at every
+# promotion.
+pages:
+  - name: workspace
+    tags: [workspace]
+    blurb: >
+      Research workspace landing page (advisor/collaborator-facing zone, added 2026-07-19,
+      LITE scope) — links to the current results and proposals for external readers; the
+      console (internal notes, to-dos, experiment logs) lives at the site root instead.
+
+  - name: updates/2026-07-19
+    tags: [update]
+    important: true
+    blurb: >
+      Daily report — switching data generation to direct GLB → o-voxel: pivots off the
+      512² somage-bake ceiling toward TRELLIS.2's native per-voxel emission bake. Today's
+      to-do (build_dataset_direct.py, 50-shape stratified pilot, go/no-go checkpoint) plus
+      carry-overs and two facts from yesterday's work.
+
+  - name: updates/2026-07-07_2k_results
+    tags: [update]
+    blurb: >
+      Draft team update on the 2k emission-filtered fine-tune result (page + PDF) — the
+      clean negative result later folded into BRIEF.md's "Latest (2k run)" section.
+      Feedback pending.
+
+  - name: pipeline_glb_direct
+    tags: [proposal, workspace]
+    important: true
+    blurb: >
+      Team explainer + proposal: today's emissive GT routes through a 512² somage bake
+      (two independent voxelizations of separately-built GLBs); every fine-tune we've
+      trained lands 0.32–0.43 IoU on large-glow shapes but only 0.036–0.055 on tiny-glow
+      shapes (7–9× gap, same source numbers as results_2k_v1's stratified chart).
+      Proposes voxelizing the original GLB directly instead (one voxelization, native
+      3-channel emissive, no 512² ceiling), with commit-pinned evidence that TRELLIS.2's
+      own tooling already supports emission end-to-end (just switched off in the
+      released weights), caveats, and a 50-shape diagnostic to decide.
+
+  - name: glb_direct_pilot_v1
+    tags: [results, workspace]
+    important: true
+    blurb: >
+      GO/NO-GO verdict for the direct-GLB emissive pilot (54-shape stratified batch):
+      NO-GO on o-voxel's per-voxel emissive attribute, GO on the one-hop idea. The attr
+      is populated but WRONG — it fabricates glow on non-emissive shapes (a plush teddy
+      bear comes back 96% emissive; 7 of 18 render-black shapes painted >20%) and misses
+      genuine emission, correlating with rendered light 0.25 vs the somage GT's 0.72.
+      Root cause (factor-zeroing controlled test): a wrong texture lookup in o-voxel's
+      compiled voxelizer, which is why TRELLIS.2 deletes the attr. Corrects the
+      pipeline_glb_direct explainer's "supported but switched off" story; recommends the
+      fix — UV-sample the original GLB's emissiveTexture per-face (handling factor-only +
+      KHR_materials_emissive_strength materials).
+
+  - name: results_2k_v1
+    tags: [results, workspace]
+    important: true
+    blurb: >
+      LATEST — 2k emission-filtered fine-tune result: a clean negative result. Bigger
+      clean data (train_2k_ef, 2,000 shapes) and balanced per-shape loss weighting both
+      fail to beat the 0.219 zero-shot SegviGen oracle; all four new checkpoints land
+      ≈0.10–0.11, tied with the old 1k model. Comparison + stratified-by-glow-size charts,
+      an honest-eval noise callout (16-sample quick-val overstated by 53%), and 8 real
+      val_96 shapes showing large-glow success vs tiny-glow failure in rendered voxel
+      predictions.
+
+  - name: finetune_binary_v1
+    tags: [results]
+    blurb: >
+      8 real val_96 shapes: input appearance | cond photo | GT target | W5-EMA prediction
+      | W1-EMA prediction. W5 (pos_weight=5, eager) vs W1 (control). Jobs 231171/231172,
+      Phase 4 of the battle plan.
+
+  - name: training_curves_v1
+    tags: [results]
+    blurb: >
+      Loss + quick-val IoU curves for both Phase 4 arms (W5 and W1, 18 epochs, L40S),
+      plus overfit-1 and overfit-10 sanity-gate runs. Includes the full val_96
+      4-checkpoint results table.
+
+  - name: dataset_gallery_v1
+    tags: [data]
+    blurb: >
+      Full-population statistics for train_1k (1123) and val_96 (111): emissive_frac
+      distribution, latent token count estimate, and a 48-sample gallery (12 per glow
+      bucket, seeded random). Companion to finetune_binary_v1.
+
+  - name: pbr_filter_v1
+    tags: [data]
+    blurb: >
+      What the train split's --pbr_only filter keeps vs drops: pbrType is a tooling
+      signature (SubstancePainter vs Minecraft/voxel/AI-gen tags), not a quality
+      signal, and the dropped 45,829/80,735 shapes are MORE emissive-labeled than the
+      kept ones (86% vs 76%). 48-shape kept/dropped gallery. Companion to
+      dataset_gallery_v1.
+
+  - name: official_repro
+    tags: [baseline]
+    blurb: >
+      Exact official inference_full.py on the authors' example.glb — reproduces
+      the expected cap/body/door/window/leaves/step structure. Confirms weights,
+      env, and inference are correct.
+
+  - name: gt_vs_pred_canon10
+    tags: [baseline]
+    blurb: >
+      Side-by-side on the original GT mesh: input appearance | GT parts (artist submeshes)
+      | predicted parts from pretrained full_seg (zero-shot). Canonical overfit_split_10.
+      Click any thumbnail for an interactive 3D orbit view.
+
+  - name: fullseg_canon10_mesh
+    tags: [baseline]
+    blurb: >
+      Pretrained full_seg part-segmentation on the res-512 decoded mesh (paper-style,
+      no voxel coarsening). Canonical overfit_split_10. Predicted parts only.
+
+  - name: fullseg_canon10
+    tags: [archive]
+    blurb: >
+      Raw per-voxel decode + palette-recolored parts (32^3 latent → 512^3 voxels).
+      Superseded by the mesh view above.
+
+  - name: fullseg_overfit10_adhoc
+    tags: [archive]
+    blurb: >
+      Arbitrary 10-shape set picked during an autonomous run — NOT the team's
+      overfit_split_10. Kept for reference only.

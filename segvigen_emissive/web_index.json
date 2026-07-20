@@ -1,0 +1,72 @@
+{
+  "project": "lightgen",
+  "title": "lightgen · SegviGen emissive / part-segmentation visuals",
+  "entries": [
+    {
+      "slug": "results_2k_v1",
+      "title": "2k fine-tune results: a clean negative result (LATEST)",
+      "brief": "The 2k emission-filtered fine-tune result, visualized: bigger clean data (train_2k_ef, 2,000 shapes, vs. the old 1123-shape train_1k) and balanced per-shape loss weighting (W_shape≈(1-p)/p, capped, vs. the old flat 5x) were both meant to fix the emissive fine-tune's majority-class collapse. Neither beats zero-shot SegviGen (0.219 nonzero IoU) — all four new checkpoints (2k+W5 best/EMA, 2k+balanced best/EMA) land ≈0.103-0.114, statistically tied with the old 1k model (0.117). Honest protocol: full 111-shape val set, K=4 generations per shape averaged, voxel IoU @0.5. Includes a stratified-by-glow-size chart showing every checkpoint nails large-glow shapes (0.32-0.43 IoU) and fails on tiny-glow shapes (0.04-0.06 IoU) — the real wall, untouched by data volume or loss weighting — plus a noise callout (a 16-sample quick-val briefly overstated the 2k+W5 result by 53%) and 8 real val_96 shapes with rendered voxel predictions (appearance | GT target | 2k+W5 pred | 2k+balanced pred) ordered large→tiny→zero glow.",
+      "status": "live"
+    },
+    {
+      "slug": "dataset_gallery_v1",
+      "title": "The fine-tuning dataset: statistics + gallery",
+      "brief": "Full-population statistics for train_1k (1123) and val_96 (111): emissive_frac distribution (mean 0.123/0.136, median 0.014/0.019, 24.5%/22.5% zero-glow), a 200-sample latent-token-count estimate (66-6148, median ~2053), and a 48-sample gallery (12 per glow bucket, seeded random, not hand-picked) showing appearance vs. GT white/black target for each. Companion to finetune_binary_v1's Section A.",
+      "status": "live"
+    },
+    {
+      "slug": "pbr_filter_v1",
+      "title": "PBR filter: what it keeps vs drops",
+      "brief": "The train split's --pbr_only filter drops 56% of the 80,735-shape emissive corpus (45,829 non-PBR shapes). Investigation shows pbrType is a tooling signature (substancepainter tag 22.6% of PBR-kept vs 1.5% non-PBR, a 15x gap) not a quality signal — the scans/baked-lit hypothesis is debunked (15.6% vs 14.8%, no signal), while minecraft/voxel/AI-gen tags are what's actually concentrated in the dropped pool. Dropped shapes are denser (median 23,688 vs 11,697 verts), less-curated (46.3% vs 34.0% zero categories), and MORE emissive-labeled (86.1% vs 75.9%) than kept ones — the filter's real justification was never cleanly tested. 48-shape (24 kept / 24 dropped, seed 42) gallery with names/tags from TexVerse metadata. Companion to dataset_gallery_v1.",
+      "status": "live"
+    },
+    {
+      "slug": "training_curves_v1",
+      "title": "Training curves: did the fine-tuning really happen?",
+      "brief": "Loss + quick-val IoU curves for both Phase 4 arms (jobs 231171/231172, W5 vs W1, 18 epochs x 1123 samples, ~6.5h each on L40S), parsed straight from Slurm logs and train_curve.json. Plus the overfit-1 and overfit-10 sanity-gate runs that preceded them (jobs 231118/231119/231120/231124/231164). Includes the full val_96 4-checkpoint results table and an honest flag: re-evaluating the same EMA checkpoints a day later gave visibly different flat-mean IoU due to stochastic sampling.",
+      "status": "live"
+    },
+    {
+      "slug": "finetune_binary_v1",
+      "title": "Fine-tune data + predictions (binary emissive v1)",
+      "brief": "How a training sample is made (artist GLB → input/target GLBs → 512³ voxelize → sparse 32³ latents → DINOv3 photo tokens), plus 8 real val_96 shapes showing appearance | cond photo | GT target | W5-EMA prediction | W1-EMA prediction, ordered large→tiny→zero glow. W5-EMA (\"eager\", 5× emissive-voxel loss weight) vs W1-EMA (\"timid\", plain loss) — eager nails large glow and over-paints tiny glow; timid plays it safe and racks up free points on zero-glow shapes.",
+      "status": "live"
+    },
+    {
+      "slug": "console",
+      "title": "War Command Center",
+      "brief": "MkDocs console aggregating current mission (binary emissive fine-tune), open decisions, WORKLOG results table, and links to all published visuals below. Rebuild with `python tools/build_console.py --publish` from the repo root.",
+      "status": "live"
+    },
+    {
+      "slug": "official_repro",
+      "title": "Official example reproduction (sanity check)",
+      "brief": "Ran the exact official inference_full.py on the authors' shipped example.glb vs their shipped output. Reproduces the expected clean part structure (cap/body/door/window/leaves/step) — confirms our weights+env+inference are correct. Part colors are stochastic per run.",
+      "status": "live"
+    },
+    {
+      "slug": "gt_vs_pred_canon10",
+      "title": "GT parts vs predicted full-seg (on GT mesh)",
+      "brief": "Side-by-side on the original GT mesh: input appearance | GT parts (artist submeshes) | predicted parts from the pretrained full_seg (zero-shot). Canonical overfit_split_10. Shows full_seg gets the coarse structure but under-segments vs the artist decomposition. Click any thumbnail (🔍 3D) for an interactive orbit/zoom 3D view.",
+      "status": "live"
+    },
+    {
+      "slug": "fullseg_canon10_mesh",
+      "title": "Predicted full-seg on the mesh surface",
+      "brief": "Pretrained full_seg part-segmentation rendered on the res-512 decoded mesh (paper-style, no voxel coarsening). Canonical overfit_split_10. Predicted parts only.",
+      "status": "live"
+    },
+    {
+      "slug": "fullseg_canon10",
+      "title": "Predicted full-seg as voxels (intermediate)",
+      "brief": "The raw per-voxel decode + palette-recolored parts. The intermediate representation (32^3 latent decoded to 512^3 voxels), coarsened for rendering. Superseded by the mesh views.",
+      "status": "superseded"
+    },
+    {
+      "slug": "fullseg_overfit10_adhoc",
+      "title": "Ad-hoc 10-shape set (NOT canonical)",
+      "brief": "An arbitrary 10-shape set picked during an autonomous run — NOT the team's overfit_split_10. Kept only for reference.",
+      "status": "deprecated"
+    }
+  ]
+}

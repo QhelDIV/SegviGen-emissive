@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lightgen — What Are We Actually Doing?</title>
+<style>
+  :root {
+    --bg: #12151a;
+    --panel: #171b22;
+    --panel2: #1b2028;
+    --border: #262c36;
+    --text: #d8dde6;
+    --muted: #8b96a5;
+    --accent: #5cc8ff;   /* W5 / primary series */
+    --accent2: #ffb454;  /* W1 / control series */
+    --good: #4ade80;
+    --bad: #f87171;
+    --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px; line-height: 1.55;
+    overflow-x: hidden;
+  }
+  .page { max-width: 900px; margin: 0 auto; padding: 1.6rem 1.2rem 4rem; }
+  h1 { font-size: 1.55rem; margin: 0 0 .3rem; letter-spacing: -.01em; }
+  h2 { font-size: 1.05rem; margin: 0 0 .6rem; color: #fff; }
+  h2 .num { color: var(--accent); margin-right: .35rem; }
+  .sub { color: var(--muted); margin: 0 0 1.1rem; font-size: .92rem; max-width: 62ch; }
+  p { margin: .5rem 0; }
+  strong { color: #fff; }
+  code { background: #0d1014; border: 1px solid var(--border); border-radius: .25rem;
+         padding: .05rem .3rem; font-size: .88em; color: var(--accent); }
+  section { margin: 2.1rem 0; padding-top: .2rem; }
+  section + section { border-top: 1px solid var(--border); padding-top: 1.9rem; }
+  .callout {
+    background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: .4rem; padding: .85rem 1rem; margin: 1rem 0 1.6rem; font-size: .95rem;
+  }
+  svg { width: 100%; height: auto; display: block; margin: .8rem 0; overflow: visible; }
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .diagram-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: .5rem;
+                  padding: .9rem 1rem 1rem; }
+  /* dense, wide diagrams: scroll horizontally at a fixed legible size instead of shrinking to
+     illegible text on narrow screens (same convention as .table-scroll) */
+  .diagram-wrap.wide-diagram { overflow-x: auto; }
+  .wide-diagram svg { width: 860px; max-width: none; }
+  .caption { color: var(--muted); font-size: .82rem; margin-top: .4rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: .8rem; color: var(--muted);
+            margin-top: .5rem; }
+  .legend span.sw { display: inline-block; width: .7rem; height: .7rem; border-radius: .15rem;
+                    margin-right: .35rem; vertical-align: -1px; }
+
+  /* scoreboard */
+  .scoreboard { background: var(--panel); border: 1px solid var(--border); border-radius: .5rem;
+                padding: 1rem 1.1rem; }
+
+  /* results table */
+  .table-scroll { overflow-x: auto; margin-top: .6rem; -webkit-overflow-scrolling: touch; }
+  table.results { width: 100%; min-width: 480px; border-collapse: collapse; font-size: .85rem; }
+  table.results th, table.results td { padding: .45rem .55rem; border-bottom: 1px solid var(--border);
+                                        text-align: left; }
+  table.results th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase;
+                     letter-spacing: .03em; }
+  table.results td.num, table.results th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.results tr.pending td { color: var(--muted); font-style: italic; }
+  .tag { display: inline-block; font-size: .68rem; padding: .1rem .4rem; border-radius: .8rem;
+         border: 1px solid var(--border); color: var(--muted); margin-left: .4rem; }
+  .tag.w5 { color: var(--accent); border-color: rgba(92,200,255,.4); }
+  .tag.w1 { color: var(--accent2); border-color: rgba(255,180,84,.4); }
+
+  .stat-row { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .7rem; }
+  .stat { background: #0d1014; border: 1px solid var(--border); border-radius: .4rem;
+          padding: .5rem .75rem; flex: 1 1 150px; }
+  .stat b { display: block; font-size: 1.3rem; color: #fff; }
+  .stat span { font-size: .74rem; color: var(--muted); }
+
+  footer { margin-top: 2.5rem; color: var(--muted); font-size: .8rem; text-align: center; }
+
+  @media (max-width: 480px) {
+    body { font-size: 14px; }
+    .page { padding: 1.1rem .8rem 3rem; }
+    h1 { font-size: 1.3rem; }
+    .stat-row { gap: .5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <h1>What are we actually doing?</h1>
+    <p class="sub">A plain-language map of the current Lightgen experiment — the task, the
+      scoreboard, and every term flying around the war room (flat mean, Otsu, strata, W5/W1…).
+      No prior familiarity with this project's jargon assumed.</p>
+    <div class="callout">
+      <strong>Short answer: yes — we are fine-tuning SegviGen.</strong> Specifically its
+      <code>full_seg</code> model. We're giving it a narrower job than usual: instead of
+      splitting a shape into many labeled parts, it just has to paint every surface voxel
+      <strong>white</strong> (this glows / is emissive) or <strong>black</strong> (it doesn't).
+      Everything below explains how we check whether the fine-tune is working, and what we've
+      found so far.
+    </div>
+  </header>
+
+  <!-- ============================================================ SCOREBOARD ==== -->
+  <section id="scoreboard">
+    <h2><span class="num">★</span>Numbers to beat</h2>
+    <p>We score every prediction with <strong>IoU</strong> (intersection-over-union): overlap
+      between the voxels the model painted white and the voxels that are <em>actually</em>
+      emissive in the ground truth, divided by the union of the two. 1 = perfect overlap,
+      0 = no overlap at all. This is a SegviGen-vs-SegviGen project — the reference scores below
+      are both SegviGen itself, not an outside baseline:</p>
+    <div class="scoreboard">
+      <svg viewBox="0 0 720 110" id="svg-scoreboard">
+        <!-- axis -->
+        <line x1="190" y1="20" x2="190" y2="90" stroke="#383f4a" stroke-width="1"/>
+        <line x1="190" y1="90" x2="640" y2="90" stroke="#383f4a" stroke-width="1"/>
+        <!-- bar 1: zero-shot oracle 0.235 -->
+        <text x="180" y="42" text-anchor="end" fill="#d8dde6" font-size="12">Zero-shot oracle</text>
+        <rect x="190" y="30" width="316" height="20" rx="4" fill="#4ade80"/>
+        <text x="513" y="45" fill="#fff" font-size="13" font-weight="700">0.235</text>
+        <!-- bar 2: previous best fine-tune 0.230 (then collapsed) -->
+        <text x="180" y="82" text-anchor="end" fill="#d8dde6" font-size="12">Previous best fine-tune</text>
+        <rect x="190" y="70" width="309" height="20" rx="4" fill="#ffb454"/>
+        <text x="506" y="85" fill="#fff" font-size="13" font-weight="700">0.230</text>
+        <text x="620" y="85" fill="#f87171" font-size="11" font-style="italic">→ collapsed to 0.035</text>
+      </svg>
+      <div class="legend">
+        <span><span class="sw" style="background:#4ade80"></span><strong>Oracle</strong>: no training at all — take the PRETRAINED SegviGen's existing part segmentation, label each part "emissive" if &gt;50% of it overlaps ground truth. This is the bar fine-tuning has to beat to be worth doing.</span>
+        <span><span class="sw" style="background:#ffb454"></span>Best epoch of our previous fine-tune (before this dataset/loss work), before it broke</span>
+      </div>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted)">Success = a fine-tuned SegviGen beating both
+      of these numbers, with qualitatively good white/black maps on shapes that actually glow —
+      not just a higher average. Our fine-tune already matched the oracle once, then destroyed
+      itself a few epochs later. The rest of this page is about fixing that failure mode and
+      finding out whether the fix actually helps.</p>
+  </section>
+
+  <!-- ============================================================ 1. PIPELINE ==== -->
+  <section id="pipeline">
+    <h2><span class="num">1</span>The task, pictured</h2>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 780 300">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#5cc8ff"/>
+          </marker>
+          <marker id="arrow-opt" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#ffb454"/>
+          </marker>
+          <linearGradient id="texgrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#ffb454"/>
+            <stop offset="0.5" stop-color="#5cc8ff"/>
+            <stop offset="1" stop-color="#4ade80"/>
+          </linearGradient>
+        </defs>
+        <!-- MAIN input (required): shape + its own PBR texture -->
+        <g>
+          <polygon points="35,50 75,30 115,50 115,100 75,120 35,100" fill="none" stroke="#8b96a5" stroke-width="1.6"/>
+          <line x1="35" y1="50" x2="75" y2="70" stroke="#8b96a5" stroke-width="1.2"/>
+          <line x1="115" y1="50" x2="75" y2="70" stroke="#8b96a5" stroke-width="1.2"/>
+          <line x1="75" y1="70" x2="75" y2="120" stroke="#8b96a5" stroke-width="1.2"/>
+          <text x="128" y="86" fill="#8b96a5" font-size="18">+</text>
+          <rect x="140" y="55" width="50" height="50" rx="6" fill="url(#texgrad)" opacity=".5" stroke="#8b96a5" stroke-width="1.2"/>
+          <text x="112" y="142" text-anchor="middle" fill="#d8dde6" font-size="12" font-weight="700">textured 3D shape</text>
+          <text x="112" y="157" text-anchor="middle" fill="#8b96a5" font-size="10">(geometry + its own PBR texture)</text>
+        </g>
+        <!-- required arrow -->
+        <line x1="200" y1="80" x2="300" y2="80" stroke="#5cc8ff" stroke-width="2" marker-end="url(#arrow)"/>
+        <!-- OPTIONAL input (dashed): rendered photo -->
+        <g>
+          <rect x="160" y="205" width="80" height="55" rx="4" fill="#0d1014" stroke="#8b96a5" stroke-width="1.2" stroke-dasharray="4,3"/>
+          <circle cx="182" cy="222" r="6" fill="#ffb454" opacity=".8"/>
+          <polygon points="165,255 195,225 213,243 233,227 233,255" fill="#5cc8ff" opacity=".4"/>
+          <text x="200" y="277" text-anchor="middle" fill="#ffb454" font-size="11">optional image hint</text>
+          <text x="200" y="291" text-anchor="middle" fill="#8b96a5" font-size="9.5">we keep it on — our ablation: 0.176 without → 0.230 with</text>
+        </g>
+        <!-- optional dashed arrow, merging in lower on the model box -->
+        <line x1="240" y1="232" x2="300" y2="152" stroke="#ffb454" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrow-opt)"/>
+        <!-- model box -->
+        <rect x="305" y="35" width="150" height="150" rx="8" fill="#0d1014" stroke="#5cc8ff" stroke-width="1.6"/>
+        <text x="380" y="95" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">SegviGen</text>
+        <text x="380" y="112" text-anchor="middle" fill="#5cc8ff" font-size="11">full_seg</text>
+        <text x="380" y="128" text-anchor="middle" fill="#8b96a5" font-size="10">(fine-tuning this)</text>
+        <!-- arrow to output -->
+        <line x1="460" y1="110" x2="505" y2="110" stroke="#5cc8ff" stroke-width="2" marker-end="url(#arrow)"/>
+        <!-- output voxel grid -->
+        <g id="pipeline-voxels" transform="translate(515,55)"></g>
+        <text x="600" y="195" text-anchor="middle" fill="#d8dde6" font-size="12">every surface voxel painted</text>
+      </svg>
+      <div class="legend">
+        <span><span class="sw" style="background:#eef2f7"></span>white = predicted emissive (glowing)</span>
+        <span><span class="sw" style="background:#232a34;border:1px solid #383f4a"></span>black = predicted not emissive</span>
+        <span>solid = required input · dashed = optional (photo)</span>
+      </div>
+    </div>
+    <p>The ground truth comes from the original artists: whichever parts of a 3D asset they
+      assigned an <em>emissive material</em> (a glowing texture, like a screen or a light strip)
+      are the "true white" voxels. The model never sees that material assignment directly — it
+      only sees the shape's geometry and its own PBR texture, plus an optional rendered photo
+      that we found helps, and has to guess which surface regions glow. Where does that optional
+      photo input actually come from, and why keep it if it's "optional"? See the next section.</p>
+  </section>
+
+  <!-- ============================================================ 2. PAPER VS CODE ==== -->
+  <section id="paper-vs-code">
+    <h2><span class="num">2</span>Where the "optional" photo actually comes from: paper vs. code</h2>
+    <p>We checked the published method (arXiv 2603.16869 §3.3.2) against the shipped SegviGen
+      code. They disagree about this exact input:</p>
+    <div class="diagram-wrap wide-diagram">
+      <svg viewBox="0 0 900 380">
+        <line x1="445" y1="10" x2="445" y2="368" stroke="#262c36" stroke-width="1"/>
+        <!-- LEFT: paper -->
+        <text x="210" y="20" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">What the paper describes (§3.3.2)</text>
+        <rect x="30" y="40" width="360" height="110" rx="6" fill="#171b22" stroke="#5cc8ff" stroke-width="1.4"/>
+        <text x="50" y="62" fill="#d8dde6" font-size="11">noisy target latent y_t</text>
+        <text x="50" y="80" fill="#d8dde6" font-size="11">shape / structured latent z</text>
+        <text x="50" y="98" fill="#d8dde6" font-size="11">point tokens Q — all-zero (full-seg mode)</text>
+        <text x="50" y="116" fill="#d8dde6" font-size="11">task-ID embedding + timestep t</text>
+        <line x1="210" y1="150" x2="210" y2="190" stroke="#5cc8ff" stroke-width="2" marker-end="url(#arrowD1)"/>
+        <rect x="110" y="195" width="200" height="50" rx="8" fill="#0d1014" stroke="#5cc8ff" stroke-width="1.6"/>
+        <text x="210" y="225" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">flow transformer</text>
+        <text x="210" y="270" text-anchor="middle" fill="#8b96a5" font-size="10.5">full-seg: "purely 3D input" — no image conditioning</text>
+
+        <!-- RIGHT: code -->
+        <text x="670" y="20" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">What the shipped code does</text>
+        <rect x="490" y="40" width="360" height="110" rx="6" fill="#171b22" stroke="#5cc8ff" stroke-width="1.4"/>
+        <text x="510" y="62" fill="#d8dde6" font-size="11">noisy target latent y_t</text>
+        <text x="510" y="80" fill="#d8dde6" font-size="11">shape / structured latent z</text>
+        <text x="510" y="98" fill="#d8dde6" font-size="11">point tokens Q — all-zero (full-seg mode)</text>
+        <text x="510" y="116" fill="#d8dde6" font-size="11">task-ID embedding + timestep t</text>
+        <line x1="670" y1="150" x2="670" y2="190" stroke="#5cc8ff" stroke-width="2" marker-end="url(#arrowD1)"/>
+        <rect x="570" y="195" width="200" height="50" rx="8" fill="#0d1014" stroke="#5cc8ff" stroke-width="1.6"/>
+        <text x="670" y="225" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">flow transformer</text>
+
+        <!-- amber extra branch, undocumented -->
+        <rect x="490" y="290" width="70" height="34" rx="4" fill="#171b22" stroke="#ffb454" stroke-width="1.3" stroke-dasharray="4,3"/>
+        <text x="525" y="311" text-anchor="middle" fill="#ffb454" font-size="9.5">input GLB</text>
+        <line x1="560" y1="307" x2="578" y2="307" stroke="#ffb454" stroke-width="1.6" marker-end="url(#arrowD2)"/>
+        <rect x="580" y="290" width="90" height="34" rx="4" fill="#171b22" stroke="#ffb454" stroke-width="1.3" stroke-dasharray="4,3"/>
+        <text x="625" y="304" text-anchor="middle" fill="#ffb454" font-size="9.5">self-rendered</text>
+        <text x="625" y="317" text-anchor="middle" fill="#ffb454" font-size="9.5">photo</text>
+        <line x1="670" y1="307" x2="688" y2="307" stroke="#ffb454" stroke-width="1.6" marker-end="url(#arrowD2)"/>
+        <rect x="690" y="290" width="55" height="34" rx="4" fill="#171b22" stroke="#ffb454" stroke-width="1.3" stroke-dasharray="4,3"/>
+        <text x="717" y="311" text-anchor="middle" fill="#ffb454" font-size="9.5">RMBG</text>
+        <line x1="745" y1="307" x2="763" y2="307" stroke="#ffb454" stroke-width="1.6" marker-end="url(#arrowD2)"/>
+        <rect x="765" y="290" width="85" height="34" rx="4" fill="#171b22" stroke="#ffb454" stroke-width="1.3" stroke-dasharray="4,3"/>
+        <text x="807" y="304" text-anchor="middle" fill="#ffb454" font-size="9.5">DINOv3 tokens</text>
+        <text x="807" y="317" text-anchor="middle" fill="#ffb454" font-size="9.5">(~1024)</text>
+        <line x1="680" y1="290" x2="680" y2="249" stroke="#ffb454" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrowD2)"/>
+        <text x="694" y="272" fill="#ffb454" font-size="9.5">cross-attention</text>
+        <text x="670" y="342" text-anchor="middle" fill="#ffb454" font-size="10.5" font-weight="600">undocumented — inherited from TRELLIS.2</text>
+        <text x="670" y="358" text-anchor="middle" fill="#8b96a5" font-size="9.5">our ablation: 0.176 without → 0.230 with</text>
+
+        <defs>
+          <marker id="arrowD1" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#5cc8ff"/></marker>
+          <marker id="arrowD2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#ffb454"/></marker>
+        </defs>
+      </svg>
+    </div>
+    <p>The paper's full-seg mode feeds the flow transformer only the shape latent and all-zero
+      point tokens — by the text, "purely native 3D representation," no image anywhere. The
+      shipped code takes the input GLB, self-renders a photo of it, strips the background, and
+      runs it through DINOv3 into the same transformer's cross-attention — a real extra input
+      channel the paper never mentions. That gap exists because the underlying TRELLIS.2 texture
+      flow is image-conditioned by architecture; the authors kept that slot fed rather than
+      retraining it away. <strong>Takeaway:</strong> the photo adds no outside information (it's
+      rendered from the asset itself), but the pretrained weights rely on the channel being
+      filled — which is why our fine-tune keeps it on.</p>
+  </section>
+
+  <!-- ============================================================ 3. IoU ==== -->
+  <section id="iou">
+    <h2><span class="num">3</span>Scoring a prediction: IoU</h2>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 620 260">
+        <circle cx="230" cy="100" r="60" fill="#5cc8ff" opacity=".38" stroke="#5cc8ff" stroke-width="1.6"/>
+        <circle cx="300" cy="100" r="60" fill="#4ade80" opacity=".38" stroke="#4ade80" stroke-width="1.6"/>
+        <text x="180" y="25" fill="#5cc8ff" font-size="12" font-weight="700" text-anchor="middle">predicted white</text>
+        <text x="350" y="25" fill="#4ade80" font-size="12" font-weight="700" text-anchor="middle">true white (GT)</text>
+        <text x="265" y="104" fill="#fff" font-size="11" text-anchor="middle">overlap</text>
+        <!-- formula: fully below the venn, own row, generous clearance -->
+        <g transform="translate(310,196)">
+          <text x="-95" y="4" fill="#d8dde6" font-size="14" text-anchor="end">IoU =</text>
+          <line x1="-45" y1="-3" x2="55" y2="-3" stroke="#8b96a5" stroke-width="1.2"/>
+          <text x="5" y="-9" text-anchor="middle" fill="#d8dde6" font-size="12">overlap</text>
+          <text x="5" y="14" text-anchor="middle" fill="#d8dde6" font-size="12">union of both</text>
+        </g>
+        <text x="310" y="246" text-anchor="middle" fill="#8b96a5" font-size="11">0 = miss entirely · 1 = perfect match</text>
+      </svg>
+    </div>
+    <p>IoU punishes both kinds of mistake symmetrically: painting white where it should be black
+      (false positive) and painting black where it should be white (false negative) both shrink
+      the overlap relative to the union. That symmetry is exactly what makes it a trap for tiny
+      emissive regions — see below.</p>
+  </section>
+
+  <!-- ============================================================ 3. IMBALANCE ==== -->
+  <section id="imbalance">
+    <h2><span class="num">4</span>Why models "give up" and paint everything black</h2>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 420 225" id="svg-imbalance">
+        <g id="imbalance-grid" transform="translate(10,10)"></g>
+        <text x="10" y="218" fill="#8b96a5" font-size="11">100 surface voxels, average shape — only ~11 are truly emissive (white)</text>
+      </svg>
+      <div class="stat-row">
+        <div class="stat"><b>~11%</b><span>average emissive voxels across shapes</span></div>
+        <div class="stat"><b>1.4%</b><span>median training shape's emissive fraction</span></div>
+        <div class="stat"><b>24.5%</b><span>of shapes have ZERO emissive voxels</span></div>
+      </div>
+    </div>
+    <p>Because emissive voxels are rare, a model that <strong>paints every voxel black gets
+      ~89% accuracy</strong> — it "looks" like it's doing great — <em>but scores 0 on our actual
+      metric</em>, since there's zero overlap with the true white region. That "paint all black"
+      answer is a seductive shortcut for the optimizer to fall into. This is exactly the failure
+      that hit our previous fine-tune: it hit 0.230 IoU at epoch 2, then <strong>collapsed</strong> —
+      both training and validation scores slid toward zero together as the whole model drifted to
+      all-black predictions, bottoming out at 0.035 IoU by epoch 6. That rules out classical
+      overfitting (where training would keep improving while validation falls) — this is the whole
+      model giving up on the minority class.</p>
+  </section>
+
+  <!-- ============================================================ 4. W5 vs W1 ==== -->
+  <section id="w5w1">
+    <h2><span class="num">5</span>The fix under test: W5 vs W1</h2>
+    <p>To stop the model from taking the all-black shortcut, we changed the training loss so a
+      mistake on an emissive voxel counts for more: weight <code>w = 1 + (W−1)·(emissive fraction of that cell)</code>.
+      <strong>W5</strong> is the run with that fix turned on (mistakes on emissive voxels count
+      5× as much). <strong>W1</strong> is an identical control run with the weight left at 1 —
+      i.e. the old plain loss, same data, same schedule. Running both side by side is the only
+      way to know whether any improvement is really caused by the weighting. Exact loss math:
+      <a href="https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/finetune_binary_v1/index.html#loss-math"
+         style="color:var(--accent)">the fine-tune predictions page</a>.</p>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 780 190">
+        <text x="10" y="18" fill="#8b96a5" font-size="11">same data (1123 shapes) · same schedule (18 epochs) · only the loss differs</text>
+        <!-- W5 row -->
+        <rect x="10" y="35" width="150" height="40" rx="6" fill="#0d1014" stroke="#5cc8ff" stroke-width="1.4"/>
+        <text x="85" y="59" text-anchor="middle" fill="#5cc8ff" font-size="13" font-weight="700">W5 run</text>
+        <line x1="160" y1="55" x2="260" y2="55" stroke="#5cc8ff" stroke-width="2" marker-end="url(#arrow5)"/>
+        <rect x="265" y="30" width="270" height="50" rx="6" fill="#171b22" stroke="#5cc8ff" stroke-width="1.2"/>
+        <text x="400" y="50" text-anchor="middle" fill="#fff" font-size="11">emissive-voxel mistakes count</text>
+        <text x="400" y="68" text-anchor="middle" fill="#5cc8ff" font-size="14" font-weight="700">5×</text>
+        <line x1="535" y1="55" x2="605" y2="55" stroke="#5cc8ff" stroke-width="2" marker-end="url(#arrow5)"/>
+        <rect x="610" y="30" width="160" height="50" rx="6" fill="#0d1014" stroke="#5cc8ff" stroke-width="1.4"/>
+        <text x="690" y="50" text-anchor="middle" fill="#fff" font-size="11">peak val IoU</text>
+        <text x="690" y="68" text-anchor="middle" fill="#5cc8ff" font-size="13" font-weight="700">0.215 @ ep14</text>
+
+        <!-- W1 row -->
+        <rect x="10" y="115" width="150" height="40" rx="6" fill="#0d1014" stroke="#ffb454" stroke-width="1.4"/>
+        <text x="85" y="139" text-anchor="middle" fill="#ffb454" font-size="13" font-weight="700">W1 run (control)</text>
+        <line x1="160" y1="135" x2="260" y2="135" stroke="#ffb454" stroke-width="2" marker-end="url(#arrow1)"/>
+        <rect x="265" y="110" width="270" height="50" rx="6" fill="#171b22" stroke="#ffb454" stroke-width="1.2"/>
+        <text x="400" y="130" text-anchor="middle" fill="#fff" font-size="11">every mistake counts</text>
+        <text x="400" y="148" text-anchor="middle" fill="#ffb454" font-size="14" font-weight="700">1× (plain loss)</text>
+        <line x1="535" y1="135" x2="605" y2="135" stroke="#ffb454" stroke-width="2" marker-end="url(#arrow1)"/>
+        <rect x="610" y="110" width="160" height="50" rx="6" fill="#0d1014" stroke="#ffb454" stroke-width="1.4"/>
+        <text x="690" y="130" text-anchor="middle" fill="#fff" font-size="11">peak val IoU</text>
+        <text x="690" y="148" text-anchor="middle" fill="#ffb454" font-size="13" font-weight="700">0.221 @ ep16</text>
+
+        <defs>
+          <marker id="arrow5" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#5cc8ff"/></marker>
+          <marker id="arrow1" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#ffb454"/></marker>
+        </defs>
+      </svg>
+    </div>
+    <p>The good news: neither run collapsed this time — 18 epochs, no crash to zero, for either
+      weighting. That instability is fixed. The catch: 0.215 vs 0.221 is <strong>statistically
+      indistinguishable</strong> — both close to each other and to the old 0.230 peak. On this
+      16-shape quick-validation slice, the weighting hasn't proven itself yet.</p>
+  </section>
+
+  <!-- ============================================================ 5. GLOW SIZE ==== -->
+  <section id="glowsize">
+    <h2><span class="num">6</span>The real discovery: glow size, not material</h2>
+    <p>A separate test — training on just 10 shapes until the model should be able to
+      memorize each one — found the split isn't about PBR material type as first suspected.
+      It's about how much of the shape's surface actually glows:</p>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 780 210">
+        <!-- large -->
+        <g id="glow-large" transform="translate(30,10)"></g>
+        <text x="110" y="180" text-anchor="middle" fill="#d8dde6" font-size="12">large glow (≥36% of surface)</text>
+        <text x="110" y="198" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="700">memorized · IoU ≈ 1.0</text>
+        <!-- medium -->
+        <g id="glow-medium" transform="translate(320,10)"></g>
+        <text x="400" y="180" text-anchor="middle" fill="#8b96a5" font-size="12">medium glow</text>
+        <text x="400" y="198" text-anchor="middle" fill="#8b96a5" font-size="12" font-style="italic">not tested here — the open question</text>
+        <!-- tiny -->
+        <g id="glow-tiny" transform="translate(610,10)"></g>
+        <text x="690" y="180" text-anchor="middle" fill="#d8dde6" font-size="12">tiny glow (≤7% of surface)</text>
+        <text x="690" y="198" text-anchor="middle" fill="#f87171" font-size="13" font-weight="700">stuck near IoU ≈ 0</text>
+      </svg>
+      <div class="legend">
+        <span><span class="sw" style="background:#eef2f7"></span>emissive (white) voxels</span>
+        <span><span class="sw" style="background:#232a34;border:1px solid #383f4a"></span>non-emissive (black) voxels</span>
+      </div>
+    </div>
+    <p>Big glowing regions get memorized perfectly, even at just 600 training steps. Shapes with
+      a tiny glow — like one small LED on an otherwise plain machine — stay near zero no matter
+      how long we train on them: missing that one tiny bright spot scores exactly 0 IoU, same as
+      missing the whole thing. We also directly checked whether the VAE (the model's latent
+      encoder/decoder) was silently destroying tiny glow regions before training even sees them —
+      it isn't: even a region covering just 0.03% of the surface survives encoding and decoding
+      faithfully. The ceiling is coming from the objective/training dynamics, not from lossy
+      compression.</p>
+  </section>
+
+  <!-- ============================================================ 6. FINAL EVAL ==== -->
+  <section id="finaleval">
+    <h2><span class="num">7</span>How we're reading the final results</h2>
+    <p>A larger evaluation — all 111 validation shapes, across 4 checkpoints — is now complete.
+      It reports numbers three different ways, specifically so a single misleading average can't
+      hide what's really happening:</p>
+
+    <p><strong>Flat mean</strong> — the plain average IoU over all 111 shapes, each scored at its
+      best fixed cutoff. This is the single headline number, and (as the next section explains)
+      it's the one most easily gamed by a model that plays it safe.</p>
+
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 780 90">
+        <text x="10" y="18" fill="#8b96a5" font-size="11">validation shapes, split into 4 buckets by how much of the surface glows</text>
+        <rect x="10" y="35" width="150" height="34" fill="#1b2028" stroke="#383f4a" stroke-width="1"/>
+        <text x="85" y="56" text-anchor="middle" fill="#d8dde6" font-size="12">0%</text>
+        <rect x="165" y="35" width="150" height="34" fill="#22384a" stroke="#5cc8ff" stroke-width="1" opacity=".55"/>
+        <text x="240" y="56" text-anchor="middle" fill="#d8dde6" font-size="12">tiny (0–5%]</text>
+        <rect x="320" y="35" width="230" height="34" fill="#1c527a" stroke="#5cc8ff" stroke-width="1" opacity=".75"/>
+        <text x="435" y="56" text-anchor="middle" fill="#fff" font-size="12">medium (5–30%]</text>
+        <rect x="555" y="35" width="215" height="34" fill="#0f6aab" stroke="#5cc8ff" stroke-width="1.4"/>
+        <text x="662" y="56" text-anchor="middle" fill="#fff" font-size="12">large (&gt;30%)</text>
+      </svg>
+    </div>
+    <p>The same scores, split into these 4 groups, are the <strong>per-bucket strata</strong> —
+      "strata" just means slices of the data grouped by a shared trait (here, glow size). This
+      shows exactly where the model wins and loses, rather than blending a strong "large glow"
+      score and a weak "tiny glow" score into one number that looks mediocre everywhere.</p>
+
+    <p>The model's raw output per voxel is a grayish confidence value, not a clean 0/1 — so a
+      <strong>threshold</strong> decides the white/black cutoff:</p>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 780 90">
+        <defs>
+          <linearGradient id="gray-grad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#111318"/>
+            <stop offset="1" stop-color="#eef2f7"/>
+          </linearGradient>
+        </defs>
+        <rect x="10" y="15" width="600" height="26" rx="4" fill="url(#gray-grad)" stroke="#383f4a"/>
+        <text x="10" y="8" fill="#8b96a5" font-size="10">0 (black)</text>
+        <text x="590" y="8" fill="#8b96a5" font-size="10">1 (white)</text>
+        <!-- fixed sweep ticks -->
+        <g stroke="#f87171" stroke-width="1.4">
+          <line x1="130" y1="12" x2="130" y2="44"/>
+          <line x1="250" y1="12" x2="250" y2="44"/>
+          <line x1="370" y1="12" x2="370" y2="44"/>
+          <line x1="490" y1="12" x2="490" y2="44"/>
+        </g>
+        <text x="310" y="62" text-anchor="middle" fill="#f87171" font-size="11">fixed sweep: 0.2 · 0.3 · 0.4 · 0.5</text>
+        <!-- otsu marker -->
+        <line x1="660" y1="8" x2="660" y2="48" stroke="#4ade80" stroke-width="2" stroke-dasharray="3,2"/>
+        <text x="660" y="70" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="700">Otsu</text>
+        <text x="660" y="84" text-anchor="middle" fill="#8b96a5" font-size="10">picked per-shape, automatically</text>
+      </svg>
+    </div>
+    <p>We sweep several fixed cutoffs (0.2–0.5) <em>and</em> use <strong>Otsu</strong>'s method —
+      an automatic threshold that finds the best split point separately for each shape — so a
+      badly-chosen fixed cutoff can't be mistaken for a bad model.</p>
+
+    <p>Four checkpoints get all of the above: W5-best, W1-best, and each one's
+      <strong>EMA</strong> sibling — an exponential moving average of the model's weights over
+      recent training steps, kept alongside the raw checkpoint because it's often slightly
+      smoother/steadier.</p>
+
+    <p style="font-size:.85rem;color:var(--muted)">Training / quick-validation (16-shape subset, checked every 2 epochs while the run was still training):</p>
+    <div class="table-scroll">
+    <table class="results">
+      <thead><tr><th>Run</th><th>Data</th><th class="num">Epoch</th><th class="num">Val IoU (16-shape quick-val)</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Zero-shot oracle</td><td>—</td><td class="num">—</td><td class="num">0.235</td><td>no training at all</td></tr>
+        <tr><td>Previous best fine-tune</td><td>232</td><td class="num">2</td><td class="num">0.230</td><td>collapsed to 0.035 by ep6</td></tr>
+        <tr><td>W5 <span class="tag w5">this run</span></td><td>1123</td><td class="num">14</td><td class="num">0.215</td><td>no collapse over 18 epochs</td></tr>
+        <tr><td>W1 (control) <span class="tag w1">this run</span></td><td>1123</td><td class="num">16</td><td class="num">0.221</td><td>no collapse over 18 epochs</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p style="font-size:.85rem;color:var(--muted);margin-top:1.3rem">Final evaluation — all 111 validation shapes, each shape at its best fixed cutoff:</p>
+    <div class="table-scroll">
+    <table class="results">
+      <thead><tr><th>Checkpoint</th><th class="num">Flat mean</th><th class="num">Zero-glow (25 shapes)</th><th class="num">Tiny</th><th class="num">Medium</th><th class="num">Large</th></tr></thead>
+      <tbody>
+        <tr><td>W5-best <span class="tag w5">ep14</span></td><td class="num">0.117</td><td class="num">0.20</td><td class="num">0.06</td><td class="num">0.08</td><td class="num">0.22</td></tr>
+        <tr><td>W1-best <span class="tag w1">ep16</span></td><td class="num">0.161</td><td class="num">0.52</td><td class="num">0.04</td><td class="num">0.04</td><td class="num">0.13</td></tr>
+        <tr><td>W5-EMA <span class="tag w5">ep14</span></td><td class="num">0.096</td><td class="num">0.00</td><td class="num">0.01</td><td class="num">0.12</td><td class="num">0.52</td></tr>
+        <tr><td>W1-EMA <span class="tag w1">ep16</span></td><td class="num">0.172</td><td class="num">0.48</td><td class="num">0.03</td><td class="num">0.09</td><td class="num">0.25</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="caption">All four checkpoints score below the 0.230 / 0.235 reference lines on flat mean — but reading the buckets, not just the flat mean, is the whole point of the next section.</p>
+
+    <h3 style="font-size:.95rem;color:#fff;margin:1.6rem 0 .5rem">The zero-glow scoring trap</h3>
+    <p><strong>25 of the 111</strong> validation shapes have <em>zero</em> true emissive voxels —
+      nothing on them glows. On those shapes, a model that predicts nothing scores a perfect
+      IoU of 1.0; a model that paints anything at all there scores 0. That single rule quietly
+      rewards timidity: a model that plays it safe and predicts little/nothing racks up free
+      points on a quarter of the validation set, inflating its flat mean, while a model that
+      actually attempts to segment glowing surfaces can look worse on paper even when it's the
+      better segmenter.</p>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 780 190">
+        <!-- timid card -->
+        <rect x="20" y="15" width="330" height="160" rx="8" fill="#171b22" stroke="#ffb454" stroke-width="1.4"/>
+        <text x="185" y="40" text-anchor="middle" fill="#ffb454" font-size="13" font-weight="700">W1-EMA — "timid"</text>
+        <text x="185" y="58" text-anchor="middle" fill="#8b96a5" font-size="10">often paints little or nothing</text>
+        <text x="45" y="90" fill="#d8dde6" font-size="12">zero-glow bucket</text>
+        <rect x="45" y="98" width="270" height="14" rx="3" fill="#232a34"/>
+        <rect x="45" y="98" width="130" height="14" rx="3" fill="#ffb454"/>
+        <text x="325" y="109" fill="#fff" font-size="11" font-weight="700">0.48</text>
+        <text x="45" y="135" fill="#d8dde6" font-size="12">large-glow bucket</text>
+        <rect x="45" y="143" width="270" height="14" rx="3" fill="#232a34"/>
+        <rect x="45" y="143" width="68" height="14" rx="3" fill="#ffb454"/>
+        <text x="325" y="154" fill="#fff" font-size="11" font-weight="700">0.25</text>
+        <text x="185" y="172" text-anchor="middle" fill="#8b96a5" font-size="10">high score on empty shapes hides a mediocre segmenter</text>
+        <!-- eager card -->
+        <rect x="430" y="15" width="330" height="160" rx="8" fill="#171b22" stroke="#5cc8ff" stroke-width="1.4"/>
+        <text x="595" y="40" text-anchor="middle" fill="#5cc8ff" font-size="13" font-weight="700">W5-EMA — "eager"</text>
+        <text x="595" y="58" text-anchor="middle" fill="#8b96a5" font-size="10">always paints something</text>
+        <text x="455" y="90" fill="#d8dde6" font-size="12">zero-glow bucket</text>
+        <rect x="455" y="98" width="270" height="14" rx="3" fill="#232a34"/>
+        <text x="740" y="109" fill="#fff" font-size="11" font-weight="700">0.00</text>
+        <text x="455" y="135" fill="#d8dde6" font-size="12">large-glow bucket</text>
+        <rect x="455" y="143" width="270" height="14" rx="3" fill="#232a34"/>
+        <rect x="455" y="143" width="140" height="14" rx="3" fill="#5cc8ff"/>
+        <text x="740" y="154" fill="#fff" font-size="11" font-weight="700">0.52</text>
+        <text x="595" y="172" text-anchor="middle" fill="#8b96a5" font-size="10">zero free points, but by far the best real segmenter</text>
+      </svg>
+      <div class="legend">
+        <span>Flat means: W1-EMA 0.172 vs W5-EMA 0.096 — the "timid" checkpoint wins the headline number despite being worse where it actually matters (large-glow shapes).</span>
+      </div>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted)">One consequence: whatever process picks a
+      "best" checkpoint needs to look at the buckets, not just the flat mean, or it will
+      systematically prefer timid models. A second honest caveat: per-shape predictions are
+      unstable across checkpoints — the same shape can score 0.0 under one checkpoint and 0.5
+      under another, because generation is stochastic. Averaging several sampling runs per shape
+      at eval time is a known next step, not yet done for the numbers above.</p>
+  </section>
+
+  <!-- ============================================================ NEXT ==== -->
+  <section id="next">
+    <h2>What's next</h2>
+    <p>The final buckets confirm the pattern the glow-size discovery predicted: the
+      <strong>tiny-glow</strong> bucket is weak everywhere (0.01–0.06, across all four
+      checkpoints) regardless of weighting, while the <strong>large-glow</strong> bucket is where
+      a real gap shows up — W5-EMA reaches 0.52 there, well above every other checkpoint. That
+      points at two next steps rather than "train longer": (1) a stronger
+      <strong>per-shape balanced weighting</strong>, where each shape's positive (emissive)
+      voxels get a fixed share of the loss regardless of how tiny the glow region is, and
+      (2) fixing checkpoint/model selection itself so it can't be won by a timid model farming
+      free points on zero-glow shapes — e.g. selecting on the non-zero-glow subset, not the flat
+      mean. The plan is to keep reporting the stratified numbers to the team alongside the flat
+      mean, rather than let one average hide where the model actually stands.</p>
+  </section>
+
+  <footer>Lightgen war room · notes/metrics_explainer.html · numbers as of the 2026-07-02 battle plan and overnight W5/W1 run</footer>
+</div>
+
+<script>
+(function () {
+  function grid(containerId, cols, rows, cell, gap, whiteCount, opts) {
+    opts = opts || {};
+    var g = document.getElementById(containerId);
+    if (!g) return;
+    var total = cols * rows;
+    var whiteSet = new Set();
+    if (whiteCount > 0) {
+      var stride = total / whiteCount;
+      for (var k = 0; k < whiteCount; k++) whiteSet.add(Math.floor(k * stride));
+    }
+    for (var i = 0; i < total; i++) {
+      var col = i % cols, row = Math.floor(i / cols);
+      var x = col * (cell + gap), y = row * (cell + gap);
+      var isWhite = whiteSet.has(i);
+      var rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("x", x); rect.setAttribute("y", y);
+      rect.setAttribute("width", cell); rect.setAttribute("height", cell);
+      rect.setAttribute("rx", Math.max(1, cell * 0.12));
+      if (opts.hatch) {
+        rect.setAttribute("fill", "#1b2028");
+        rect.setAttribute("stroke", "#383f4a");
+        rect.setAttribute("stroke-width", "1");
+        rect.setAttribute("stroke-dasharray", "2,1.5");
+      } else if (isWhite) {
+        rect.setAttribute("fill", "#eef2f7");
+      } else {
+        rect.setAttribute("fill", "#232a34");
+        rect.setAttribute("stroke", "#2f3844");
+        rect.setAttribute("stroke-width", "0.6");
+      }
+      g.appendChild(rect);
+    }
+  }
+  // pipeline output voxels: 6x6, roughly 11/36 white (illustrative "some emissive" output)
+  grid("pipeline-voxels", 6, 6, 15, 3, 8);
+  // class imbalance: 10x10 = 100 cells, 11 white
+  grid("imbalance-grid", 10, 10, 17, 2, 11);
+  // glow-size shapes: 8x8 = 64 cells
+  grid("glow-large", 8, 8, 12, 2, 23);   // ~36%
+  grid("glow-medium", 8, 8, 12, 2, 0, { hatch: true });
+  grid("glow-tiny", 8, 8, 12, 2, 4);     // ~6%, within stated <=7%
+})();
+</script>
+</body>
+</html>
