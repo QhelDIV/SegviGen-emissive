@@ -21,3 +21,24 @@ Run on solar (env trellis2); working dir was
 Ground truth for emission is the emit_only multiview render, NOT the voxel attr.
 Fix path (see build_dataset_direct.py stage-2 notes): UV-sample the original GLB's
 `emissiveTexture × emissiveFactor` per-face; handle factor-only + emissive_strength.
+
+## UPDATE (2026-07-19): root cause found + fixed — it was a one-line bug
+
+`ovoxel_emissive_mipmap_fix.patch` — the fix for the broken emissive attr. In
+microsoft/TRELLIS.2 (commit 75fbf01) `o-voxel/src/convert/volumetic_attr.cpp:559`,
+the emissive texture sampler was passed `roughnessMipmaps[mid]` (copy-paste from the
+roughness block) instead of `emissiveMipmaps[mid]` — the emissive mipmaps are built at
+L364-368 but never used. So the emissive sampler indexed the ROUGHNESS mip pyramid,
+returning achromatic roughness-like garbage (the grey R=G=B emissive we measured),
+factor-scaled.
+
+Apply + rebuild (isolated, does NOT touch the installed env):
+  git clone --filter=blob:none TRELLIS.2, sparse-checkout o-voxel @ 75fbf01,
+  fetch the eigen submodule (commit 21e4582), `git apply` this patch,
+  `python setup.py build_ext --inplace`, run with PYTHONPATH=<o-voxel dir>.
+
+Verified (job 233531): teddy 0.96→0.00, a535 0.48→0.00 (fabrication gone),
+7d46 genuinely-glowing 0.86→0.95 (real emission preserved, now properly structured).
+Factor-only emissive path unchanged (default {1,1,1}×factor when no texture — correct).
+Residual: KHR_materials_emissive_strength (strength>1) is dropped by trimesh before the
+C code sees it, so it is NOT fixed here — a known residual for the UV-sample path too.
