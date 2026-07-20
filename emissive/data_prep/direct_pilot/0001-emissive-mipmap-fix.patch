@@ -1,0 +1,47 @@
+From f0e1272b963f01f935be7e25764f6c27a030f894 Mon Sep 17 00:00:00 2001
+From: Xingguang Yan <yxgunbreakable@gmail.com>
+Date: Sun, 19 Jul 2026 19:26:11 -0700
+Subject: [PATCH] Fix emissive texture sampled through the roughness mipmap
+ pyramid
+
+In textured_mesh_to_volumetric_attr, the per-voxel emissive sampling
+(o-voxel/src/convert/volumetic_attr.cpp:559) passed `roughnessMipmaps[mid]`
+to the emissive texture sampler instead of `emissiveMipmaps[mid]`. The
+emissive mipmaps are built at L364-368 but never used -- a copy-paste from
+the roughness block just above. As a result the emissive texture is sampled
+through the roughness mip pyramid, so the per-voxel `emissive` attribute is
+decoupled from the material's actual emission (base_color / metallic /
+roughness sampling is unaffected).
+
+Impact, measured on a 54-shape TexVerse batch against an independent ground
+truth (the emission-only render): before the fix, per-voxel emissive was
+decorrelated from real emission (correlation 0.25) -- shapes that emit
+nothing were labelled up to 96% emissive (mean 0.33 fabricated coverage over
+18 non-emitting shapes), while some genuinely emissive textures were dropped.
+This is consistent with the prep pipeline deleting the attribute
+(data_toolkit/voxelize_pbr.py: `del attr['emissive']`).
+
+After the one-line fix, the same measurement rises to 0.834 correlation and
+fabricated coverage on non-emitting shapes falls to 0.010, making the
+emissive attribute usable as ground truth. The factor-only path
+(emissiveFactor with no emissiveTexture) is unchanged.
+---
+ o-voxel/src/convert/volumetic_attr.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/o-voxel/src/convert/volumetic_attr.cpp b/o-voxel/src/convert/volumetic_attr.cpp
+index 64c3d09..0350a9d 100644
+--- a/o-voxel/src/convert/volumetic_attr.cpp
++++ b/o-voxel/src/convert/volumetic_attr.cpp
+@@ -556,7 +556,7 @@ voxelize_trimesh_pbr_impl(
+                 sample_texture_mipmap(
+                     emissiveTexture[mid],
+                     H_emTex[mid], W_emTex[mid], 3,
+-                    roughnessMipmaps[mid],
++                    emissiveMipmaps[mid],
+                     uv.x(), uv.y(), mip_length, mipLevelOffset,
+                     emissiveTextureFilter[mid], emissiveTextureWrap[mid],
+                     emissive
+-- 
+2.34.1
+
