@@ -70,8 +70,8 @@ edit goes live regardless of which target (staging or publish) was built.
 import argparse, datetime, html, json, pathlib, re, shutil, subprocess, sys, time
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "tools"))  # xgpage.py's home in this project
-import xgpage as xg
+sys.path.insert(0, str(REPO / "tools"))  # local modules below (build_roadmap, workspace_zone) — NOT xgpage
+import xgpage as xg  # the installed package (uv pip install -e ~/studio/xgpage[console]); migrated 2026-07-22
 from build_roadmap import pipeline_html as roadmap_pipeline_html  # reuse the `## Pipeline` -> strip parser verbatim
 import workspace_zone as wz  # the research workspace zone (added 2026-07-19, LITE scope)
 
@@ -618,8 +618,17 @@ def build_console_redirect(out_dir):
 
 # -------------------------------------------------------------------- build ----
 def sync_assets():
-    """Merge-copy the repo's asset source of truth into the servable NFS copy.
-    NEVER rmtree."""
+    """Two-hop COPY-variant asset sync (migrated 2026-07-22 — web/assets/ is
+    now GENERATED, not hand-maintained; see tools/sync_xgpage_assets.py, which
+    owns hop 1 AND the lightgen-local model-viewer CSS/JS patch — NEVER call
+    xgpage.publish.publish_assets() directly here, or the patch gets skipped
+    and the 3D lightbox silently breaks, exactly as happened once already):
+      1. xgpage package -> web/assets/ (sync_xgpage_assets.sync()).
+      2. web/assets/ -> PUBLISH_DEST/assets/ (merge-copy; unchanged from before
+         the migration — this hop is what makes the COPY variant work at all).
+    NEVER rmtree either destination."""
+    import sync_xgpage_assets
+    sync_xgpage_assets.sync()
     dest = PUBLISH_DEST / "assets"
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ASSETS_DIR, dest, dirs_exist_ok=True)

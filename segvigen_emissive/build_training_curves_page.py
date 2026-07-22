@@ -26,8 +26,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, "vis_data", "training_curves_html")
 os.makedirs(OUT, exist_ok=True)
 
-sys.path.insert(0, os.path.join(ROOT, "..", "tools"))
-import xgpage as lp
+import xgpage as lp  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
 
 # Cluster path root (verified 2026-07-07 via `ssh solar` directory listing) for the
 # filepath() hover/click-copy component.

@@ -36,8 +36,8 @@ Usage:
 import argparse, datetime, pathlib, sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "tools"))
-import xgpage as xg
+sys.path.insert(0, str(REPO / "tools"))  # local modules below (build_console) — NOT xgpage
+import xgpage as xg  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
 from build_console import (SITE_ROOT, BASE_URL, PUBLISH_DEST, ASSETS_DIR, ASSETS_REL,
                             CONSOLE_URL, FAVICON, console_tree_html)
 

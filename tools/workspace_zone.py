@@ -95,9 +95,7 @@ def tree_entries():
 
 def tree_html(active_href=None):
     """Baked tree markup (the no-JS fallback; runtime refresh via tree.json)."""
-    import sys
-    sys.path.insert(0, str(REPO / "tools"))
-    import xgpage as xg
+    import xgpage as xg  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
     entries = tree_entries()
     for g in entries:
         for leaf in g.get("children", []):

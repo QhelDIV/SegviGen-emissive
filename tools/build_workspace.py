@@ -20,11 +20,11 @@ Usage:
     .venv_console/bin/python tools/build_workspace.py --publish   # publish (the only servable target)
     .venv_console/bin/python tools/build_workspace.py --check-guard  # prove the zone-link guard fires
 """
-import argparse, pathlib, sys
+import argparse, html, pathlib, sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "tools"))
-import xgpage as xg
+sys.path.insert(0, str(REPO / "tools"))  # local module below (workspace_zone) — NOT xgpage
+import xgpage as xg  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
 import workspace_zone as wz
 
 SITE_ROOT = wz.SITE_ROOT
@@ -47,7 +47,7 @@ def collab_pages_html():
     out = ['<div class="clist-group">']
     for slug, label, meta in wz.COLLAB_PAGES:
         out.append(f'<a class="clist-item" href="{SITE_ROOT}/{slug}/index.html">'
-                    f'<div class="ci-title">{xg._esc(label)}<span class="ci-meta">{xg._esc(meta)}</span></div>'
+                    f'<div class="ci-title">{html.escape(label)}<span class="ci-meta">{html.escape(meta)}</span></div>'
                     f'</a>')
     out.append('</div>')
     return "\n".join(out)
@@ -77,13 +77,13 @@ def build_html():
 
 
 def build(out_dir):
-    html = build_html()
-    violations = wz.console_links_in(html)
+    page_html = build_html()
+    violations = wz.console_links_in(page_html)
     if violations:
         sys.exit("ZONE-LINK GUARD FAILED: workspace/index.html illegally links to the "
                  f"console: {violations}. Fix the page before publishing.")
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "index.html").write_text(html)
+    (out_dir / "index.html").write_text(page_html)
     for p in [out_dir, *out_dir.rglob("*")]:
         try:
             p.chmod(p.stat().st_mode | (0o005 if p.is_dir() else 0o004))

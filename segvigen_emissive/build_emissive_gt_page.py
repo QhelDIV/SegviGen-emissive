@@ -25,8 +25,7 @@ OUT = os.path.join(ROOT, "vis_data", "emissive_gt_html")
 IMG = os.path.join(OUT, "img")
 os.makedirs(IMG, exist_ok=True)
 
-sys.path.insert(0, os.path.join(ROOT, "..", "tools"))
-import xgpage as lp  # noqa: E402
+import xgpage as lp  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
 
 ASSETS_REL = "/projects/omages/yanxg/lightgen/assets"
 ASSETS_DIR = os.path.join(ROOT, "..", "web", "assets")

@@ -15,8 +15,7 @@ on the cluster) in vis_data/pbr_filter_thumbs/.
 import os, json, shutil, sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(ROOT, "..", "tools"))
-import xgpage as lp
+import xgpage as lp  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
 
 SRC = os.path.join(ROOT, "vis_data", "pbr_filter_thumbs")
 OUT = os.path.join(ROOT, "vis_data", "pbr_filter_html")

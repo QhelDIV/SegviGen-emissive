@@ -26,8 +26,9 @@ SRC = os.path.join(ROOT, "vis_data", "results_2k_v1")
 OUT = os.path.join(ROOT, "vis_data", "results_2k_html")
 os.makedirs(OUT, exist_ok=True)
 
-sys.path.insert(0, os.path.join(ROOT, "..", "tools"))
-import xgpage as lp
+sys.path.insert(0, os.path.join(ROOT, "..", "tools"))  # local module below (xgpage_ext) — NOT xgpage
+import xgpage as lp  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
+import xgpage_ext as lpx  # lightgen-local: viewer_img/model_viewer_head/model_viewer_modal (the 3D lightbox)
 
 SEGVIGEN_ROOT = "/3dlg-jupiter-project/lightgen/segvigen_emissive"
 
@@ -119,7 +120,8 @@ def comparison_bar_svg():
         for sub, val, color in bars:
             by = y(val)
             base = y(0)
-            parts.append(f'<rect x="{bx:.1f}" y="{by:.1f}" width="{bar_w}" height="{base-by:.1f}" rx="3" fill="{color}"{" fill-opacity=\"0.55\"" if sub=="EMA" else ""}/>')
+            opacity_attr = ' fill-opacity="0.55"' if sub == "EMA" else ""
+            parts.append(f'<rect x="{bx:.1f}" y="{by:.1f}" width="{bar_w}" height="{base-by:.1f}" rx="3" fill="{color}"{opacity_attr}/>')
             parts.append(f'<text x="{bx+bar_w/2:.1f}" y="{by-6:.1f}" text-anchor="middle" fill="#d8dde6" font-size="10.5">{val:.3f}</text>')
             parts.append(f'<text x="{bx+bar_w/2:.1f}" y="{base+14:.1f}" text-anchor="middle" fill="#8b96a5" font-size="9.5">{sub}</text>')
             bx += bar_w + pair_gap
@@ -275,9 +277,9 @@ def build_mesh_row(sid, gt, w5, bal, bucket):
             <div><span class="tag w5">W5 best</span> IoU {iou_span(w5)}</div>
           </div>
         </td>
-        <td>{lp.viewer_img(f"{sid}_input.png", f"{sid}_viewer_app.glb", cap="appearance", title=f"{sid} · appearance")}</td>
-        <td>{lp.viewer_img(f"{sid}_emissive.png", f"{sid}_viewer_gt.glb", cap="GT emissive (mesh)", title=f"{sid} · GT emissive")}</td>
-        <td>{lp.viewer_img(f"{sid}_meshpred_w5.png", f"{sid}_viewer_pred_w5.glb", cap=f"2k+W5 best pred (mesh) &mdash; IoU {w5:.3f}", title=f"{sid} · 2k+W5 pred · IoU {w5:.3f}")}</td>
+        <td>{lpx.viewer_img(f"{sid}_input.png", f"{sid}_viewer_app.glb", cap="appearance", title=f"{sid} · appearance")}</td>
+        <td>{lpx.viewer_img(f"{sid}_emissive.png", f"{sid}_viewer_gt.glb", cap="GT emissive (mesh)", title=f"{sid} · GT emissive")}</td>
+        <td>{lpx.viewer_img(f"{sid}_meshpred_w5.png", f"{sid}_viewer_pred_w5.glb", cap=f"2k+W5 best pred (mesh) &mdash; IoU {w5:.3f}", title=f"{sid} · 2k+W5 pred · IoU {w5:.3f}")}</td>
       </tr>"""
 
 
@@ -488,8 +490,8 @@ html = lp.page(
     ],
     needs_katex=False,
     assets_dir=os.path.join(ROOT, "..", "web", "assets"),  # cache-bust theme.css/ui.js
-    extra_head=f"<style>{PAGE_STYLE}</style>\n" + lp.model_viewer_head(),
-    extra_body_end=lp.model_viewer_modal(),
+    extra_head=f"<style>{PAGE_STYLE}</style>\n" + lpx.model_viewer_head(),
+    extra_body_end=lpx.model_viewer_modal(),
 )
 
 with open(os.path.join(OUT, "index.html"), "w") as f:

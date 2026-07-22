@@ -28,8 +28,7 @@ SRC = os.path.join(ROOT, "vis_data", "finetune_examples")
 OUT = os.path.join(ROOT, "vis_data", "finetune_examples_html")
 os.makedirs(OUT, exist_ok=True)
 
-sys.path.insert(0, os.path.join(ROOT, "..", "tools"))
-import xgpage as lp
+import xgpage as lp  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
 
 # Cluster path root (verified 2026-07-07 via `ssh solar` directory listing) for the
 # filepath() hover/click-copy component. Per-sample files use <sid> as a literal
@@ -247,7 +246,7 @@ overview_body = f"""
         '(see the Results stochasticity note below).',
         '<strong>Timidity-proof checkpoint selection</strong> — the flat-mean metric currently '
         'rewards a model that predicts nothing on zero-glow shapes; select on the non-zero-glow '
-        "subset instead so a \"timid\" checkpoint can't win on free points.",
+        "subset instead so a &quot;timid&quot; checkpoint can't win on free points.",
         '<strong>Per-shape balanced weighting</strong> — replace the fixed W=5 with '
         'W<sub>shape</sub> &asymp; (1&minus;p)/p (capped), so tiny-glow shapes get a loss weight '
         'that actually matches their rarity instead of a one-size-fits-all multiplier '

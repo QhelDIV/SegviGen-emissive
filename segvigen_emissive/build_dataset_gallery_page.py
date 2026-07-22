@@ -11,8 +11,7 @@ per-sid renders in vis_data/dataset_gallery/<sid>/{render_input,render_emissive}
 import os, json, shutil, sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(ROOT, "..", "tools"))
-import xgpage as lp
+import xgpage as lp  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
 STATS_PATH = os.path.join(ROOT, "dataset_stats.json")
 SRC = os.path.join(ROOT, "vis_data", "dataset_gallery")
 OUT = os.path.join(ROOT, "vis_data", "dataset_gallery_html")
@@ -469,10 +468,10 @@ def main():
     {pick_list_flow_html()}
     {lp.honesty_box(
         "<b>Why does an all-emissive corpus still contain 24.5% zero-glow shapes?</b> "
-        "\"Declared emissive\" &ne; \"effectively emissive\": glTF materials can carry "
+        "&quot;Declared emissive&quot; &ne; &quot;effectively emissive&quot;: glTF materials can carry "
         "<code>emissiveFactor&gt;0</code> with an all-black emissive texture, or emission too weak "
         "for the per-face labeling thresholds &rarr; <code>emissive_frac=0</code> at label level. "
-        "(Same reason Dongchen's 1099 \"emission_filtered\" split removed 55 zero-emission samples.)")}
+        "(Same reason Dongchen's 1099 &quot;emission_filtered&quot; split removed 55 zero-emission samples.)")}
 """
 
     body_sections = [

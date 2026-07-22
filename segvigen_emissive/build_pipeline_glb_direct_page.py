@@ -27,6 +27,7 @@ Run:
   /local-scratch2/xya120/studio/misc/lightgen/.venv_console/bin/python \
     build_pipeline_glb_direct_page.py
 """
+import html
 import os
 import shutil
 import sys
@@ -36,8 +37,7 @@ OUT = os.path.join(ROOT, "vis_data", "pipeline_glb_direct_html")
 IMG = os.path.join(OUT, "img")
 os.makedirs(IMG, exist_ok=True)
 
-sys.path.insert(0, os.path.join(ROOT, "..", "tools"))
-import xgpage as lp  # noqa: E402
+import xgpage as lp  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
 
 SEGVIGEN_ROOT = "/3dlg-jupiter-project/lightgen/segvigen_emissive"
 ASSETS_REL = "/projects/omages/yanxg/lightgen/assets"
@@ -77,11 +77,11 @@ def _dbox(x, y, w, h, lines, mono_lines=None, accent=False):
     start_y = y + h / 2 - (total_lines - 1) * line_h / 2 + 5
     for i, ln in enumerate(lines):
         texts.append(f'<text class="dtitle" x="{x + w/2}" y="{start_y + i*line_h}" '
-                     f'text-anchor="middle">{lp._esc(ln)}</text>')
+                     f'text-anchor="middle">{html.escape(ln)}</text>')
     for j, ln in enumerate(mono_lines or []):
         yy = start_y + (n_title + j) * line_h
         texts.append(f'<text class="dmono" x="{x + w/2}" y="{yy}" '
-                     f'text-anchor="middle">{lp._esc(ln)}</text>')
+                     f'text-anchor="middle">{html.escape(ln)}</text>')
     return rect + "".join(texts)
 
 
