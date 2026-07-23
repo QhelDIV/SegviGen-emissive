@@ -36,10 +36,9 @@ Usage:
 import argparse, datetime, pathlib, sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "tools"))  # local modules below (build_console) — NOT xgpage
-import xgpage as xg  # the installed package (uv pip install -e ~/studio/xgpage); migrated 2026-07-22
-from build_console import (SITE_ROOT, BASE_URL, PUBLISH_DEST, ASSETS_DIR, ASSETS_REL,
-                            CONSOLE_URL, FAVICON, console_tree_html)
+sys.path.insert(0, str(REPO / "tools"))  # local module below (build_console)
+from xgpage import console as xc
+from build_console import SITE_ROOT, BASE_URL, PUBLISH_DEST, CONSOLE_URL, CONFIG, console_tree_entries
 
 # ---- per-day content (copy this file for the next day's report) ----
 DATE = "2026-07-19"
@@ -48,7 +47,6 @@ TAG = "direct-GLB pivot"
 PROJECT_TITLE = "Lightgen: binary emissive-region segmentation"
 
 PIPELINE_EXPLAINER_URL = f"{SITE_ROOT}/pipeline_glb_direct/index.html"
-UPDATE_HREF = f"{SITE_ROOT}/updates/{DIRNAME}/index.html"
 
 DEK_HTML = (
     "Today's pipeline work pivots off the current somage-bake data chain toward voxelizing "
@@ -116,16 +114,17 @@ def build():
     footer = (f'<footer style="margin-top:2.5rem;padding-top:1.2rem;border-top:1px solid var(--line);'
               f'color:var(--ink-3);font-size:.85rem"><a href="{CONSOLE_URL}">&larr; Lightgen console</a></footer>')
 
-    return xg.page(
-        title=f"Daily report {DATE} — Lightgen",
-        header_html=header,
-        body_sections=[body, footer],
-        theme="v3",
-        tree_html=console_tree_html(SITE_ROOT, active_href=UPDATE_HREF),
+    # Daily reports always publish straight to the live root (no staging
+    # concept — see main()), so base is unconditionally SITE_ROOT, matching
+    # the console's own console_base() when out_dir == PUBLISH_DEST. The
+    # "Updates" tree leaves use the date string itself as their key (see
+    # build_console.console_tree_entries), so active_key=DATE marks this
+    # page's own leaf active — no href-matching special case needed anymore.
+    return xc.console_page(
+        CONFIG, f"Daily report {DATE} — Lightgen", DATE,
+        header + body + footer,
+        console_tree_entries(SITE_ROOT), SITE_ROOT,
         nav_title=f"Update {DATE}",
-        assets_rel=ASSETS_REL,
-        assets_dir=ASSETS_DIR,
-        extra_head=f'<link rel="icon" href="{FAVICON}">',
     )
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""build_console.py — the Lightgen Console (xgpage engine, v13 / v3-shell).
+"""build_console.py — the Lightgen Console, a thin driver over xgpage.console.
 
 Aggregates the project's living documents, experiments, and visuals into one
 navigable console site, published to aspis. One URL to see and think from:
@@ -12,75 +12,69 @@ Usage:
     .venv_console/bin/python tools/build_console.py --watch     # poll + rebuild every ~2s (staging)
     .venv_console/bin/python tools/build_console.py --watch --publish   # poll + rebuild live
 
-Needs `markdown` + `PyYAML` in `.venv_console`, and `itables==2.8.1` + `PyYAML`
-in the separate `.venv_itables` (Pages-tab database fragment only — see
-inventory_pages.py's module docstring for why it's a dedicated venv, kept out
-of .venv_console per project env rules). Recreate with:
-    python3.11 -m venv .venv_console && .venv_console/bin/pip install markdown PyYAML
+Needs `markdown` + `pymdown-extensions` (the `xgpage[console]` extra) in
+`.venv_console`, and `itables==2.8.1` + `PyYAML` in the separate `.venv_itables`
+(Pages-tab database fragment only — see inventory_pages.py's module docstring).
+Recreate with:
+    python3.11 -m venv .venv_console && .venv_console/bin/pip install -e '/localhome/xya120/studio/xgpage[console]'
     python3.11 -m venv .venv_itables && .venv_itables/bin/pip install itables==2.8.1 PyYAML
 
-Migration history:
-  v11 (2026-07-19, this session): MkDocs retired; rebuilt on xgpage's v1/v2
-    component library, nav_tabs()/nav_subtabs() shell (see project-console
-    skill's v11 template — now KNOWN STALE, see v13 note below).
-  v13 (2026-07-19, SAME SESSION, course-corrected): re-ported onto the
-    xgpage v3 "workspace" shell (left page tree, centered content column,
-    right per-page outline — see xgpage SKILL.md's v3 registry entry),
-    matching what the somages console ACTUALLY runs (verified live +
-    against its tools/build_console.py, v13/v13.1). The v11 template this
-    was first built from turned out to be stale; see the upstreamed
-    template/SKILL.md fix for the correction on record. Adopted from
-    somages: the v3_tree() left-nav shell, the itables-backed Pages-tab
-    DATABASE view (tools/inventory_pages.py, ported — see its own module
-    docstring for the COPY-variant path adaptations), theme3.css/xg3.js
-    (synced verbatim — xgpage.py itself had NO lightgen-specific fork
-    beyond the .v3d model-viewer additions, which live only in theme.css/
-    ui.js, not xgpage.py, so the whole v3 API came across as a clean sync).
-  Explicitly OMITTED (lightgen has no advisor workspace zone — the console
-    is the ONLY zone, so there is nothing to switch between and no one-way
-    zone-boundary law to enforce): the workspace-zone tree group + its
-    switcher (somages' workspace_zone.py has no lightgen analog — lightgen's
-    "Updates" tree group links directly to each updates/<date>/ page, not
-    to a separate zone), publish_version.py's version-minting/snapshot
-    machinery (no /v/N/ immutable versions here), hypothes.is annotation.
-  Deliberately KEPT DIFFERENT from the somages v13.1 pattern: BRIEF.md
-    stays the Overview body (authored, milestone-cadence) rather than being
-    retired in favor of a live LOG.md headline — v13.1 retired somages'
-    BRIEF because it had ROTTED (unmaintained, silently stale); lightgen's
-    BRIEF.md is actively maintained (see AGENTS.md's "ratified" markers) and
-    lightgen has no LOG.md to switch to. Re-evaluate this call if BRIEF.md
-    ever goes stale the way somages' did.
+Architecture (v14, 2026-07-23): the console GENRE — the v3 shell + page tree,
+the living-document parsers, the KPI/notes/doc renderers, and the CLI harness —
+now lives in the standalone xgpage package as `xgpage.console` (mirrors somages'
+`tools/build_console.py`, the reference thin driver, read in full before this
+rewrite). This file is the lightgen DRIVER: it fills a ConsoleConfig with the
+project's COPY-variant paths and identity, defines the page tree (Console /
+Workspace / Updates / Project docs — injecting the workspace-zone group AND the
+per-day Updates group, neither of which the generic module knows about), keeps
+the project-specific scanners (the itables pages database, the hand-synced
+experiments table, the Team-updates/Current-highlights pages.yaml renderers),
+and composes the tabs from the generic primitives. Migration history (v11-v13.2)
+lives in the project-console skill's version log; what remains here is
+lightgen-specific content and composition, not engine mechanics.
 
-COPY-variant publishing (unchanged since v10/v11 — see the project-console
-skill's "Publishing" section, "Storage constraint" paragraph): this repo
-lives on local-scratch, which the aspis web server cannot traverse — no
+Preserved DELIBERATELY DIFFERENT from the somages driver (unchanged since v13):
+  - BRIEF.md stays the Overview body (authored, milestone-cadence) rather than
+    a live LOG.md headline — lightgen's BRIEF.md is actively maintained (see
+    AGENTS.md's "ratified" markers) and there is no LOG.md here. Re-evaluate if
+    BRIEF.md ever goes stale the way somages' did.
+  - ROADMAP.md (not LOG.md) sources the Roadmap tab — it is ALREADY the
+    actively-maintained fast-update file, not a rotted hand-written doc.
+  - The Workspace group links directly to lightgen's own workspace_zone.py
+    (LITE scope: zone + switcher + zone-link guard, no versioning/annotation
+    — see that module's docstring); Updates links to per-day report pages
+    (lightgen keeps one standalone page per day, no journal aggregator).
+
+COPY-variant publishing (unchanged since v10): this repo lives on
+local-scratch, which the aspis web server cannot traverse — no
 symlink-from-www is possible. PUBLISH_DEST is therefore the real NFS www
 directory (not `web/` in the repo); every write (staging AND publish) lands
 directly under PUBLISH_DEST. Staging is `PUBLISH_DEST/_preview/console_v11/`
 (servable, since a repo-local `web/_preview/` would NOT be); publish is
-PUBLISH_DEST itself. `web/` in the repo holds only pages.yaml + README.md.
+PUBLISH_DEST itself. `web/` in the repo holds only pages.yaml + README.md +
+the generated (gitignored) assets/ staging copy — see sync_assets() below for
+why this project needs an asset-sync step somages' driver does not.
 
 Publish safety (unchanged): writes are file-by-file; NEVER rmtree the target
-(a publish step once wiped every page, 2026-07-04). Shared assets (theme.css,
-theme2.css, theme3.css, ui.js, xg2.js, xg3.js, katex/, model-viewer.min.js)
-are the repo's source of truth but SERVED from PUBLISH_DEST/assets — every
-build() call merge-copies web/assets/ into PUBLISH_DEST/assets/ so an asset
-edit goes live regardless of which target (staging or publish) was built.
+(a publish step once wiped every page, 2026-07-04).
 """
-import argparse, datetime, html, json, pathlib, re, shutil, subprocess, sys, time
+import datetime, html, pathlib, re, shutil, subprocess, sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "tools"))  # local modules below (build_roadmap, workspace_zone) — NOT xgpage
-import xgpage as xg  # the installed package (uv pip install -e ~/studio/xgpage[console]); migrated 2026-07-22
-from build_roadmap import pipeline_html as roadmap_pipeline_html  # reuse the `## Pipeline` -> strip parser verbatim
-import workspace_zone as wz  # the research workspace zone (added 2026-07-19, LITE scope)
+sys.path.insert(0, str(REPO / "tools"))  # local modules below (workspace_zone, sync_xgpage_assets) — NOT xgpage
+import xgpage as xg
+from xgpage import console as xc
+import workspace_zone as wz  # the research workspace zone (LITE scope, see its own docstring)
 
-TEMPLATE_VERSION = 13
-# v13.2 (2026-07-19): added the research WORKSPACE zone (workspace_zone.py +
-# tools/build_workspace.py) — a second, advisor-facing v3-tree zone, one-way
-# switcher (wz.console_workspace_group()) into it from here. LITE scope, owner
-# decision: zone + tree + switcher + the zone-link guard only; no per-page
-# versioning, no hypothes.is — see workspace_zone.py's module docstring.
+TEMPLATE_VERSION = 14
+# v11-v13.2: see the project-console skill's version log for the MkDocs
+#   retirement, the v3-shell re-port, and the workspace-zone addition.
+# v14 (2026-07-23, this rewrite): the 707-line hand-rolled fork replaced by a
+#   thin driver over xgpage.console (mirrors somages' v13.2 migration) — the
+#   generic engine (v3 shell, tree rendering, living-document parsers, notes
+#   list, CLI harness) now lives in the package; this file keeps only
+#   lightgen-specific content, tree structure, and the two extra tab-adjacent
+#   groups (Workspace, Updates) the generic module has no concept of.
 
 SITE_ROOT = "/projects/omages/yanxg/lightgen"
 BASE_URL = f"https://aspis.cmpt.sfu.ca{SITE_ROOT}"
@@ -88,15 +82,33 @@ CONSOLE_URL = f"{BASE_URL}/index.html"
 
 # COPY variant (see module docstring): PUBLISH_DEST is the real NFS www dir,
 # not a repo-local web/ folder. NEVER rmtree this path; every write is
-# file-by-file merge (write_page / shutil.copytree(..., dirs_exist_ok=True)).
+# file-by-file merge (xc.write_page / shutil.copytree(..., dirs_exist_ok=True)).
 PUBLISH_DEST = pathlib.Path("/project/3dlg-hcvc/omages/www/yanxg/lightgen")
-STAGE_PREVIEW = PUBLISH_DEST / "_preview" / "console_v11"  # servable staging (see docstring)
-ASSETS_DIR = REPO / "web/assets"                            # repo source of truth
-ASSETS_REL = f"{SITE_ROOT}/assets"                           # ...served from PUBLISH_DEST/assets (synced in build())
+STAGE_SUBDIR = "_preview/console_v11"
+ASSETS_DIR = REPO / "web/assets"                            # repo-local sync target (hop 1, see sync_assets())
+ASSETS_REL = f"{SITE_ROOT}/assets"                           # ...served from PUBLISH_DEST/assets (hop 2)
 FAVICON = f"{SITE_ROOT}/assets/images/favicon.png"           # inherited from the old MkDocs build; harmless to keep reusing
 
 NOTES_DIR = REPO / "notes"
 UPDATES_DIR = PUBLISH_DEST / "updates"
+
+MD_EXT = ["tables", "sane_lists"]
+
+CONFIG = xc.ConsoleConfig(
+    site_root=SITE_ROOT,
+    base_url=BASE_URL,
+    publish_dest=PUBLISH_DEST,
+    stage_preview=PUBLISH_DEST / STAGE_SUBDIR,
+    stage_subdir=STAGE_SUBDIR,
+    assets_dir=ASSETS_DIR,
+    assets_rel=ASSETS_REL,
+    favicon=FAVICON,
+    title="Lightgen",
+    subtitle="console",
+    watched_paths=[REPO / "BRIEF.md", REPO / "ROADMAP.md", REPO / "AGENTS.md",
+                   REPO / "web/pages.yaml", NOTES_DIR, UPDATES_DIR],
+    md_extensions=MD_EXT,
+)
 
 # Root reference docs shown as Project docs sub-tabs (skipped if missing).
 REFERENCE_DOCS = [
@@ -106,41 +118,37 @@ REFERENCE_DOCS = [
     ("clarifications.md", "clarifications", "Clarifications"),
 ]
 
-MD_EXT = ["tables", "sane_lists"]
-
-
-_BARE_HREF_RE = re.compile(r'href="(?!https?:|#|mailto:|/)([^"]+)"')
-
 
 def md(text):
-    import markdown  # deferred: only present in .venv_console, see module docstring
-    out = markdown.markdown(text, extensions=MD_EXT)
-    return _BARE_HREF_RE.sub(lambda m: f'href="{SITE_ROOT}/{m.group(1)}"', out)
+    """Project-bound markdown render (site-root absolutize)."""
+    return xc.md(text, SITE_ROOT, MD_EXT)
 
 
-def _hash8(path):
-    import hashlib
-    try:
-        return hashlib.md5(path.read_bytes()).hexdigest()[:8]
-    except OSError:
-        return "0"
+def open_decisions(agents_text):
+    """xc.parse_open_decisions() plus a lightgen-only filter: AGENTS.md marks
+    a decision resolved IN PLACE with `~~...RESOLVED~~` rather than deleting
+    the numbered item (keeps the resolution's reasoning on record), and the
+    Overview/Roadmap tabs should show only genuinely open items. somages'
+    AGENTS.md has no such convention (checked: zero RESOLVED markers there),
+    so this filter has no equivalent in the generic package — it stays here,
+    not upstreamed."""
+    items = xc.parse_open_decisions(agents_text)
+    return [x for x in items if not ("~~" in x and "RESOLVED" in x.upper())]
 
 
-# ------------------------------------------------------------------ nav shell ----
-def console_base(out_dir):
-    return SITE_ROOT if out_dir == PUBLISH_DEST else f"{SITE_ROOT}/_preview/console_v11"
-
-
+# ------------------------------------------------------------------ page tree ----
 def _updates_tree_children(base):
     """Tree leaves for the console's "Updates" group: one leaf PER DAY
     (lightgen keeps a standalone page per day, unlike somages' single
-    continuous journal — see module docstring), newest first. Label = date
-    (parsed from the dirname), meta = the short tag from the page's own
-    eyebrow line ("daily report · DATE · TAG" -> TAG), read directly off the
-    built HTML so it never drifts from what the page itself says."""
+    continuous journal), newest first. `key` = the date string (unique across
+    the whole tree, so build_daily_report.py can mark its own leaf active by
+    passing active_key=DATE — the generic xc.render_tree only matches by key,
+    not by href). meta = the short tag from the page's own eyebrow line
+    ("daily report · DATE · TAG" -> TAG), read directly off the built HTML so
+    it never drifts from what the page itself says."""
     if not UPDATES_DIR.exists():
         return []
-    rows = []  # (date_sort_key, dirname, label, meta)
+    rows = []  # (label, dirname, meta)
     for d in sorted(UPDATES_DIR.iterdir()):
         idx = d / "index.html"
         if not d.is_dir() or not idx.exists():
@@ -158,18 +166,17 @@ def _updates_tree_children(base):
         label = date_m.group(1) if date_m else d.name
         rows.append((label, d.name, meta))
     rows.sort(reverse=True)
-    return [{"label": label, "href": f"{SITE_ROOT}/updates/{dirname}/index.html",
+    return [{"key": label, "label": label, "href": f"{SITE_ROOT}/updates/{dirname}/index.html",
              "meta": meta} for label, dirname, meta in rows]
 
 
 def console_tree_entries(base):
-    """The console's page tree. "Workspace" (added 2026-07-19) is the
-    one-way switcher into the research workspace zone (wz.console_workspace_
-    group() — the console sidebar is a SUPERSET of that zone, same pattern
-    as somages; the zone itself never links back, enforced by
-    workspace_zone.console_links_in() in build_workspace.py). "Updates"
-    links directly to each day's report page (lightgen has no journal
-    aggregator — see module docstring), not to a zone."""
+    """The console's page tree. "Workspace" is the one-way switcher into the
+    research workspace zone (wz.console_workspace_group() — the console
+    sidebar is a SUPERSET of that zone; the zone itself never links back,
+    enforced by workspace_zone.console_links_in() in build_workspace.py).
+    "Updates" links directly to each day's report page (no journal
+    aggregator here, unlike somages' daily zone)."""
     return [
         {"label": "Console", "children": [
             {"key": "overview", "label": "Overview", "href": f"{base}/index.html"},
@@ -190,116 +197,18 @@ def console_tree_entries(base):
     ]
 
 
-def console_tree_html(base, active_key=None, active_href=None):
-    """active_key marks a Console/Project-docs leaf by its `key`; active_href
-    marks an Updates leaf by its exact href (dated leaves have no stable key
-    across rebuilds, so build_daily_report.py passes its own URL instead)."""
-    entries = console_tree_entries(base)
-    for g in entries:
-        for leaf in g["children"]:
-            k = leaf.pop("key", None)
-            if (active_key and k == active_key) or (active_href and leaf.get("href") == active_href):
-                leaf["active"] = True
-    return xg.v3_tree(entries, title="Lightgen", subtitle="console",
-                      tree_src=f"{base}/console_tree.json")
+def page(out_dir, title, active_key, body_html, wide=False, nav_title=None):
+    """Compose one console page with the lightgen tree for this build target."""
+    base = xc.console_base(CONFIG, out_dir)
+    return xc.console_page(CONFIG, title, active_key, body_html,
+                           console_tree_entries(base), base, wide=wide, nav_title=nav_title)
 
 
-def write_console_tree_json(out_dir):
-    entries = console_tree_entries(console_base(out_dir))
-    for g in entries:
-        for leaf in g["children"]:
-            leaf.pop("key", None)
-    (out_dir / "console_tree.json").write_text(json.dumps({
-        "title": "Lightgen", "subtitle": "console", "entries": entries}, indent=1))
-
-
-def page_shell(title, active_top, body_html, base, active_sub=None, extra_head="",
-               nav_title=None, wide=False):
-    active_key = active_sub if active_top == "docs" else active_top
-    head = f'<link rel="icon" href="{FAVICON}">' + extra_head
-    return xg.page(
-        title=title,
-        body_sections=[body_html],
-        theme="v3",
-        wide=wide,
-        tree_html=console_tree_html(base, active_key=active_key),
-        nav_title=nav_title or title.split(" — ")[0],
-        assets_rel=ASSETS_REL,
-        assets_dir=ASSETS_DIR,
-        extra_head=head,
-    )
-
-
-def write_page(out_dir, relpath, content):
-    p = out_dir / relpath
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(content)
-
-
-# ------------------------------------------------------------------ parsers ----
-def parse_deadlines():
-    """`## Deadlines` list in AGENTS.md: `- YYYY-MM-DD — label`. Future ones only."""
-    txt = (REPO / "AGENTS.md").read_text()
-    m = re.search(r"## Deadlines(.*?)(\n## |\Z)", txt, re.S)
-    out = []
-    if m:
-        for d, label in re.findall(r"-\s*(\d{4}-\d{2}-\d{2})\s*[—–-]+\s*(.+)", m.group(1)):
-            days = (datetime.date.fromisoformat(d) - datetime.date.today()).days
-            if days >= 0:
-                out.append((days, label.strip()))
-    return sorted(out)
-
-
-def parse_open_decisions():
-    """Numbered list under '**Open decisions...**' in Current State. Items
-    already marked ~~...RESOLVED~~ are dropped (resolved-in-place markers)."""
-    txt = (REPO / "AGENTS.md").read_text()
-    m = re.search(r"\*\*Open decisions[^\n]*\*\*:?\s*\n(.*?)(\n\s*\n|\n---)", txt, re.S)
-    if not m:
-        return []
-    items = re.findall(r"^\d+\.\s+(.+?)(?=^\d+\.|\Z)", m.group(1), re.S | re.M)
-    items = [re.sub(r"\s+", " ", x).strip() for x in items]
-    return [x for x in items if not ("~~" in x and "RESOLVED" in x.upper())]
-
-
-def note_meta(md_path):
-    lines = md_path.read_text().splitlines()
-    status, tldr = "", ""
-    for ln in lines[:8]:
-        if m := re.match(r"\*{0,2}Status\*{0,2}:\s*(.+)", ln.strip()):
-            status = m.group(1).strip()
-            break
-    for ln in lines:
-        if m := re.match(r"\*{0,2}TL;?DR\*{0,2}:\s*(.+)", ln.strip(), re.I):
-            tldr = m.group(1).strip()
-            break
-    if not tldr:
-        for ln in lines[1:]:
-            s = ln.strip()
-            if s and not s.startswith(("#", "-", "*", "|", ">", "```")):
-                tldr = s
-                break
-    if len(tldr) > 160:
-        tldr = tldr[:157] + "…"
-    stale = any(w in status.lower() for w in ("supersed", "archiv", "obsolete"))
-    return status, tldr, stale
-
-
-def note_title(md_path):
-    for ln in md_path.read_text().splitlines():
-        if m := re.match(r"#\s+(.+)", ln.strip()):
-            return re.sub(r"\s*\(\d{4}-\d{2}-\d{2}\)\s*$", "", m.group(1)).strip()
-    return md_path.stem
-
-
-def section_current_state():
-    txt = (REPO / "AGENTS.md").read_text()
-    m = re.search(r"## Current State(.*?)\n---", txt, re.S)
-    body = m.group(1) if m else "\n(parse failed — read AGENTS.md)"
-    return body.strip()
-
-
+# ------------------------------------------------------------------ scanners ----
 def scan_experiments():
+    """Key-results table. Lightgen has no checkpoint-dir scan target (runs live
+    on the cluster) — hand-embedded from WORKLOG.md's SUMMARY block. Sync
+    manually from `segvigen_emissive/WORKLOG.md` SUMMARY when new runs land."""
     head = ("| run | data | epoch | train IoU@0.2 | val IoU@0.2 | notes |\n"
             "|---|---|---|---|---|---|\n")
     rows = [
@@ -319,18 +228,15 @@ def scan_experiments():
     return head + body + note
 
 
-# --------------------------------------------------------- Pages tab (database) ----
 ITABLES_PYTHON = REPO / ".venv_itables/bin/python"
 INVENTORY_SCRIPT = REPO / "tools/inventory_pages.py"
 
 
 def scan_pages_table():
-    """Database-view Pages tab, ported from the somages v12+ design (user
-    request there: "I want a database view — list all pages, sortable, incl.
-    preview pages"). Runs tools/inventory_pages.py under the dedicated
-    `.venv_itables` venv as a subprocess and embeds its self-contained
-    sortable/searchable HTML table fragment (offline DataTables bundle, no
-    CDN — see inventory_pages.py for the full constraint list)."""
+    """Database-view Pages tab: runs tools/inventory_pages.py under the
+    dedicated `.venv_itables` venv as a subprocess and embeds its
+    self-contained sortable/searchable HTML table fragment (offline
+    DataTables bundle, no CDN — see inventory_pages.py for the constraints)."""
     import tempfile
     with tempfile.TemporaryDirectory() as tmpdir:
         out_path = pathlib.Path(tmpdir) / "pages_inventory_fragment.html"
@@ -346,44 +252,12 @@ def scan_pages_table():
         return out_path.read_text()
 
 
-# ------------------------------------------------------------- note transform ----
-def transform_note_html(md_path):
-    lines = md_path.read_text().splitlines()
-    status = tldr = ""
-    kept = []
-    for i, ln in enumerate(lines):
-        s = ln.strip()
-        if i < 12 and (m := re.match(r"\*{0,2}Status\*{0,2}:\s*(.+)", s)):
-            status = m.group(1).strip()
-            continue
-        if i < 12 and (m := re.match(r"\*{0,2}TL;?DR\*{0,2}:\s*(.+)", s, re.I)):
-            tldr = m.group(1).strip()
-            continue
-        kept.append(re.sub(r"\[\[([^\]]+)\]\]", r"*\1*", ln))
-    body_html = md("\n".join(kept))
-    if status:
-        stale = any(w in status.lower() for w in ("supersed", "archiv", "obsolete"))
-        inner = f'<strong>Status — {html.escape(status)}</strong>'
-        inner += f'<br>{html.escape(tldr)}' if tldr else '<br><em>(no TL;DR)</em>'
-        badge = xg.callout(inner, warn=stale)
-        body_html = body_html.replace("</h1>", "</h1>\n" + badge, 1) if "</h1>" in body_html else badge + body_html
-    return body_html
-
-
-# ------------------------------------------------------------------- tab builders ----
-def kpi_html(deadlines):
-    if not deadlines:
-        return ""
-    tiles = "".join(
-        f'<div class="stat{" soon" if d <= 21 else ""}"><b>{d}</b>'
-        f'<span>days · {html.escape(l)}</span></div>' for d, l in deadlines)
-    return f'<div class="stat-row">{tiles}</div>'
-
-
+# ------------------------------------------------------------------- tabs ----
 def updates_list_html():
     """Overview's Team-updates list, newest first: reads the same
     updates/<date>/ directories the tree scan and inventory_pages both scan,
-    with the blurb from web/pages.yaml when a curated entry exists."""
+    with the blurb from web/pages.yaml when a curated entry exists. No
+    xgpage.console equivalent — pages.yaml-driven, lightgen-specific."""
     import yaml
     reg = {"pages": []}
     reg_path = REPO / "web" / "pages.yaml"
@@ -422,7 +296,7 @@ def updates_list_html():
 def current_highlights_html():
     """Overview's curated highlights: pages.yaml entries with important: true,
     looked up against a live scan of PUBLISH_DEST so a stale/removed page
-    never dangles."""
+    never dangles. No xgpage.console equivalent — pages.yaml-driven."""
     import yaml
     reg_path = REPO / "web" / "pages.yaml"
     reg = yaml.safe_load(reg_path.read_text()) if reg_path.exists() else {"pages": []}
@@ -432,8 +306,7 @@ def current_highlights_html():
     out = ['<div class="clist-group">']
     for e in important:
         name = e["name"]
-        d = PUBLISH_DEST / name
-        idx = d / "index.html"
+        idx = PUBLISH_DEST / name / "index.html"
         if not idx.exists():
             continue
         head = idx.read_text(errors="ignore")[:2000]
@@ -448,9 +321,9 @@ def current_highlights_html():
 
 
 def build_overview(out_dir):
-    base = console_base(out_dir)
-    deadlines = parse_deadlines()
-    decisions = parse_open_decisions()
+    agents = (REPO / "AGENTS.md").read_text()
+    deadlines = xc.parse_deadlines(agents)
+    decisions = open_decisions(agents)
     dec_html = "".join(
         xg.callout(f'<strong>Open decision {i}:</strong> {html.escape(d)}', warn=True)
         for i, d in enumerate(decisions, 1))
@@ -465,7 +338,7 @@ def build_overview(out_dir):
       <p class="sub">built {now} · <a href="{CONSOLE_URL}">permalink</a></p>
       {xg.callout('<strong>&#128308; <a href="' + SITE_ROOT + '/roadmap.html">LIVE ROADMAP &rarr;</a></strong><br>'
                    'Real-time now / next / waiting-on-you.')}
-      {kpi_html(deadlines)}
+      {xc.kpi_row(deadlines)}
       {dec_html}
     </section>
     <section>
@@ -479,16 +352,14 @@ def build_overview(out_dir):
     </section>
     <footer>Rebuild: <code>.venv_console/bin/python tools/build_console.py --publish</code></footer>
     '''
-    write_page(out_dir, "index.html",
-               page_shell("Lightgen Console", "overview", body, base))
+    xc.write_page(out_dir, "index.html", page(out_dir, "Lightgen Console", "overview", body))
 
 
 def build_roadmap_tab(out_dir):
-    """Kept as a live-source page (unchanged in spirit from the somages
-    v13.1 "situation board" idea, but sourced from ROADMAP.md — lightgen's
+    """Kept as a live-source page sourced from ROADMAP.md — lightgen's
     ROADMAP.md is the ACTIVELY MAINTAINED fast-update file already, not a
-    rotted hand-written doc; there is no LOG.md here to switch to)."""
-    base = console_base(out_dir)
+    rotted hand-written doc; there is no LOG.md here to switch to."""
+    from build_roadmap import pipeline_html as roadmap_pipeline_html
     md_text = (REPO / "ROADMAP.md").read_text()
     strip, md_clean = roadmap_pipeline_html(md_text)
     body_html = md(md_clean)
@@ -503,9 +374,8 @@ def build_roadmap_tab(out_dir):
     </section>
     <section>{body_html}</section>
     '''
-    write_page(out_dir, "roadmap.html",
-               page_shell("Roadmap — Lightgen Console", "roadmap", body, base,
-                          nav_title="Roadmap"))
+    xc.write_page(out_dir, "roadmap.html",
+                  page(out_dir, "Roadmap — Lightgen Console", "roadmap", body, nav_title="Roadmap"))
 
 
 def build_pages_tab(out_dir):
@@ -518,89 +388,85 @@ def build_pages_tab(out_dir):
       <div class="dbwrap">{table_fragment}</div>
     </section>
     '''
-    write_page(out_dir, "pages.html",
-               page_shell("Pages — Lightgen Console", "pages", body,
-                          console_base(out_dir), wide=True))
+    xc.write_page(out_dir, "pages.html",
+                  page(out_dir, "Pages — Lightgen Console", "pages", body, wide=True))
 
 
 def build_notes_tabs(out_dir):
-    base = console_base(out_dir)
+    base = xc.console_base(CONFIG, out_dir)
     note_paths = sorted(NOTES_DIR.glob("*.md"), reverse=True)
-    items = [(p, note_title(p), *note_meta(p)) for p in note_paths]
+    notes = []  # (path, title, status, tldr, stale)
+    for p in note_paths:
+        txt = p.read_text()
+        notes.append((p, xc.note_title(txt, fallback=p.stem), *xc.note_meta(txt)))
     html_notes = sorted(NOTES_DIR.glob("*.html"), reverse=True)
 
-    out = ['<input class="filter-box" type="text" placeholder="Filter notes…" '
-           'data-filter-input="notes" aria-label="Filter notes">',
-           '<p class="clist-empty" data-filter-empty="notes">No notes match.</p>',
-           '<div class="clist-group">']
-    for p, title, status, tldr, stale in items:
-        href = f"{base}/notes/{p.stem}.html"
-        cls = "clist-item stale" if stale else "clist-item"
-        status_line = f'<div class="ci-status"><span class="badge">{html.escape(status)}</span></div>' if status else ""
-        text = f"{title} {status} {tldr}".lower()
-        out.append(f'<a class="{cls}" href="{href}" data-filter-item="notes" '
-                    f'data-filter-text="{html.escape(text)}">'
-                    f'<div class="ci-title">{html.escape(title)}</div>{status_line}'
-                    f'<div class="ci-blurb">{html.escape(tldr)}</div></a>')
-    out.append('</div>')
+    items = [(f"{base}/notes/{p.stem}.html", title, status, tldr, stale)
+             for p, title, status, tldr, stale in notes]
+    notes_html = xc.notes_list(items)
     if html_notes:
-        out.append('<div class="clist-group"><h2>Interactive pages</h2>')
+        extra = ['<div class="clist-group"><h2>Interactive pages</h2>']
         for p in html_notes:
-            out.append(f'<a class="clist-item" href="{base}/notes/{p.name}" '
-                        f'data-filter-item="notes" data-filter-text="{html.escape(p.stem.lower())}">'
-                        f'<div class="ci-title">{html.escape(p.stem)}'
-                        f'<span class="ci-meta">standalone HTML ↗</span></div></a>')
-        out.append('</div>')
+            extra.append(f'<a class="clist-item" href="{base}/notes/{p.name}" '
+                         f'data-filter-item="notes" data-filter-text="{html.escape(p.stem.lower())}">'
+                         f'<div class="ci-title">{html.escape(p.stem)}'
+                         f'<span class="ci-meta">standalone HTML ↗</span></div></a>')
+        extra.append('</div>')
+        notes_html += "".join(extra)
 
     body = f'''
     <section>
       <p class="sub">Working notes, newest first. Superseded / archived notes are dimmed.</p>
-      {"".join(out)}
+      {notes_html}
     </section>
     '''
-    write_page(out_dir, "notes/index.html",
-               page_shell("Agent notes — Lightgen Console", "notes", body, base))
+    xc.write_page(out_dir, "notes/index.html",
+                  page(out_dir, "Agent notes — Lightgen Console", "notes", body))
 
-    for p, title, status, tldr, stale in items:
-        note_body = transform_note_html(p)
+    for p, title, status, tldr, stale in notes:
+        # em-dash separator: the console is the operator zone (exempt from the
+        # em-dash guard) and this keeps note pages byte-identical to the
+        # pre-migration baseline. The package default is a colon.
+        note_body = xc.transform_note(p.read_text(), md, status_sep=" — ")
         body = f'<p><a href="{base}/notes/index.html">&larr; all notes</a></p>{note_body}'
-        write_page(out_dir, f"notes/{p.stem}.html", page_shell(title, "notes", body, base))
+        xc.write_page(out_dir, f"notes/{p.stem}.html", page(out_dir, title, "notes", body))
 
     for p in html_notes:
-        (out_dir / "notes").mkdir(parents=True, exist_ok=True)
-        shutil.copy(p, out_dir / "notes" / p.name)
+        (pathlib.Path(out_dir) / "notes").mkdir(parents=True, exist_ok=True)
+        shutil.copy(p, pathlib.Path(out_dir) / "notes" / p.name)
 
 
 def build_doc_pages(out_dir):
-    base = console_base(out_dir)
-
+    current_state = (xc.extract_section((REPO / "AGENTS.md").read_text(),
+                                        "Current State", end=r"\n---")
+                     or "(parse failed — read AGENTS.md)")
     state_md = ("# Agent state (Current State)\n\nAgent-orientation snapshot parsed from "
                 "AGENTS.md — dense by design; the human overview is the console Overview tab.\n\n"
-                + section_current_state())
-    write_page(out_dir, "state.html",
-               page_shell("Agent state — Lightgen Console", "docs", f'<section>{md(state_md)}</section>',
-                           base, active_sub="state"))
+                + current_state)
+    xc.write_page(out_dir, "state.html",
+                  page(out_dir, "Agent state — Lightgen Console", "state",
+                       f'<section>{md(state_md)}</section>'))
 
     exp_md = ("# Experiments & results\n\nHand-synced from `segvigen_emissive/WORKLOG.md`. "
               "Update when new runs land.\n\n" + scan_experiments())
-    write_page(out_dir, "experiments.html",
-               page_shell("Experiments — Lightgen Console", "docs", f'<section>{md(exp_md)}</section>',
-                           base, active_sub="experiments"))
+    xc.write_page(out_dir, "experiments.html",
+                  page(out_dir, "Experiments — Lightgen Console", "experiments",
+                       f'<section>{md(exp_md)}</section>'))
 
     for src, dst, title in REFERENCE_DOCS:
         src_path = REPO / src
         if not src_path.exists():
             continue
         doc_html = md(src_path.read_text())
-        write_page(out_dir, f"{dst}.html",
-                   page_shell(f"{title} — Lightgen Console", "docs", f'<section>{doc_html}</section>',
-                               base, active_sub=dst))
+        xc.write_page(out_dir, f"{dst}.html",
+                      page(out_dir, f"{title} — Lightgen Console", dst,
+                           f'<section>{doc_html}</section>'))
 
 
 def build_console_redirect(out_dir):
     """The console used to live at /console/index.html (pre-v10); rewritten
     idempotently on every build — never touch any OTHER file under console/."""
-    if out_dir != PUBLISH_DEST:
+    if pathlib.Path(out_dir) != PUBLISH_DEST:
         return
     stub = f'''<!DOCTYPE html>
 <html>
@@ -613,19 +479,22 @@ def build_console_redirect(out_dir):
 <p>The Lightgen Console has moved to the project root. <a href="../index.html">Click here</a> if you are not redirected automatically.</p>
 </body>
 </html>'''
-    write_page(out_dir, "console/index.html", stub)
+    xc.write_page(out_dir, "console/index.html", stub)
 
 
 # -------------------------------------------------------------------- build ----
 def sync_assets():
-    """Two-hop COPY-variant asset sync (migrated 2026-07-22 — web/assets/ is
-    now GENERATED, not hand-maintained; see tools/sync_xgpage_assets.py, which
-    owns hop 1 AND the lightgen-local model-viewer CSS/JS patch — NEVER call
-    xgpage.publish.publish_assets() directly here, or the patch gets skipped
-    and the 3D lightbox silently breaks, exactly as happened once already):
-      1. xgpage package -> web/assets/ (sync_xgpage_assets.sync()).
-      2. web/assets/ -> PUBLISH_DEST/assets/ (merge-copy; unchanged from before
-         the migration — this hop is what makes the COPY variant work at all).
+    """Two-hop COPY-variant asset sync — somages' driver does NOT need this
+    (its folder-model publish_dest IS the real web root), but lightgen's repo
+    lives on unservable local-scratch storage, so PUBLISH_DEST is a separate
+    NFS directory:
+      1. xgpage package -> web/assets/ (tools/sync_xgpage_assets.sync(), which
+         ALSO patches back the lightgen-local model-viewer CSS/JS fragments —
+         NEVER call xgpage.publish.publish_assets() directly here, or the
+         patch gets skipped and the 3D lightbox silently breaks, exactly as
+         happened once already during the package migration).
+      2. web/assets/ -> PUBLISH_DEST/assets/ (merge-copy; this hop is what
+         makes the COPY variant work at all).
     NEVER rmtree either destination."""
     import sync_xgpage_assets
     sync_xgpage_assets.sync()
@@ -635,73 +504,16 @@ def sync_assets():
 
 
 def build(out_dir):
-    out_dir.mkdir(parents=True, exist_ok=True)
     sync_assets()
-    write_console_tree_json(out_dir)
+    base = xc.console_base(CONFIG, out_dir)
+    xc.write_tree_json(out_dir, console_tree_entries(base), CONFIG.title, CONFIG.subtitle)
     build_overview(out_dir)
     build_roadmap_tab(out_dir)
     build_pages_tab(out_dir)
     build_notes_tabs(out_dir)
     build_doc_pages(out_dir)
     build_console_redirect(out_dir)
-    for p in [out_dir, *out_dir.rglob("*")]:
-        try:
-            p.chmod(p.stat().st_mode | (0o005 if p.is_dir() else 0o004))
-        except OSError:
-            pass
-
-
-WATCHED_DOCS = ["BRIEF.md", "ROADMAP.md", "AGENTS.md", "web/pages.yaml"]
-
-
-def _snapshot():
-    mtimes = {}
-    for rel in WATCHED_DOCS:
-        p = REPO / rel
-        if p.exists():
-            mtimes[rel] = p.stat().st_mtime
-    mtimes["notes"] = max((p.stat().st_mtime for p in NOTES_DIR.glob("*")), default=0)
-    mtimes["updates"] = (max((p.stat().st_mtime for p in UPDATES_DIR.rglob("*")), default=0)
-                         if UPDATES_DIR.exists() else 0)
-    return mtimes
-
-
-def watch(out_dir):
-    print(f"watching (2s poll) — rebuilding into {out_dir} on change to "
-          f"BRIEF.md / ROADMAP.md / AGENTS.md / web/pages.yaml / notes/ / updates/. Ctrl-C to stop.")
-    last = None
-    while True:
-        cur = _snapshot()
-        if cur != last:
-            t0 = time.time()
-            build(out_dir)
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] rebuilt in {time.time() - t0:.2f}s")
-            last = cur
-        time.sleep(2)
-
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--publish", action="store_true",
-                     help="build directly into the live PUBLISH_DEST root instead of the staging preview")
-    ap.add_argument("--watch", action="store_true",
-                     help="poll watched sources every ~2s and rebuild on change (Ctrl-C to stop)")
-    args = ap.parse_args()
-    out_dir = PUBLISH_DEST if args.publish else STAGE_PREVIEW
-
-    if args.watch:
-        build(out_dir)
-        watch(out_dir)
-        return
-
-    build(out_dir)
-    if args.publish:
-        print(f"published: {out_dir}")
-        print(f"URL: {CONSOLE_URL}")
-    else:
-        print(f"staged: {out_dir}")
-        print(f"URL: {BASE_URL}/_preview/console_v11/index.html")
 
 
 if __name__ == "__main__":
-    main()
+    xc.run_cli(CONFIG, build)
