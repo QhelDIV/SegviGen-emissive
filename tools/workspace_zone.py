@@ -68,6 +68,24 @@ COLLAB_PAGES = [
      "verdict: the o-voxel emissive attr is broken"),
 ]
 
+# LIVING (versioned) pages: workspace/<slug>/, each a stable URL backed by
+# immutable /v/X.y/ snapshots minted by tools/publish_version.py (2026-08-06).
+# These live INSIDE the zone, unlike COLLAB_PAGES above, which link out to
+# untouched report pages. They belong here rather than only in
+# publish_version.py's tree registration because write_tree_json() rewrites
+# tree.json WHOLESALE from tree_entries(): a page registered only at mint time
+# survived until the next `build_workspace.py --publish` and then silently
+# vanished from the rail. slug -> (label, meta).
+LIVING_PAGES = [
+    ("paper_skeleton", "Paper skeleton", "the claim chain"),
+    ("render_sweep", "Render sweep", "why Filmic +1.5 for the box figures"),
+    ("diagnostics", "Diagnostics", "why every emissive model sits near 0.1 IoU"),
+]
+# The rail heading for LIVING_PAGES. publish_version.register_in_tree() reads
+# this same constant, so the minting tool and this module cannot disagree
+# about the group's name.
+LIVING_GROUP_LABEL = "Paper"
+
 # console-zone page URLs, for enforcing the one-way rule mechanically.
 CONSOLE_HREFS = [f"{SITE_ROOT}/{p}" for p in (
     "index.html", "pages.html", "roadmap.html", "state.html", "experiments.html",
@@ -85,6 +103,10 @@ def tree_entries():
     return [
         {"label": "Overview", "children": [
             {"label": "Workspace", "href": f"{WORKSPACE_URL}/index.html"},
+        ]},
+        {"label": LIVING_GROUP_LABEL, "children": [
+            {"label": label, "href": f"{WORKSPACE_URL}/{slug}/index.html", "meta": meta}
+            for slug, label, meta in LIVING_PAGES
         ]},
         {"label": "Results & proposals", "children": [
             {"label": label, "href": f"{SITE_ROOT}/{slug}/index.html", "meta": meta}
@@ -110,6 +132,8 @@ def console_workspace_group():
     SUPERSET of the workspace (the one-way law is untouched — the workspace
     still never links back)."""
     children = [{"label": "Workspace overview", "href": f"{WORKSPACE_URL}/index.html"}]
+    children += [{"label": label, "href": f"{WORKSPACE_URL}/{slug}/index.html", "meta": meta}
+                 for slug, label, meta in LIVING_PAGES]
     children += [{"label": label, "href": f"{SITE_ROOT}/{slug}/index.html", "meta": meta}
                  for slug, label, meta in COLLAB_PAGES]
     return {"label": "Workspace", "children": children}
