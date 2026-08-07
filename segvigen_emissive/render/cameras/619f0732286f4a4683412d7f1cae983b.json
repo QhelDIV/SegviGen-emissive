@@ -1,0 +1,15 @@
+{
+ "sid": "619f0732286f4a4683412d7f1cae983b",
+ "position": [
+  2.0699559829079193,
+  -2.649422839330991,
+  1.465707707650879
+ ],
+ "target": [
+  0.0,
+  0.0,
+  0.4377904534339905
+ ],
+ "lens": 52.0,
+ "note": "solved from the SOURCE asset's bounding box after it was normalised to a 2-unit box and dropped to z=0; pass to render_emissive.py --camera_json so a remeshed prediction is framed like the shape it predicts"
+}
