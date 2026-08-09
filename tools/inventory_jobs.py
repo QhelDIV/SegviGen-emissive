@@ -75,7 +75,10 @@ def rows():
             badge += ' <span class="db-badge" style="background:#8f2f2f;color:#fff">stale</span>'
         updated = e.get("updated", "")
         if a is not None:
-            age = f"{a:.1f}h ago" if a < 48 else f"{a/24:.0f}d ago"
+            # a can go slightly negative when an entry's "updated" timestamp
+            # lands after render time (clock skew, or the file was written
+            # mid-scan) -- clamp rather than show a nonsensical "-0.3h ago".
+            age = "just now" if a < 0 else (f"{a:.1f}h ago" if a < 48 else f"{a/24:.0f}d ago")
             updated += f'<span class="db-subline">{age}</span>'
         out.append([title, badge, html.escape(e.get("executor", e.get("owner", ""))),
                     html.escape(e.get("slurm", "")), e.get("started", ""),
