@@ -181,6 +181,7 @@ def console_tree_entries(base):
         {"label": "Console", "children": [
             {"key": "overview", "label": "Overview", "href": f"{base}/index.html"},
             {"key": "roadmap", "label": "Roadmap", "href": f"{base}/roadmap.html"},
+            {"key": "jobs", "label": "Jobs", "href": f"{base}/jobs/index.html"},
             {"key": "pages", "label": "Pages", "href": f"{base}/pages.html"},
             {"key": "notes", "label": "Agent notes", "href": f"{base}/notes/index.html"},
         ]},
@@ -312,7 +313,7 @@ def current_highlights_html():
         head = idx.read_text(errors="ignore")[:2000]
         m = re.search(r"<title>(.*?)</title>", head, re.S)
         title = (m.group(1).strip() if m else name)
-        mtime = datetime.date.fromtimestamp(idx.stat().st_mtime)
+        mtime = datetime.datetime.fromtimestamp(idx.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
         out.append(f'<a class="clist-item" href="{SITE_ROOT}/{name}/index.html">'
                     f'<div class="ci-title">{html.escape(title)}<span class="ci-meta">updated {mtime}</span></div>'
                     f'<div class="ci-blurb">{html.escape(e.get("blurb", ""))}</div></a>')
