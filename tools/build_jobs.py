@@ -5,7 +5,7 @@ convention). One file per job, one writer per file: that layout is what makes
 concurrent multi-agent updates safe; this renderer is read-only over jobs/.
 
 Entry format (plain "key: value" lines):
-  title / owner / status(ongoing|done|frozen) / started / updated / slurm /
+  title / executor / status(ongoing|done|frozen) / started / updated / slurm /
   link / now / outcome
 Rebuild + publish:  .venv_console/bin/python tools/build_jobs.py
 """
@@ -70,7 +70,7 @@ def main():
         rows.append(
             "<tr><td>%s</td><td>%s</td><td><code>%s</code></td><td><code>%s</code></td>"
             "<td>%s</td><td>%s</td></tr>"
-            % (title, cell_status, html.escape(e.get("owner", "")),
+            % (title, cell_status, html.escape(e.get("executor", e.get("owner", ""))),
                html.escape(e.get("slurm", "") or "&#8212;"),
                age + " ago" if a is not None else age, html.escape(line or "")))
 
@@ -80,12 +80,12 @@ def main():
                         (str(n_stale), "stale"),
                         (stamp.split()[1], "rendered")])
     table = xg.results_table(
-        ["job", "status", "owner", "slurm", "updated", "now / outcome"],
+        ["job", "status", "executor", "slurm", "updated", "now / outcome"],
         "\n".join(rows))
     intro = xg.prose(
         "<p>One entry per non-trivial job, one file per entry under "
         "<code>jobs/</code> in the ops repo, one writer per file (the owning "
-        "agent or the master), so concurrent updates never conflict. Ongoing "
+        "executing agent or the master), so concurrent updates never conflict. Ongoing "
         "entries silent for more than %d hours are flagged stale. Statuses: "
         "ongoing, frozen, done (with a one-line outcome).</p>" % int(STALE_H))
     body = xg.section_v2("board", "01", "Every non-trivial job, one row, freshness visible",

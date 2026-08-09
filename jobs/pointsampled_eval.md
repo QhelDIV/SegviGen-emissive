@@ -1,5 +1,5 @@
 title: Point-sampled eval, five checkpoints + ceilings
-owner: pointsampled-eval
+executor: pointsampled-eval
 status: done
 started: 2026-08-07 16:20
 updated: 2026-08-09 15:07
