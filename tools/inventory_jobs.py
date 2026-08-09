@@ -28,8 +28,15 @@ STALE_H = 3.0
 ORDER = {"ongoing": 0, "frozen": 1, "done": 2}
 BADGE_BG = {"ongoing": "#1d7a46", "frozen": "#8a6d1a", "done": "#5a6472"}
 
-COLUMNS = ["job", "status", "executor", "slurm", "started", "updated",
-           "age", "now / outcome", "state-order"]
+COLUMNS = ["job", "status", "executor", "slurm", "started", "updated", "state-order"]
+# per-column <th> class, same order as COLUMNS (see render_fragment(); the
+# matching <td> classes are applied via columnDefs' className below).
+# "now / outcome" and "age" fold into the "job" / "updated" cells as a
+# .db-subline instead of getting their own column -- fewer, denser columns
+# beat a wide table that needs to scroll (2026-08-09 redesign, see
+# theme3.css's .dbwrap history comment for why scrollX + nowrap broke).
+HEAD_CLASSES = ["", "dt-nowrap", "dt-nowrap dt-hide-narrow", "dt-hide-narrow",
+                "dt-nowrap dt-right dt-hide-narrow", "dt-nowrap dt-right", ""]
 
 
 def parse(path):
@@ -59,16 +66,20 @@ def rows():
         title = html.escape(e.get("title", e["slug"]))
         if e.get("link"):
             title = f'<a href="{html.escape(e["link"])}">{title}</a>'
+        line = e.get("outcome") if st != "ongoing" and e.get("outcome") else e.get("now", "")
+        if line:
+            title += f'<span class="db-subline">{html.escape(line)}</span>'
         badge = ('<span class="db-badge" style="background:%s;color:#fff">%s</span>'
                  % (BADGE_BG.get(st, "#5a6472"), st))
         if stale:
             badge += ' <span class="db-badge" style="background:#8f2f2f;color:#fff">stale</span>'
-        age = "" if a is None else (f"{a:.1f}h" if a < 48 else f"{a/24:.0f}d")
-        line = e.get("outcome") if st != "ongoing" and e.get("outcome") else e.get("now", "")
+        updated = e.get("updated", "")
+        if a is not None:
+            age = f"{a:.1f}h ago" if a < 48 else f"{a/24:.0f}d ago"
+            updated += f'<span class="db-subline">{age}</span>'
         out.append([title, badge, html.escape(e.get("executor", e.get("owner", ""))),
                     html.escape(e.get("slurm", "")), e.get("started", ""),
-                    e.get("updated", ""), age, html.escape(line or ""),
-                    ORDER.get(st, 3)])
+                    updated, ORDER.get(st, 3)])
     return out
 
 
@@ -85,26 +96,49 @@ def write_manifest(quiet=False):
         print(f"jobs.json updated ({len(data)} jobs)", file=sys.stderr)
 
 
+# scrollX OFF (2026-08-09 redesign): DataTables' split-scroll header/body
+# containers could desync (drag one, the header doesn't follow -- caught
+# live, a column's label landed over a different column's data), and paired
+# with the "nowrap" class it clipped genuinely long free-text fields
+# mid-glyph instead of wrapping them. A single flowing table (scrollX off,
+# no "nowrap" class, wrap-by-default CSS in theme3.css) can't desync against
+# itself. See theme3.css's .dbwrap history comment for the full account.
 DT_ARGS = {
-    "classes": ["display", "nowrap", "compact", "hover", "results", "dbtable"],
+    "classes": ["display", "compact", "hover", "results", "dbtable"],
     "layout": {"topStart": "pageLength", "topEnd": "search",
                "bottomStart": "info", "bottomEnd": "paging"},
     "pageLength": 25,
     "autoWidth": False,
-    "scrollX": True,
+    "scrollX": False,
     # ongoing first (state sentinel), then most recently updated
-    "order": [[8, "asc"], [5, "desc"]],
+    "order": [[6, "asc"], [5, "desc"]],
     "columnDefs": [
-        {"targets": 0, "width": "240px"},
-        {"targets": [3, 4, 5, 6], "className": "dt-right"},
-        {"targets": [4, 5], "width": "120px"},
-        {"targets": 6, "width": "60px"},
-        {"targets": 8, "visible": False},
+        {"targets": 1, "className": "dt-nowrap"},
+        {"targets": 2, "className": "dt-nowrap dt-hide-narrow"},
+        {"targets": 3, "className": "dt-hide-narrow"},
+        {"targets": 4, "className": "dt-nowrap dt-right dt-hide-narrow"},
+        {"targets": 5, "className": "dt-nowrap dt-right"},
+        {"targets": 6, "visible": False},
     ],
     "text_in_header_can_be_selected": True,
     "style": {"caption-side": "bottom", "margin": "auto",
-              "table-layout": "auto", "width": "auto"},
+              "table-layout": "auto", "width": "100%"},
 }
+
+# click anywhere on a sortable header (not just the tiny order-indicator
+# glyph) to sort -- same convenience delegate as inventory_pages.py's
+# CHROME_JS, duplicated rather than shared since this is the only piece of
+# that script jobs also needs.
+SORT_CLICK_JS = """<script>
+document.addEventListener('click', function (e) {
+  var th = e.target.closest('th.dt-orderable-asc, th.dt-orderable-desc');
+  if (!th || e.target.closest('.dt-column-order') ||
+      e.target.closest('a, button, input')) return;
+  var ind = th.querySelector('.dt-column-order');
+  if (ind) ind.dispatchEvent(new MouseEvent('click',
+      {bubbles: true, shiftKey: e.shiftKey}));
+});
+</script>"""
 
 
 def render_fragment():
@@ -118,7 +152,8 @@ def render_fragment():
     init_datatables = ij.replace_value(init_datatables, connected_import, local_import)
     offline = ij.generate_init_offline_itables_html(dt_bundle)
     version_var = ij._ITABLES_UNDERSCORE_VERSION
-    thead = "".join(f"<th>{html.escape(c)}</th>" for c in COLUMNS)
+    thead = "".join(f'<th class="{cls}">{html.escape(c)}</th>' if cls else f"<th>{html.escape(c)}</th>"
+                    for c, cls in zip(COLUMNS, HEAD_CLASSES))
     dt_args = dict(DT_ARGS)
     dt_args["table_html"] = f"<table><thead><tr>{thead}</tr></thead></table>"
     skeleton = ('<table id="jobsdb"><tbody><tr><td class="db-loading">'
@@ -141,7 +176,7 @@ def render_fragment():
         else {{ document.addEventListener("DOMContentLoaded", init); }}
     }})();
     </script>"""
-    return offline + init_datatables + skeleton + init_script
+    return offline + init_datatables + skeleton + init_script + SORT_CLICK_JS
 
 
 def main():

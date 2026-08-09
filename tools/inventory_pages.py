@@ -68,8 +68,22 @@ ROOT_EXCLUDE = {"_preview", "assets", "notes", "search", "stylesheets",
 # The console's own staging build dir — not a "page", it's this console.
 CONSOLE_STAGING_NAME = "console_v11"
 
-COLUMNS = ["name", "tier", "title", "tags", "modified", "size_mb", "n_html",
-           "notes", "important"]
+COLUMNS = ["name", "tier", "title", "tags", "created", "modified", "size_mb",
+           "n_html", "important"]
+# per-column <th> class, same order as COLUMNS (see render_table_fragment();
+# the matching <td> classes are applied via columnDefs' className below).
+# "notes" folds into the "title" cell as a .db-subline instead of its own
+# column; size_mb/n_html stay in the data (searchable) but hidden from view
+# -- fewer, denser visible columns beat a wide table that needs to scroll
+# (2026-08-09 redesign, see theme3.css's .dbwrap history comment).
+HEAD_CLASSES = ["", "dt-nowrap", "", "dt-hide-narrow", "dt-nowrap dt-right dt-hide-narrow",
+                "dt-nowrap dt-right dt-hide-narrow", "", "", ""]
+
+# When (frozen) a page was first observed by the sweep; survives republishes,
+# which rewrite every file's mtime and would otherwise reset any filesystem-
+# derived "created". Backfilled once from the earliest current file mtime.
+CREATED_FILE = pathlib.Path.home() / ".cache/lightgen_pages_created.json"
+TIME_FMT = "%Y-%m-%d %H:%M"
 
 
 # ------------------------------------------------------------------ scan ----
@@ -95,9 +109,29 @@ def _is_redirect_stub(idx: pathlib.Path) -> bool:
 def _dir_stats(d: pathlib.Path):
     files = [p for p in d.rglob("*") if p.is_file()]
     size_mb = round(sum(p.stat().st_size for p in files) / 1e6, 2) if files else 0.0
-    mtime = max((p.stat().st_mtime for p in files), default=d.stat().st_mtime)
+    mtimes = [p.stat().st_mtime for p in files] or [d.stat().st_mtime]
+    modified = datetime.datetime.fromtimestamp(max(mtimes)).strftime(TIME_FMT)
+    # created ESTIMATE = earliest surviving file mtime; frozen on first sight
+    # (see _frozen_created). Approximate for pages that predate tracking, exact
+    # and stable for anything created from now on.
+    created_est = datetime.datetime.fromtimestamp(min(mtimes)).strftime(TIME_FMT)
     n_html = len(list(d.glob("*.html")))
-    return size_mb, datetime.date.fromtimestamp(mtime).isoformat(), n_html
+    return size_mb, created_est, modified, n_html
+
+
+def _load_created() -> dict:
+    try:
+        return json.loads(CREATED_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_created(reg: dict):
+    try:
+        CREATED_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CREATED_FILE.write_text(json.dumps(reg))
+    except OSError:
+        pass
 
 
 def _plain(s: str) -> str:
@@ -157,6 +191,7 @@ def _cache_key(d: pathlib.Path) -> str:
 def scan_rows(use_cache: bool = False):
     notes_idx = _notes_index()
     cache = _load_cache() if use_cache else {}
+    created_reg = _load_created()
     new_cache = {}
     rows = []
     found_root = set()
@@ -171,15 +206,20 @@ def scan_rows(use_cache: bool = False):
         cached = cache.get(ck)
         if cached and cached.get("key") == key:
             row = dict(cached["row"])
+            if not row.get("created"):  # cache predates the created column
+                row["created"] = created_reg.get(name) or _dir_stats(d)[1]
         else:
-            size_mb, modified, n_html = _dir_stats(d)
+            size_mb, created_est, modified, n_html = _dir_stats(d)
             status, tldr = notes_idx.get(name, ("", ""))
+            # freeze created on first observation; never let a republish move it
+            created = created_reg.get(name) or created_est
             row = {"name": name, "tier": tier,
                    "title": _title_from_index(idx, name),
-                   "modified": modified, "size_mb": size_mb, "n_html": n_html,
-                   "url": url,
+                   "created": created, "modified": modified,
+                   "size_mb": size_mb, "n_html": n_html, "url": url,
                    "notes": (f"{status} — {tldr}" if status and tldr
                              else (status or tldr))}
+        created_reg[name] = row["created"]  # persist the frozen value
         new_cache[ck] = {"key": key, "row": row}
         rows.append(row)
 
@@ -216,6 +256,7 @@ def scan_rows(use_cache: bool = False):
             CACHE_FILE.write_text(json.dumps(new_cache))
         except OSError:
             pass
+    _save_created(created_reg)
     return rows
 
 
@@ -227,10 +268,24 @@ def load_curation():
         data = yaml.safe_load(PAGES_YAML.read_text()) or {}
     except (OSError, ValueError, ImportError):
         return {}
-    return {p["name"]: {"tags": p.get("tags") or [],
-                        "important": bool(p.get("important")),
-                        "blurb": p.get("blurb") or ""}
-            for p in data.get("pages", [])}
+    out = {}
+    for p in data.get("pages", []):
+        meta = {"tags": p.get("tags") or [],
+                "important": bool(p.get("important")),
+                "blurb": p.get("blurb") or ""}
+        name = p["name"]
+        out[name] = meta
+        # Preview pages are keyed path-like in pages.yaml ("_preview/foo",
+        # matching the `updates/<date>` convention) but scan_rows names a
+        # preview row by its bare dir name, so the join silently missed and
+        # tags/star/blurb never rendered for ANY preview page. Alias both
+        # spellings rather than renaming the rows (the tier badge already
+        # says "preview"; a prefixed name column would just duplicate it).
+        # Safe against collision: scan_rows skips a preview dir whose name
+        # also exists at root, so bare names stay unique across tiers.
+        if name.startswith("_preview/"):
+            out.setdefault(name[len("_preview/"):], meta)
+    return out
 
 
 # ------------------------------------------------------------- rendering ----
@@ -254,17 +309,14 @@ def render_data_rows(rows):
         title_html = (f'<span title="{html.escape(blurb, quote=True)}">'
                       f'{html.escape(r["title"])}</span>'
                       if blurb else html.escape(r["title"]))
+        n = _plain(r["notes"] or "")
+        if n:
+            title_html += f'<span class="db-subline">{html.escape(n)}</span>'
         tags_html = " ".join(
             f'<span class="db-tag" data-tag="{html.escape(t, quote=True)}">'
             f'{html.escape(t)}</span>' for t in tags)
-        n = _plain(r["notes"] or "")
-        if len(n) <= 90:
-            notes_html = html.escape(n)
-        else:
-            notes_html = (f'<span class="db-note" title="{html.escape(n, quote=True)}">'
-                          f'{html.escape(n[:87])}&hellip;</span>')
         out.append([name_html, tier_html, title_html, tags_html,
-                    r["modified"], r["size_mb"], r["n_html"], notes_html,
+                    r["created"], r["modified"], r["size_mb"], r["n_html"],
                     "pinned-important" if imp else ""])
     return out
 
@@ -298,28 +350,35 @@ def write_manifest(quiet: bool = True) -> bool:
 
 
 # ------------------------------------------------------------- fragment ----
+# scrollX OFF (2026-08-09 redesign): DataTables' split-scroll header/body
+# containers could desync (drag one, the header doesn't follow -- caught
+# live on the jobs table, a column's label landed over a different column's
+# data), and paired with the "nowrap" class it clipped genuinely long
+# free-text fields mid-glyph instead of wrapping them. A single flowing
+# table (scrollX off, no "nowrap" class, wrap-by-default CSS in theme3.css)
+# can't desync against itself. size_mb/n_html stay in the data (so search
+# still reaches them) but are hidden from view -- see COLUMNS/HEAD_CLASSES.
 DT_ARGS = {
-    "classes": ["display", "nowrap", "compact", "hover", "results", "dbtable"],
+    "classes": ["display", "compact", "hover", "results", "dbtable"],
     "layout": {"topStart": "pageLength", "topEnd": "search",
                "bottomStart": "info", "bottomEnd": "paging"},
     "pageLength": 25,
     "autoWidth": False,
-    "scrollX": True,
-    # pinned-first (hidden importance sentinel), then newest
-    "order": [[8, "desc"], [4, "desc"]],
+    "scrollX": False,
+    # pinned-first (hidden importance sentinel), then newest-modified
+    "order": [[8, "desc"], [5, "desc"]],
     "columnDefs": [
-        {"targets": [4, 5, 6], "className": "dt-right"},
-        {"targets": 0, "width": "200px"},
-        {"targets": 1, "width": "70px"},
-        {"targets": 3, "width": "170px"},
-        {"targets": 4, "width": "105px"},
-        {"targets": 5, "width": "80px"},
-        {"targets": 6, "width": "60px"},
+        {"targets": 1, "className": "dt-nowrap"},
+        {"targets": 3, "className": "dt-hide-narrow"},
+        {"targets": 4, "className": "dt-nowrap dt-right dt-hide-narrow"},
+        {"targets": 5, "className": "dt-nowrap dt-right dt-hide-narrow"},
+        {"targets": 6, "visible": False},  # size_mb (searchable, not shown)
+        {"targets": 7, "visible": False},  # n_html (searchable, not shown)
         {"targets": 8, "visible": False},  # importance sentinel (searchable)
     ],
     "text_in_header_can_be_selected": True,
     "style": {"caption-side": "bottom", "margin": "auto",
-              "table-layout": "auto", "width": "auto"},
+              "table-layout": "auto", "width": "100%"},
 }
 
 CHROME_JS = """<script>
@@ -383,7 +442,8 @@ def render_table_fragment():
     version_var = ij._ITABLES_UNDERSCORE_VERSION           # e.g. _itables_2_8_1
     ready_event = ("itables-" + version_var.replace("_itables_", "")
                    .replace("_", ".") + "-ready")
-    thead = "".join(f"<th>{html.escape(c)}</th>" for c in COLUMNS)
+    thead = "".join(f'<th class="{cls}">{html.escape(c)}</th>' if cls else f"<th>{html.escape(c)}</th>"
+                    for c, cls in zip(COLUMNS, HEAD_CLASSES))
     dt_args = dict(DT_ARGS)
     dt_args["table_html"] = f"<table><thead><tr>{thead}</tr></thead></table>"
 
