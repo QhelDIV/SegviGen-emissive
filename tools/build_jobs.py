@@ -51,37 +51,25 @@ def main():
                      key=lambda e: (ORDER.get(e.get("status", "ongoing"), 0),
                                     e.get("updated", ""), e["slug"]))
     n_on = sum(1 for e in entries if e.get("status") == "ongoing")
-    n_stale = 0
-    rows = []
-    for e in entries:
-        st = e.get("status", "ongoing")
-        a = age_h(e.get("updated", ""))
-        stale = st == "ongoing" and a is not None and a > STALE_H
-        n_stale += stale
-        age = "&#8212;" if a is None else (f"{a:.1f}h" if a < 48 else f"{a/24:.0f}d")
-        title = html.escape(e.get("title", e["slug"]))
-        if e.get("link"):
-            title = f'<a href="{html.escape(e["link"])}">{title}</a>'
-        bg, fg = BADGE.get(st, BADGE["done"])
-        cell_status = xg.badge(st, bg=bg, color=fg) + (
-            " " + xg.badge("stale &gt;%dh" % STALE_H, bg="#8f2f2f", color="#ffecec")
-            if stale else "")
-        line = e.get("outcome") if st != "ongoing" and e.get("outcome") else e.get("now", "")
-        rows.append(
-            "<tr><td>%s</td><td>%s</td><td><code>%s</code></td><td><code>%s</code></td>"
-            "<td>%s</td><td>%s</td></tr>"
-            % (title, cell_status, html.escape(e.get("executor", e.get("owner", ""))),
-               html.escape(e.get("slurm", "") or "&#8212;"),
-               age + " ago" if a is not None else age, html.escape(line or "")))
+    n_stale = sum(1 for e in entries
+                  if e.get("status") == "ongoing"
+                  and (lambda a: a is not None and a > STALE_H)(age_h(e.get("updated", ""))))
 
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     band = xg.statband([(str(len(entries)), "jobs tracked"),
                         (str(n_on), "ongoing"),
                         (str(n_stale), "stale"),
                         (stamp.split()[1], "rendered")])
-    table = xg.results_table(
-        ["job", "status", "executor", "slurm", "updated", "now / outcome"],
-        "\n".join(rows))
+    import subprocess, tempfile
+    with tempfile.TemporaryDirectory() as td:
+        frag = pathlib.Path(td) / "jobs_fragment.html"
+        r = subprocess.run([str(REPO / ".venv_itables/bin/python"),
+                            str(REPO / "tools/inventory_jobs.py"),
+                            "--manifest", "--out", str(frag)],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError("inventory_jobs failed:\n" + r.stderr)
+        table = frag.read_text()
     intro = xg.prose(
         "<p>One entry per non-trivial job, one file per entry under "
         "<code>jobs/</code> in the ops repo, one writer per file (the owning "

@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""inventory_jobs.py — the Jobs board database: manifest + DataTables fragment.
+
+Same architecture as inventory_pages.py (the console Pages tab), applied to the
+jobs registry: jobs/*.md (one file per job, one writer per file) -> jobs.json
+manifest served from PUBLISH_DEST, plus a sortable/searchable offline-DataTables
+widget fragment that fetches it at load. Columns include started/updated and a
+computed freshness cell so staleness is sortable, which the owner asked for.
+
+Modes:
+    --manifest            jobs/*.md -> PUBLISH_DEST/jobs.json   (stdlib only)
+    --out <fragment.html> the widget fragment (NEEDS .venv_itables)
+"""
+import argparse
+import datetime
+import html
+import json
+import pathlib
+import re
+import sys
+
+REPO = pathlib.Path(__file__).resolve().parent.parent
+SITE_ROOT = "/projects/omages/yanxg/lightgen"
+JOBS = REPO / "jobs"
+PUBLISH_DEST = pathlib.Path("/project/3dlg-hcvc/omages/www/yanxg/lightgen")
+MANIFEST = PUBLISH_DEST / "jobs.json"
+STALE_H = 3.0
+ORDER = {"ongoing": 0, "frozen": 1, "done": 2}
+BADGE_BG = {"ongoing": "#1d7a46", "frozen": "#8a6d1a", "done": "#5a6472"}
+
+COLUMNS = ["job", "status", "executor", "slurm", "started", "updated",
+           "age", "now / outcome", "state-order"]
+
+
+def parse(path):
+    e = {"slug": path.stem}
+    for line in path.read_text().splitlines():
+        m = re.match(r"^(\w+):\s*(.*)$", line)
+        if m:
+            e[m.group(1).lower()] = m.group(2).strip()
+    return e
+
+
+def age_h(ts):
+    try:
+        t = datetime.datetime.strptime(ts, "%Y-%m-%d %H:%M")
+        return (datetime.datetime.now() - t).total_seconds() / 3600.0
+    except Exception:
+        return None
+
+
+def rows():
+    out = []
+    for p in sorted(JOBS.glob("*.md")):
+        e = parse(p)
+        st = e.get("status", "ongoing")
+        a = age_h(e.get("updated", ""))
+        stale = st == "ongoing" and a is not None and a > STALE_H
+        title = html.escape(e.get("title", e["slug"]))
+        if e.get("link"):
+            title = f'<a href="{html.escape(e["link"])}">{title}</a>'
+        badge = ('<span class="db-badge" style="background:%s;color:#fff">%s</span>'
+                 % (BADGE_BG.get(st, "#5a6472"), st))
+        if stale:
+            badge += ' <span class="db-badge" style="background:#8f2f2f;color:#fff">stale</span>'
+        age = "" if a is None else (f"{a:.1f}h" if a < 48 else f"{a/24:.0f}d")
+        line = e.get("outcome") if st != "ongoing" and e.get("outcome") else e.get("now", "")
+        out.append([title, badge, html.escape(e.get("executor", e.get("owner", ""))),
+                    html.escape(e.get("slurm", "")), e.get("started", ""),
+                    e.get("updated", ""), age, html.escape(line or ""),
+                    ORDER.get(st, 3)])
+    return out
+
+
+def write_manifest(quiet=False):
+    data = rows()
+    payload = {"data": data,
+               "generated": datetime.datetime.now().isoformat(timespec="seconds")}
+    MANIFEST.write_text(json.dumps(payload))
+    try:
+        MANIFEST.chmod(MANIFEST.stat().st_mode | 0o004)
+    except OSError:
+        pass
+    if not quiet:
+        print(f"jobs.json updated ({len(data)} jobs)", file=sys.stderr)
+
+
+DT_ARGS = {
+    "classes": ["display", "nowrap", "compact", "hover", "results", "dbtable"],
+    "layout": {"topStart": "pageLength", "topEnd": "search",
+               "bottomStart": "info", "bottomEnd": "paging"},
+    "pageLength": 25,
+    "autoWidth": False,
+    "scrollX": True,
+    # ongoing first (state sentinel), then most recently updated
+    "order": [[8, "asc"], [5, "desc"]],
+    "columnDefs": [
+        {"targets": 0, "width": "240px"},
+        {"targets": [3, 4, 5, 6], "className": "dt-right"},
+        {"targets": [4, 5], "width": "120px"},
+        {"targets": 6, "width": "60px"},
+        {"targets": 8, "visible": False},
+    ],
+    "text_in_header_can_be_selected": True,
+    "style": {"caption-side": "bottom", "margin": "auto",
+              "table-layout": "auto", "width": "auto"},
+}
+
+
+def render_fragment():
+    import itables.javascript as ij
+    dt_bundle = ij.opt.dt_bundle
+    init_datatables = ij.read_package_file("html/init_datatables.html")
+    connected_import = ("import { set_or_remove_dark_class } from '"
+                        + ij.UNPKG_DT_BUNDLE_URL_NO_VERSION + "';")
+    local_import = ("const { set_or_remove_dark_class } = await window."
+                    + ij._ITABLES_UNDERSCORE_VERSION + ";")
+    init_datatables = ij.replace_value(init_datatables, connected_import, local_import)
+    offline = ij.generate_init_offline_itables_html(dt_bundle)
+    version_var = ij._ITABLES_UNDERSCORE_VERSION
+    thead = "".join(f"<th>{html.escape(c)}</th>" for c in COLUMNS)
+    dt_args = dict(DT_ARGS)
+    dt_args["table_html"] = f"<table><thead><tr>{thead}</tr></thead></table>"
+    skeleton = ('<table id="jobsdb"><tbody><tr><td class="db-loading">'
+                'Loading the live jobs board&hellip;</td></tr></tbody></table>'
+                '<noscript><p>JavaScript required; raw data at '
+                f'<a href="{SITE_ROOT}/jobs.json">jobs.json</a>.</p></noscript>')
+    init_script = f"""<script type="module">
+    (async () => {{
+        async function init() {{
+            const {{ ITable }} = await window.{version_var};
+            const table = document.querySelector("#jobsdb:not(.dataTable)");
+            if (!table) return;
+            const resp = await fetch("{SITE_ROOT}/jobs.json", {{ cache: "no-cache" }});
+            const manifest = await resp.json();
+            let dt_args = {json.dumps(dt_args)};
+            dt_args["data_json"] = JSON.stringify(manifest.data);
+            new ITable(table, dt_args);
+        }}
+        if (window.{version_var}) {{ await init(); }}
+        else {{ document.addEventListener("DOMContentLoaded", init); }}
+    }})();
+    </script>"""
+    return offline + init_datatables + skeleton + init_script
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--manifest", action="store_true")
+    ap.add_argument("--out")
+    args = ap.parse_args()
+    if args.manifest or not args.out:
+        write_manifest()
+    if args.out:
+        pathlib.Path(args.out).write_text(render_fragment())
+        print(f"fragment -> {args.out}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
