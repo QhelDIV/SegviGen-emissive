@@ -181,7 +181,7 @@ def console_tree_entries(base):
         {"label": "Console", "children": [
             {"key": "overview", "label": "Overview", "href": f"{base}/index.html"},
             {"key": "roadmap", "label": "Roadmap", "href": f"{base}/roadmap.html"},
-            {"key": "jobs", "label": "Jobs", "href": f"{base}/jobs/index.html"},
+            {"key": "jobs", "label": "Jobs", "href": f"{base}/jobs.html"},
             {"key": "pages", "label": "Pages", "href": f"{base}/pages.html"},
             {"key": "notes", "label": "Agent notes", "href": f"{base}/notes/index.html"},
         ]},
@@ -393,6 +393,45 @@ def build_pages_tab(out_dir):
                   page(out_dir, "Pages — Lightgen Console", "pages", body, wide=True))
 
 
+JOBS_INVENTORY_SCRIPT = REPO / "tools/inventory_jobs.py"
+
+
+def scan_jobs_table():
+    """Database-view Jobs tab: same pattern as scan_pages_table() — runs
+    tools/inventory_jobs.py under .venv_itables as a subprocess and embeds
+    its self-contained sortable/searchable HTML table fragment (also
+    refreshes PUBLISH_DEST/jobs.json via --manifest)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_path = pathlib.Path(tmpdir) / "jobs_inventory_fragment.html"
+        result = subprocess.run(
+            [str(ITABLES_PYTHON), str(JOBS_INVENTORY_SCRIPT), "--out", str(out_path),
+             "--manifest"],
+            cwd=str(REPO), capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"inventory_jobs.py failed (exit {result.returncode}):\n{result.stderr}")
+        print(f"[jobs tab] {result.stderr.strip()}")
+        return out_path.read_text()
+
+
+def build_jobs_tab(out_dir):
+    table_fragment = scan_jobs_table()
+    body = f'''
+    <section>
+      <p class="sub">Every non-trivial job, one row: ongoing, frozen, or done. One file
+      per job under <code>jobs/</code> in the ops repo, one writer per file; ongoing
+      entries silent for more than 3 hours are flagged stale. Rendered from
+      <code>jobs/</code> by <code>tools/build_jobs.py</code>.</p>
+      <div class="dbwrap">{table_fragment}</div>
+    </section>
+    <script>setTimeout(()=>location.reload(),120000)</script>
+    '''
+    xc.write_page(out_dir, "jobs.html",
+                  page(out_dir, "Jobs — Lightgen Console", "jobs", body, wide=True))
+
+
 def build_notes_tabs(out_dir):
     base = xc.console_base(CONFIG, out_dir)
     note_paths = sorted(NOTES_DIR.glob("*.md"), reverse=True)
@@ -464,6 +503,29 @@ def build_doc_pages(out_dir):
                            f'<section>{doc_html}</section>'))
 
 
+def build_jobs_redirect(out_dir):
+    """The Jobs tab used to live at jobs/index.html (a standalone xgpage v2
+    page); now jobs.html at the console root, console-genre (see
+    build_jobs_tab). Old links keep working via this stub. Only written
+    against the real publish dest (mirrors build_console_redirect); never
+    touch any OTHER file under jobs/ (never rmtree)."""
+    if pathlib.Path(out_dir) != PUBLISH_DEST:
+        return
+    stub = '''<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0; url=../jobs.html">
+<script>location.replace("../jobs.html");</script>
+<title>Jobs (moved)</title>
+</head>
+<body>
+<p>The Jobs board has moved. <a href="../jobs.html">Click here</a> if you are not redirected automatically.</p>
+</body>
+</html>'''
+    xc.write_page(out_dir, "jobs/index.html", stub)
+
+
 def build_console_redirect(out_dir):
     """The console used to live at /console/index.html (pre-v10); rewritten
     idempotently on every build — never touch any OTHER file under console/."""
@@ -511,6 +573,8 @@ def build(out_dir):
     build_overview(out_dir)
     build_roadmap_tab(out_dir)
     build_pages_tab(out_dir)
+    build_jobs_tab(out_dir)
+    build_jobs_redirect(out_dir)
     build_notes_tabs(out_dir)
     build_doc_pages(out_dir)
     build_console_redirect(out_dir)
