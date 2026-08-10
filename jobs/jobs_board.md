@@ -2,11 +2,10 @@ title: Jobs board evolution (design and data model)
 executor: jobs-redesign
 status: ongoing
 started: 2026-08-09 14:30
-updated: 2026-08-09 18:31
+updated: 2026-08-09 18:34
 slurm: 
 link: 
 page: none (the board itself is the deliverable)
-needs: evaluation: Expand this row's log timeline: every line now names its speaker (agent names in gray, owner in heavier text), and this very ask appears there as a violet line. Is the who-said-what now clear?
 motivation: The owner needs one glance to know what is running, what finished, and where their attention is needed; the board is that instrument and has been evolving through owner feedback rounds.
 log:
 - 2026-08-09 15:16 The board became a sortable database like the pages list.
@@ -25,4 +24,7 @@ log:
 - 2026-08-09 18:31 [master] Same agent. The word executor was the generic label on lines written before authorship existed; the board now shows the real executor name on those lines too, so the generic word no longer appears anywhere.
 - 2026-08-09 18:31 [owner] Also, I don't see my words/feedback/review after the master For your review message in the jobs redesign entry?
 - 2026-08-09 18:31 [master] Correct, and fixed as standing practice: the owner's feedback now enters this log verbatim as owner lines at the moment the master relays it, so the timeline carries the full exchange, not just one side.
+- 2026-08-09 18:34 [owner] Good, last comment is the owner's feedback should be somewhat more apparent. currently it is just black 'owner' one don't notice it quickly
+- 2026-08-09 18:34 [master] Owner labels are now small filled chips in the accent color, unmissable in a timeline while the sentence stays normal ink. The review flag is cleared on the owner's good.
+- 2026-08-09 18:34 [master] Review complete; flag cleared.
 outcome: 
