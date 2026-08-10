@@ -1,6 +1,7 @@
 title: Page-relationship graph console view
 executor: xgpage-designer
 status: done
+needs: evaluation
 started: 2026-08-09 16:30
 updated: 2026-08-09 17:55
 slurm:
@@ -13,3 +14,4 @@ log:
 - 2026-08-09 17:35 fixed the unreadable labels (node markers now stay a constant readable size no matter how far the view is zoomed out) and fixed a real bug where the initial view was cropping out most of the graph instead of framing it, found by checking every node's on-screen position rather than trusting a screenshot alone.
 - 2026-08-09 17:50 full QA pass done: rebuilding the graph twice with no changes reproduces the exact same layout, adding a new linked page leaves every existing page's position untouched, all the interactions were driven and checked by script, and the page loads with zero requests to any external site. Verdict: done, live on the console as the new Graph tab.
 outcome: The Graph tab is live on the console (41 pages, 24 real content links, 23 pages not yet cross-linked to anything). Positions are remembered between rebuilds so the owner's mental map of the graph stays stable; only genuinely new or newly-linked pages move.
+- 2026-08-09 17:59 The graph is master-reviewed: em dashes removed from the page prose, everything committed, and a 20-minute rebuild schedule now keeps the graph fresh no matter who publishes a page. Waiting on the owner to look.
