@@ -26,9 +26,11 @@ another renderer against it):
     }
 "id" is the same page identity inventory_pages.py already uses (its "name"
 column — bare for root/preview tiers, "updates/<date>" / "workspace/<slug>"
-for the two nested tiers). "type" is reserved for future curated edge kinds
-(supersedes, evidence-for); this build only ever emits "link". x/y are a
-stable 2D layout in an abstract ~1200x800 coordinate space (not pixels —
+for the two nested tiers). "type" is "link" for a crawled content link, or
+one of "supersedes"/"evidence-for"/"part-of" for a curated edge from
+web/graph_edges.yaml (round-2 addition, 2026-08-10) -- hand-verified against
+the actual page content, never crawled or invented; see load_typed_edges().
+x/y are a stable 2D layout in an abstract ~1200x800 coordinate space (not pixels —
 the renderer fits it to whatever canvas it has).
 
 NODES come from inventory_pages.scan_rows() (the exact cached scan that also
@@ -109,6 +111,25 @@ under web/assets/ (same precedent as the hand-vendored model-viewer.min.js —
 see sync_xgpage_assets.py's module docstring), not part of the xgpage
 package: this is a project-specific console tab, not a reusable report
 component.
+
+ROUND 2 (2026-08-10, owner-directed, three additions on top of the above):
+1. Interaction state machine: click/hover/search/select were rebuilt around
+   an explicit model with a guaranteed reset (background click or Escape
+   clears everything) after the owner reported a real bug (a hover-then-
+   click sequence could leave the page permanently dimmed until refresh).
+   Fully documented in graph_view.js's own "interaction state" comment
+   block; the permanent regression test is tools/qa_graph_journeys.js
+   (7 scripted journeys, run it after any change to the interaction code).
+2. Timeline mode (Map/Timeline toggle in the toolbar): the SAME nodes and
+   edges, laid out deterministically by `created` date (x) and tier (y,
+   fixed lane order root/workspace/preview/update), no physics, so
+   development flow reads left to right instead of as a force-directed
+   cluster. See graph_view.js's computeTimelineLayout().
+3. Curated typed edges (web/graph_edges.yaml, load_typed_edges() below):
+   hand-verified relationships (supersedes/evidence-for/part-of) the
+   content-link crawler cannot see, merged into graph.json's edges with
+   their real "type" (the field the v1 contract reserved for exactly this).
+   Rendered dashed with the relationship word labeled on the edge itself.
 """
 import argparse
 import datetime
@@ -275,6 +296,46 @@ def scan_edges(nodes):
     return sorted(edges)
 
 
+# ---------------------------------------------------------- typed edges ----
+GRAPH_EDGES_YAML = REPO / "web" / "graph_edges.yaml"
+TYPED_EDGE_TYPES = {"supersedes", "evidence-for", "part-of"}
+
+
+def load_typed_edges(node_ids):
+    """web/graph_edges.yaml: curated {from, to, type} entries, hand-verified
+    against the actual page content (see the file's own header comment for
+    the verification record) -- NOT crawled, the opposite of scan_edges().
+    Silently usable-but-loud about problems: an entry naming an unknown node
+    id, or an unrecognized type, is DROPPED with a stderr warning rather
+    than crashing the build (a typo here should degrade to "one less edge
+    shown", never take down the whole graph page)."""
+    if not GRAPH_EDGES_YAML.exists():
+        return []
+    import yaml
+    try:
+        data = yaml.safe_load(GRAPH_EDGES_YAML.read_text()) or []
+    except (OSError, ValueError) as e:
+        print(f"[graph_edges.yaml] failed to parse, skipping: {e}", file=sys.stderr)
+        return []
+    ids = set(node_ids)
+    out = []
+    seen = set()
+    for entry in data or []:
+        a, b, t = entry.get("from"), entry.get("to"), entry.get("type")
+        if a not in ids or b not in ids:
+            print(f"[graph_edges.yaml] dropping {a!r} {t!r} {b!r}: unknown node id", file=sys.stderr)
+            continue
+        if t not in TYPED_EDGE_TYPES:
+            print(f"[graph_edges.yaml] dropping {a!r} {t!r} {b!r}: unrecognized type", file=sys.stderr)
+            continue
+        key = (a, b, t)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"source": a, "target": b, "type": t})
+    return out
+
+
 # ---------------------------------------------------------------- layout ---
 def _load_positions():
     try:
@@ -439,14 +500,23 @@ def compute_layout(node_ids, edges):
 # ------------------------------------------------------------------ build --
 def build_graph_data():
     nodes = scan_nodes()
-    edges = scan_edges(nodes)
+    edges = scan_edges(nodes)  # content-link edges, crawled; plain (a, b) tuples
     node_ids = sorted(n["id"] for n in nodes)
-    positions = compute_layout(node_ids, edges)
-    _save_positions(positions, edges)
+    typed_edges = load_typed_edges(node_ids)  # curated; [{"source","target","type"}, ...]
+
+    # LAYOUT and degree counting treat a typed edge as a real connection too
+    # (a "supersedes"/"evidence-for" relationship pulls nodes together and
+    # counts against orphan status exactly like a content link does) --
+    # combined as plain (a, b) pairs, type-blind, for compute_layout() and
+    # the position-persistence neighbor-set diff.
+    typed_pairs = [(e["source"], e["target"]) for e in typed_edges]
+    all_pairs = sorted(set(edges) | set(typed_pairs))
+    positions = compute_layout(node_ids, all_pairs)
+    _save_positions(positions, all_pairs)
 
     in_deg = {nid: 0 for nid in node_ids}
     out_deg = {nid: 0 for nid in node_ids}
-    for a, b in edges:
+    for a, b in all_pairs:
         out_deg[a] += 1
         in_deg[b] += 1
 
@@ -458,7 +528,16 @@ def build_graph_data():
         out_nodes.append({"id": nid, "title": n["title"], "tier": n["tier"], "url": n["url"],
                            "created": n["created"], "modified": n["modified"],
                            "x": x, "y": y, "in_degree": in_deg[nid], "out_degree": out_deg[nid]})
-    out_edges = [{"source": a, "target": b, "type": "link"} for a, b in edges]
+    # A pair covered by a curated typed edge is strictly more informative
+    # than the generic crawled "link" between the same two pages (found
+    # live: glb_direct_pilot_v1 already had a content-link citation to
+    # pipeline_glb_direct, and the SAME pair is also the one verified
+    # evidence-for relationship, which would otherwise draw two overlapping
+    # edges for one relationship) -- suppress the plain link edge for any
+    # ordered pair a typed edge already covers.
+    typed_pair_set = set(typed_pairs)
+    out_edges = ([{"source": a, "target": b, "type": "link"} for a, b in edges if (a, b) not in typed_pair_set]
+                 + typed_edges)
     return {"generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
             "nodes": out_nodes, "edges": out_edges}
 
@@ -481,7 +560,9 @@ def legend_html():
     items = "".join(
         f'<span class="gl-item"><span class="gl-dot" style="background:{color}"></span>{html.escape(label)}</span>'
         for _, label, color in TIER_LEGEND)
-    return f'<div class="graph-legend" id="graph-legend">{items}</div>'
+    typed_item = ('<span class="gl-item"><span class="gl-dash"></span>'
+                  'curated relationship (labeled on the edge)</span>')
+    return f'<div class="graph-legend" id="graph-legend">{items}{typed_item}</div>'
 
 
 def _asset_hash8(path):
@@ -519,22 +600,30 @@ def build_graph_tab(out_dir):
 
     body = f'''
     <section class="graph-page" data-graph-src="{SITE_ROOT}/graph.json">
-      <p class="sub">built {now} &middot; {n_nodes} pages, {n_edges} content links, {n_orphans} not yet connected</p>
+      <p class="sub">built {now} &middot; {n_nodes} pages, {n_edges} edges, {n_orphans} not yet connected</p>
       <p>Every published page is a node, positioned once and remembered between rebuilds so the
       map stays navigable by memory. A directed edge means one page's own rendered content links
       the other: page-tree links, outlines, and the theme toggle are excluded, only links inside
-      the article body count. Built by <code>tools/build_graph.py</code>, which reads the same page
-      inventory as the Pages tab and crawls each page's HTML for its real content links; positions
-      persist in <code>.console_build/graph_positions.json</code> so a rebuild never reshuffles pages
-      you already know the layout of. Only brand-new pages, or pages whose links changed, move.</p>
+      the article body count. Dashed edges are curated relationships (supersedes, evidence-for,
+      part-of) checked by hand against the pages, not crawled. Built by
+      <code>tools/build_graph.py</code>, which reads the same page inventory as the Pages tab and
+      crawls each page's HTML for its real content links; positions persist in
+      <code>.console_build/graph_positions.json</code> so a rebuild never reshuffles pages you
+      already know the layout of. Only brand-new pages, or pages whose links changed, move.
+      Click a node to select it (its neighborhood stays lit, everything else dims); click empty
+      space or press Escape to clear the selection. Double-click a node to open its page.</p>
       <div class="graph-toolbar">
         <input type="search" id="graph-search" placeholder="Search pages&hellip;" aria-label="Search pages">
+        <div class="graph-modes" role="group" aria-label="Layout mode">
+          <button type="button" data-graph-mode="map" class="active">Map</button>
+          <button type="button" data-graph-mode="timeline">Timeline</button>
+        </div>
         {legend_html()}
       </div>
       <div class="graph-layout">
         <div class="graph-canvas-wrap">
           <svg id="graph-svg" class="graph-svg" role="img" aria-label="Page relationship graph"></svg>
-          <div class="graph-hint">scroll to zoom &middot; drag to pan &middot; drag a node to move it</div>
+          <div class="graph-hint">scroll to zoom &middot; drag to pan &middot; click selects, double-click opens &middot; Esc clears</div>
         </div>
         <aside class="graph-orphans">
           <h3>Not yet connected</h3>
