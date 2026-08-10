@@ -90,6 +90,32 @@ tiny-glow shapes ((0,0.05] GT coverage, IoU 0.04–0.06). Tiny-glow shapes domin
 111-shape val set — this is why the flat/nonzero headline numbers stay low even when
 large-glow performance looks reasonable.
 
+### 2026-08-09 — conditioning parity: --pbr_cond channel + --cond real (planned: emis_72k_ccreal)
+
+Decision (lightgen side): all TRELLIS.2-family emission baselines must receive the
+PBR latent the same way. Upstream SegviGen conditions via token doubling
+(Gen3DSeg: PBR latent appended as N extra tokens, sequence 2N, 64ch input);
+lightgen's emission DiTs condition via per-token channel concat
+([x_t|shape|pbr]=96ch, sequence N). This fork now supports both:
+
+- `emissive/pbr_conditioning.py` — Gen3DSegChannelConcat wrapper + builders;
+  train takes a REQUIRED `--pbr_cond {channel,token}`; eval/predict auto-detect
+  the mode from the checkpoint's input_layer fan-in (64=token, 96=channel), so
+  every pre-existing checkpoint keeps working unchanged.
+- channel mode re-initializes input_layer on warm start from full_seg (64→96
+  shape mismatch); all transformer blocks load. Sequence stays N (vs 2N in token
+  mode), so channel steps are cheaper.
+- The dated one-off scripts (emissive/infer/dump_pred_voxels*.py,
+  emissive/diagnostics/*, seg_covers_emissive.py, seg_to_mesh.py) intentionally
+  stay token-only — they reproduce pre-change checkpoints.
+- Planned production run: `emissive/slurm/train_72k_ccreal.sbatch` — identical
+  owner decisions to emis_72k_unfilt except --pbr_cond channel + --cond real
+  (the second parity axis: TRELLIS2 DiTs train on real DINOv3 thumbnails).
+  Smoke gate: `smoke_72k_ccreal.sbatch` (includes cond.pth/emis_mask.pth
+  coverage preflight). When it trains/evals, add its row to the run registry
+  above. Tracking: this registry + the sbatch .log files (documented exemption
+  from the lightgen wandb rule).
+
 ### Historical / pilot table (superseded — collapsed here, kept for provenance)
 
 <details>
