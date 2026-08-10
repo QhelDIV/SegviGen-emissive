@@ -211,20 +211,26 @@ def _resolve_page(e, pages_index):
     return href, none_reason, page_name
 
 
-def _author_label(author):
+def _author_label(author, executor=None):
     """A log line's small quiet attribution label (see module docstring's
     LOG-LINE AUTHORSHIP section): author is the raw bracket content LOG_LINE_RE
-    captured, or None for a legacy untagged line, which defaults to
-    "executor" for DISPLAY ONLY -- the file itself is never rewritten to add
-    a label to an old line. Rendered exactly as given (no lookup/validation);
-    "owner" alone gets a touch more visual weight since owner words are the
-    record of verdicts, not just progress notes."""
-    label = (author or "executor").strip()
+    captured, or None for a legacy untagged line, which displays as the JOB'S
+    OWN executor name (owner confusion 2026-08-09: the generic word "executor"
+    next to real agent names read as two different people; the renderer knows
+    the executor field, so legacy lines show the real name) -- DISPLAY ONLY,
+    the file itself is never rewritten to add a label to an old line.
+    Rendered exactly as given (no lookup/validation); "owner" alone gets a
+    touch more visual weight since owner words are the record of verdicts,
+    not just progress notes. A literal [executor] token also resolves to the
+    real name (xgjobs stamped that generic default for a short window)."""
+    label = (author or "").strip()
+    if not label or label.lower() == "executor":
+        label = (executor or "").strip() or "executor"
     cls = " log-author-owner" if label.lower() == "owner" else ""
     return f'<span class="log-author{cls}">{html.escape(label)}</span>'
 
 
-def render_timeline_html(log, has_outcome, none_reason=None):
+def render_timeline_html(log, has_outcome, none_reason=None, executor=None):
     """The child-row expansion: a formatted timeline, timestamps in their own
     column (CSS grid, see theme3.css .log-entry) so they align regardless of
     sentence length. The final entry of a job with a recorded outcome gets a
@@ -253,7 +259,7 @@ def render_timeline_html(log, has_outcome, none_reason=None):
             cls += " log-entry-review"
         tag = '<span class="log-outcome-tag">outcome</span>' if is_outcome else ""
         parts.append(f'<div class="{cls}"><span class="log-ts">{html.escape(ts)}</span>'
-                     f'<span class="log-text">{_author_label(author)}{tag}{html.escape(text)}</span></div>')
+                     f'<span class="log-text">{_author_label(author, executor)}{tag}{html.escape(text)}</span></div>')
     parts.append("</div>")
     return "".join(parts)
 
@@ -311,7 +317,7 @@ def rows():
                   f'{n} update{"s" if n != 1 else ""}<span class="log-chevron">&#9662;</span></button>')
         latest = (f'<div class="log-latest{" log-latest-outcome" if is_outcome_last else ""}">'
                   f'<span class="log-ts">{html.escape(last_ts)}</span>'
-                  f'<span class="log-text">{_author_label(last_author)}{tag}{html.escape(last_text)}</span>{toggle}</div>')
+                  f'<span class="log-text">{_author_label(last_author, e.get("executor"))}{tag}{html.escape(last_text)}</span>{toggle}</div>')
         if needs_eval:
             ask_text = review_ask or ("Open the linked page, judge it with your own eyes, "
                                       "and give a verdict in the CLI.")
@@ -326,7 +332,8 @@ def rows():
             age = "just now" if a < 0 else (f"{a:.1f}h ago" if a < 48 else f"{a/24:.0f}d ago")
             updated += f'<span class="db-subline">{age}</span>'
 
-        log_full_html = render_timeline_html(log, has_outcome, none_reason)
+        log_full_html = render_timeline_html(log, has_outcome, none_reason,
+                                             executor=e.get("executor"))
 
         # three attention bands (see module docstring): needs-evaluation
         # rows pin above everything regardless of their own status; within
