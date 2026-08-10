@@ -3,7 +3,7 @@ executor: team-lead
 track: research
 status: ongoing
 started: 2026-08-09 13:40
-updated: 2026-08-10 09:35
+updated: 2026-08-10 12:35
 slurm: 242125
 link: 
 page: none (training run; results land on the overfit/eval pages)
@@ -16,4 +16,5 @@ log:
 - 2026-08-10 03:33 [master] Fourteen hours in: the epoch 4 checkpoint is saved and its quick validation scored 0.03 on the nonzero-only metric, a weak early signal on a small noisy subset. The proper averaged evaluation of this checkpoint is running as its own job; the run continues toward the epoch 8 checkpoint.
 - 2026-08-10 06:34 [master] Seventeen hours in: epoch 5 done, loss 0.312 and still easing down. The epoch 8 checkpoint should land near the end of the 24 hour window; its averaged evaluation will reuse the pipeline being built for epoch 4 right now.
 - 2026-08-10 09:35 [master] Twenty hours in: epoch 6 done, loss flat around 0.31 to 0.32. About four hours remain in the window; whether the epoch 8 checkpoint saves before the time limit is now close, and the run may end at epoch 7 with only the epoch 4 checkpoint plus the last-state file.
+- 2026-08-10 12:35 [master] Twenty-three hours in: epoch 7 done at a new loss low of 0.311. The epoch 8 checkpoint cannot fit in the remaining hour, so the run will end at the time limit with the epoch 4 checkpoint plus the epoch 7 last-state file, which can seed a continuation run if the owner wants one.
 outcome: 
