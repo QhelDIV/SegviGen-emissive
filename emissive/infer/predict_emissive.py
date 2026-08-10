@@ -114,18 +114,6 @@ def _common_coords_2(slat_a, slat_b):
     return uniq[counts == 2].cuda()
 
 
-def _load_ckpt(gen, ckpt_path, device):
-    """Identical to the state_dict loading in eval_emissive.py main() / make_pred_glb.py
-    main() (the trained module is wrapped as `gen3dseg.<name>` by the standalone training
-    loop's Lightning-style checkpointing; strip that prefix before load_state_dict)."""
-    from collections import OrderedDict
-    import torch
-    sd = torch.load(ckpt_path, map_location=device)["state_dict"]
-    sd = OrderedDict([(k.replace("gen3dseg.", ""), v) for k, v in sd.items()])
-    gen.load_state_dict(sd)
-    gen.eval()
-
-
 def _render_cond_image(glb_path, out_img_path, transforms_json):
     """Default (no --zero_cond, no --image) conditioning path: render the glb the same
     way build_dataset.py's --real_cond does (data_toolkit/bpy_render.render_from_transforms
@@ -338,6 +326,7 @@ def main():
     sys.path.insert(0, SEGVIGEN)
     sys.path.insert(0, os.path.join(SEGVIGEN, "data_toolkit"))
     sys.path.insert(0, os.path.join(ROOT, "emissive", "eval"))  # sibling dir holding eval_emissive.py
+    sys.path.insert(0, os.path.join(ROOT, "emissive"))          # pbr_conditioning.py (shared)
     os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
@@ -345,7 +334,8 @@ def main():
     import numpy as np
     import trellis2.modules.sparse as sp
     from trellis2 import models
-    from inference_full import Gen3DSeg, Sampler, slat_to_glb   # reuse: same import make_pred_glb.py does
+    from inference_full import Sampler, slat_to_glb   # reuse: same import make_pred_glb.py does
+    from pbr_conditioning import build_gen_from_sd    # token/channel auto-detected from the ckpt
     from eval_emissive import load_eval_models, COND_T, COND_D  # reuse: shared decoder/norm-stat loader
     from glb_to_vxz import glb_to_vxz
     from vxz_to_slat import vxz_to_latent_slat, get_slat_by_common_coords
@@ -392,9 +382,11 @@ def main():
 
     # --- 3. load fine-tuned model (step 4) ---
     print(f"[ckpt] {args.ckpt}", flush=True)
-    flow = models.from_pretrained("microsoft/TRELLIS.2-4B/ckpts/slat_flow_imgshape2tex_dit_1_3B_512_bf16")
-    gen = Gen3DSeg(flow).to(device)
-    _load_ckpt(gen, args.ckpt, device)
+    from collections import OrderedDict
+    sd = torch.load(args.ckpt, map_location=device)["state_dict"]
+    sd = OrderedDict([(k.replace("gen3dseg.", ""), v) for k, v in sd.items()])
+    gen, _ = build_gen_from_sd(sd, device)
+    gen.eval()
 
     md = load_eval_models(device)   # reuse: eval_emissive.load_eval_models — decoders + norm stats + sampler
     tex_decoder, shape_decoder, sampler = md["tex_decoder"], md["shape_decoder"], md["sampler"]

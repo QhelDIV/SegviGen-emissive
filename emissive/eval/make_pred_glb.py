@@ -30,6 +30,7 @@ while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
     ROOT = parent   # walk up: this script now lives nested under emissive/eval/, not repo root
 SEGVIGEN = ROOT
 sys.path.insert(0, SEGVIGEN)
+sys.path.insert(0, os.path.join(ROOT, "emissive"))   # pbr_conditioning.py (shared)
 os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 
 import json
@@ -37,8 +38,8 @@ import torch
 import numpy as np
 from collections import OrderedDict
 import trellis2.modules.sparse as sp
-from trellis2 import models
-from inference_full import Gen3DSeg, Sampler, slat_to_glb
+from inference_full import Sampler, slat_to_glb
+from pbr_conditioning import build_gen_from_sd   # mode auto-detected from the ckpt
 from eval_emissive import load_eval_models, COND_T, COND_D
 
 
@@ -60,11 +61,10 @@ def main():
     np.random.seed(args.seed)
 
     print(f"[load] flow model + ckpt {args.ckpt}", flush=True)
-    flow = models.from_pretrained("microsoft/TRELLIS.2-4B/ckpts/slat_flow_imgshape2tex_dit_1_3B_512_bf16")
-    gen = Gen3DSeg(flow).to(device)
     sd = torch.load(args.ckpt, map_location=device)["state_dict"]
     sd = OrderedDict([(k.replace("gen3dseg.", ""), v) for k, v in sd.items()])
-    gen.load_state_dict(sd); gen.eval()
+    gen, _ = build_gen_from_sd(sd, device)
+    gen.eval()
 
     md = load_eval_models(device)
     tex_decoder, shape_decoder, sampler = md["tex_decoder"], md["shape_decoder"], md["sampler"]
