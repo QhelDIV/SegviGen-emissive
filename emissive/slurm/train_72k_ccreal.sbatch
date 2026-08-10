@@ -21,6 +21,10 @@
 # Sizing: token mode measured ~1.25 s/shape at sequence 2N; channel mode runs
 # sequence N so expect FASTER — recalibrate --n_per_epoch/--epochs from the
 # smoke log if s/shape drops materially. Run smoke_72k_ccreal.sbatch first.
+#
+# (Third delta vs train_72k_unfilt.sbatch, a bugfix not a training axis:
+# set -o pipefail so a training failure isn't masked by the awk timestamp pipe.)
+set -o pipefail
 source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh
 conda activate trellis2
 export HF_HOME=/3dlg-jupiter-project/lightgen/hf_cache

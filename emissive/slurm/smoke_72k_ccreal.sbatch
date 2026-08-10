@@ -11,7 +11,8 @@
 # Smoke for the 2026-08 conditioning-parity run: --pbr_cond channel (lightgen-style
 # per-token concat, 96ch, input_layer re-init from full_seg) + --cond real.
 # Success = SMOKE_DONE with (a) "[pbr_cond=channel] warm start: re-initialized
-# ['flow_model.input_layer.weight', 'flow_model.input_layer.bias']" in the log,
+# ['flow_model.input_layer.weight']" in the log (bias is [model_channels] —
+# input-size independent, so it loads from the ckpt),
 # (b) finite decreasing flow_loss over 3 epochs, (c) quick-val runs.
 set -euo pipefail
 

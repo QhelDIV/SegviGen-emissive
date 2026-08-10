@@ -16,7 +16,7 @@ text said interactive_seg but that was never true, see --init_ckpt help).
 
 Usage (GPU node, trellis2 env):
   python train_emissive.py --dataset .../dataset --out_dir .../outputs/emis_pilot \
-      --epochs 300 --lr 1e-5 --n_per_epoch 0 --cond zero
+      --epochs 300 --lr 1e-5 --n_per_epoch 0 --cond zero --pbr_cond token
 """
 import os, sys, json, argparse, glob
 ROOT = os.path.dirname(os.path.abspath(__file__))

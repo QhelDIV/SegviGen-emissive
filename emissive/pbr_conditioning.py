@@ -137,6 +137,16 @@ def load_warmstart(gen, sd, pbr_cond):
         return
     own = gen.state_dict()
     dropped = [k for k in sd if k in own and sd[k].shape != own[k].shape]
+    # The ONLY tensor a 64->96 conversion may re-initialize is the input
+    # projection weight (its bias is [model_channels] — input-size independent,
+    # and MUST load). dropped == [] is also fine (init ckpt is already a
+    # channel-mode flow, e.g. continuing a channel run). Anything else
+    # mismatching means the init ckpt is not a compatible flow checkpoint —
+    # fail loudly instead of silently re-initing transformer weights.
+    if dropped and set(dropped) != {INPUT_LAYER_KEY}:
+        raise RuntimeError(
+            f"channel warm start expected at most [{INPUT_LAYER_KEY}] to be "
+            f"shape-mismatched, got {dropped} — incompatible init checkpoint?")
     filtered = {k: v for k, v in sd.items() if k not in dropped}
     missing, unexpected = gen.load_state_dict(filtered, strict=False)
     # every missing key must be one we deliberately dropped; anything else is a
