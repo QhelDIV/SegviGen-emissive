@@ -1,83 +1,78 @@
 # Lightgen — live roadmap
 
 _The real-time "where are we / what's next / what needs you" view. Master edits this file
-as state changes and republishes; auto-refreshes every 2 min. Rewritten 2026-07-23 as a
-clean handoff (prior 2k-training arc archived in git history)._
+as state changes and republishes; auto-refreshes every 2 min. Rewritten 2026-08-10 (the
+2026-07 data-pivot arc is archived in git history)._
 
-**Jobs board:** https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/jobs/ (one entry per non-trivial job, ongoing/done/frozen, stale-flagged; entries live in `jobs/`, rendered by `tools/build_jobs.py`).
+**Jobs board:** https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/jobs.html (every
+workstream, one log per job, review flags pin to the top; written via `tools/xgjobs`).
+**Page graph:** https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/graph.html
 
 ## Pipeline
-- done: direct-GLB emissive investigation (found the o_voxel bug)
-- done: bug already fixed by Dongchen (June 4), corrected data produced
-- done: nonzero-emissive threshold decided (>1/255)
-- done: xgpage standalone package migration (core + console)
-- doing: data-understanding pages (report + gallery) — built, awaiting promote
-- todo: SegviGen fine-tune restart on Dongchen's corrected 74k data
-- wait: your calls (promote pages · filtering-gallery framing) ←
+- done: v2 split adopted (Dongchen's newbake_vae, 71,646/387/388) + cond backfill
+- done: overfit diagnostic, 10 shapes: neither pos_weight memorizes (0.28 / 0.42 vs 0.96 ceiling)
+- done: single-shape control on today's code memorizes (0.997 by ep70) — no code regression
+- doing: 72k image-conditioned training, capped epochs (first checkpoint due overnight)
+- doing: 10-shape pos_weight-1 run extended to 400 epochs (epoch-matched comparison)
+- todo: locate the multi-shape blocker (capacity / schedule / interference)
+- wait: your verdicts on flagged deliverables ←
 
 ## ▶ Now (active)
 
-- **Nothing running.** All workers idle (pipelineworker, consoleworker). Nothing blocked
-  except the owner decisions below.
+- **Training, Solar:** the capped 72k conditioned run (epoch 1 done, loss normal, watcher on
+  the first checkpoint) and the 400-epoch 10-shape parity run. Watchers + agent heartbeats on both.
+- **Team:** rendering-page upgrade (five-setup teaser; emission-sweep video encoding), graph
+  round 2 (interaction state model + simulated-user QA + timeline mode), board track filter
+  (research / tooling / paper separation).
 
-## 🎯 The situation (post-compaction orientation — read this first)
+## 🎯 The situation (read this first)
 
-The emissive project pivoted this week. We set out to switch data generation to
-direct-GLB→o-voxel; investigating it, we found o_voxel's per-voxel emissive was broken
-(a one-line mipmap copy-paste bug). **Dongchen had already found and fixed that exact bug
-on 2026-06-04** (TRELLIS.2-lightning commit `eec7840b`; not ours to fix or PR). His
-**`uv_voxel_pipeline`** has since processed the corpus into corrected data:
+The overfit mystery narrowed decisively tonight. The pipeline cannot memorize 10 training
+shapes at ANY pos_weight (best IoU 0.28 at 1.0, 0.42 at 5.0, against a 0.96 ceiling), but
+today's code memorizes a single emissive shape to 0.997, better than July's anchor. So:
+no code regression, and the failure is specific to multi-shape training. A separate finding
+points at the backbone: zero-shot reconstruction butchers the emissive asset family (pumpkin
+to smooth ball, candles to one disc) while reporting plausible part counts, invisible to
+metrics, visible only in renders. The 400-epoch parity run decides whether 10 shapes
+saturate or just need far longer.
 
-- **Data: `/cs/3dlg-jupiter-project/lightgen/uv_voxel_pipeline/out_uv_voxel_74k/`** —
-  72,374 shapes, each: `atlas.npz` (512² UV, for TEXGen) + `emission_voxels_256/*.vxz` +
-  `pbr_voxels_256/*.vxz` (256³, for us/SegviGen) + `coords.npz`. SHA == Sketchfab UID.
-  This is the GT the emissive fine-tune should now train on. Validated: teddy 0, glowers real.
-- **Threshold decision:** binarize emissive as **any authored emission (value > 1/255)**,
-  NOT lum>0.04 — the data showed the (0,0.04] dim band is large (43–60% of glowing shapes)
-  and real, and 0.04 was starving the tiny-glow regime. (Pure `>0` is a 3-min re-run option.)
+Rendering setups are now named and documented (box render is the project default for
+emission figures): RENDERING.md + the workspace page.
 
-## → Next (the actual research path)
+## → Next
 
-1. **256³ vs 512³ reconciliation** — Dongchen's voxels are 256³; our SegviGen fine-tune ran
-   at 512³ (glb_to_vxz grid 512 → 32³ latent). Confirm SegviGen can train on 256³ emission
-   voxels directly, or derive a 512³ target. THIS is the first concrete fine-tune step.
-2. Restart the emissive fine-tune on the corrected 74k data + nonzero target.
+1. Read the 400-epoch parity curve when it lands; if it saturates, probe interference
+   (fewer shapes, higher capacity, schedule variants) before any more 72k spend.
+2. First 72k checkpoint: eval + rendered examples on the standard shapes, K-draw protocol.
+3. Keep thickening the page graph (cross-links + curated relationship edges).
 
 ## ⏸ Waiting on you
 
-1. **Promote** `uvvox_report` + `uvvox_gallery` (in `_preview`, correct at nonzero now) into
-   the workspace zone → permanent tracking.
-2. **Filtering-recap page framing** — the "unlit vs PBR" gallery: render from original GLBs?
-   how many per class (dozens or hundreds)? (Recap of the filtering is done, in chat + notes.)
-3. **emissive_gt / pipeline_glb_direct pages** — they frame the bug as OUR discovery; Dongchen
-   found it first. Reframe as team-attributed validation, or shelve. (Both are drafts/unshared.)
-4. **Upstream Microsoft PR** — moot (Dongchen fixed it in the team fork); drop unless you want
-   it sent to microsoft/TRELLIS.2 upstream (still buggy there).
+1. Review flags on the jobs board (violet rows, each states its ask).
+2. Rendering-page v1 version mint happens after the sweep video lands; the flagged page
+   will be your review surface.
 
 ## 🔗 Key locations (durable)
 - Corrected data: `/cs/3dlg-jupiter-project/lightgen/uv_voxel_pipeline/out_uv_voxel_74k/`
-- Pages (all `_preview`): uvvox_report, uvvox_gallery (700 ex.), emissive_gt, pipeline_glb_direct
-- Console: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/ (thin driver on xgpage.console)
-- Ops repo (console/xgpage/notes/page-builders): `QhelDIV/lightgen-ops` (local root = this dir)
-- xgpage package: `~/studio/xgpage` (lightgen consumes it; `import xgpage`); model-viewer kept
-  lightgen-local (`tools/xgpage_ext.py` + `tools/sync_xgpage_assets.py`)
-- Fine-tune fork: `QhelDIV/SegviGen-emissive` (main @ 9b71cf8; predict_emissive.py, EXPERIMENTS.md)
+- Console: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/ (Jobs / Pages / Graph tabs)
+- Rendering setups: RENDERING.md + https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/workspace/rendering/
+- Overfit diagnostic page: .../lightgen/_preview/overfit_condtest/
+- Ops repo: `QhelDIV/lightgen-ops` (this dir) · xgpage package: `~/studio/xgpage`
+- Fine-tune fork: `QhelDIV/SegviGen-emissive`
 
 ## 📋 Recent (newest first)
 
-- **Nonzero threshold adopted** — re-rendered the 700 gallery + 5 report shapes at >1/255;
-  sign 16%→60%, creature 29%→77% (dim gradient now counted), teddy/zeros stay 0. Both pages
-  updated + QA-clean. Gallery strata now glow 371 / tiny 235 / zero 94.
-- **Console → thin driver on `xgpage.console`** (lightgen-ops @39bfd28), byte-parity verified.
-  Lightgen fully on the standalone xgpage package (core + console). Pages auto-track cron added.
-- **700-example emission gallery** built (`_preview/uvvox_gallery`) — grey/orange voxels,
-  sort-by-glow filter, Sketchfab click-through.
-- **uv_voxel data report** built (`_preview/uvvox_report`) — what the corrected data is, emission
-  validated correct, vs the old somage→glb→ovoxel path.
-- **lightgen-ops repo** created (QhelDIV/lightgen-ops, private) — the local console/xgpage/notes
-  tooling, finally versioned. Dev code stays in dongchen-yang/lightgen + the SegviGen-emissive submodule.
-- **Fork reorg + predict_emissive.py + per-face mesh masks** merged to SegviGen-emissive main (9b71cf8).
-- Earlier arc (archived): the 2k emission-filtered fine-tune was a clean negative result (no
-  model beat the 0.219 zero-shot oracle; tiny-glow is the wall) — which motivated the data pivot.
-
-<!-- Workers idle. No git pushes to team repos / no team-facing sends without owner go. -->
+- **Ops overhaul (2026-08-09 night):** jobs board rebuilt as a log-first database with
+  review flags, recency heat, authored lines (owner words verbatim in accent chips), and
+  the `xgjobs` CLI enforcing the writing standard; page-relationship Graph tab shipped;
+  figure numbering + thumbnail strip landed in the xgpage engine; rendering setups named
+  and documented with a five-setup teaser and sweep video in progress.
+- **Overfit verdicts:** pos_weight ruled out as sole cause; no code regression
+  (single-shape 0.997); emissive family is out of distribution for the pretrained
+  backbone's reconstruction; multi-shape blocker is the open question.
+- **19-shape part-segmentation gallery** (fullseg_19) published; orientation mismatch
+  disclosed; one input render fixed (stray icosphere inflated the auto-frame).
+- **Old showcase numbers closed:** exact replay proved unseeded single-draw luck
+  (per-shape IoU swung 0.984 to 0.180); only K-draw means count from now on.
+- **v2 split + cond backfill done;** the uncapped 24h runs timed out saving nothing
+  (600GB/epoch cond reads); the capped relaunch is the active 72k run.
