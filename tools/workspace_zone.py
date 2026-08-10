@@ -80,6 +80,7 @@ LIVING_PAGES = [
     ("paper_skeleton", "Paper skeleton", "the claim chain"),
     ("render_sweep", "Render sweep", "why Filmic +1.5 for the box figures"),
     ("diagnostics", "Diagnostics", "why every emissive model sits near 0.1 IoU"),
+    ("rendering", "Rendering setups", "the five named lighting setups"),
 ]
 # The rail heading for LIVING_PAGES. publish_version.register_in_tree() reads
 # this same constant, so the minting tool and this module cannot disagree
