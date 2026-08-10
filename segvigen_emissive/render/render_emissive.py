@@ -32,14 +32,29 @@ import numpy as np
 import bpy  # noqa: E402
 from xgutils import bpyutil  # noqa: E402
 
-# Any emission at all counts, matching the dataset's >1/255 rule. Blender image
-# pixels are linear float; 1/255 in sRGB is about 5.7e-6 linear, so this floor
-# sits just above it and still admits the faintest authored emission.
+# Any emission at all counts. Blender image pixels are linear float, and the
+# dataset's ">1/255 sRGB" rule converts to 1/255/12.92 = 3.035e-4 linear, so
+# this floor sits about 30x BELOW the dataset rule and is the more permissive
+# of the two. (An earlier comment here put 1/255 at 5.7e-6 linear and claimed
+# this floor sat just above it; both were wrong, and the error propagated into
+# a threshold-gap hypothesis that measurement then rejected.)
+#
+# Measured on the two textured emissive materials of the strength-ladder
+# shapes, the two thresholds select IDENTICAL texels: those emissive textures
+# are already effectively binary, with nothing in the band between. That is two
+# textures, not a dataset-wide result, so a shape whose emissive texture has a
+# faint floor would still be masked more permissively here than in training.
 LIN_EPS = 1e-5
 
 # One strength for every shape on the page, so no shape is flattered by a
 # per-shape exposure choice, and so the true / mask x albedo pair differ only in
 # colour.
+#
+# THIS IS A LOOK CHOICE, NOT A MEASUREMENT. The bake stores emission as uint8
+# and drops the KHR_materials_emissive_strength extension, which 3 of 60 sampled
+# source GLBs carry, so nothing in the data says how brightly a surface emits.
+# Overridable with --emit_strength; the default is kept at 4.0 so every earlier
+# render and every pinned invocation reproduces unchanged.
 EMIT_STRENGTH = 4.0
 
 
@@ -191,6 +206,7 @@ def blocky_mask(shape, density, blocks, rng):
 
 
 def rebuild_emission_baseline(obj, facts, areas, mode, rng, blocks=28,
+                              strength=EMIT_STRENGTH,
                               tex_size=512):
     """The two dummy baselines, both applied to EVERY material of the shape.
 
@@ -221,7 +237,7 @@ def rebuild_emission_baseline(obj, facts, areas, mode, rng, blocks=28,
                 e_sock.default_value = (1, 1, 1, 1)
             else:
                 e_sock.default_value = (*b_const, 1.0)
-            bsdf.inputs["Emission Strength"].default_value = EMIT_STRENGTH
+            bsdf.inputs["Emission Strength"].default_value = strength
             continue
 
         if b_node is not None:
@@ -240,7 +256,7 @@ def rebuild_emission_baseline(obj, facts, areas, mode, rng, blocks=28,
                          node.inputs["Vector"])
         nt.links.new(node.outputs["Color"], e_sock)
         e_sock.default_value = (1, 1, 1, 1)
-        bsdf.inputs["Emission Strength"].default_value = EMIT_STRENGTH
+        bsdf.inputs["Emission Strength"].default_value = strength
     return density
 
 
@@ -288,6 +304,128 @@ def load_pred(pred_dir, sid, n_slots):
     return masks, uniform, names
 
 
+def load_emission(pred_dir, sid, n_slots):
+    """Read a method's predicted emission COLOUR for one shape.
+
+    Same file convention and the same slot-name contract as load_pred, and
+    deliberately so: one naming scheme, one verification, two payloads. The
+    difference is what the pixels mean. Here they are the emitted colour itself,
+    kept as RGB, not a mask to multiply the asset's albedo by.
+
+    A uniform entry is a per-slot RGB triple rather than a scalar, since a
+    material with no UVs still has to say what colour it emits.
+    """
+    import glob as _glob
+    import matplotlib.image as mpimg
+    emis, uniform = {}, {}
+    stats_path = os.path.join(pred_dir, f"{sid}__stats.json")
+    st = json.load(open(stats_path)) if os.path.exists(stats_path) else {}
+    for k, v in (st.get("uniform") or {}).items():
+        v = [float(v)] * 3 if np.isscalar(v) else [float(x) for x in v][:3]
+        uniform[int(k)] = np.array(v, dtype=np.float32)
+    for p in _glob.glob(os.path.join(pred_dir, f"{sid}__mat*__emis.png")):
+        n = int(os.path.basename(p).split("__mat")[1].split("__")[0])
+        a = mpimg.imread(p)
+        if a.dtype == np.uint8:
+            a = a.astype(np.float32) / 255.0
+        # sRGB in, linear out: an 8-bit PNG of emission is almost always written
+        # through an sRGB transfer curve, and feeding it to Blender as linear
+        # would darken the midtones by roughly a factor of two. If your files are
+        # already linear, say so with --emission_linear.
+        emis[n] = a[..., :3].astype(np.float32)
+    unknown = [n for n in list(emis) + list(uniform) if n >= n_slots]
+    assert not unknown, (f"{sid}: prediction names material slots {unknown} but "
+                         f"the asset has {n_slots}; slot indices must be the "
+                         f"asset's own material order")
+    names = st.get("materials")
+    assert names, (
+        f"{sid}: {os.path.basename(stats_path)} carries no 'materials' list, so "
+        f"the slot keying cannot be verified. Emit one name per slot, in the "
+        f"asset's material order.")
+    if isinstance(names[0], dict):
+        names = [m.get("material") for m in sorted(names, key=lambda m: m["slot"])]
+    return emis, uniform, names
+
+
+def srgb_to_linear(a):
+    return np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** 2.4)
+
+
+def rebuild_emission_direct(obj, facts, areas, emis, uniform, strength=1.0,
+                            assume_linear=False):
+    """Emission = the method's OWN predicted colour, written in unchanged.
+
+    This is the path for a method that predicts emission RGB. It shares the
+    scene, camera, tone and bloom with every other mode and differs in one
+    thing: there is no multiply by the asset's albedo. That multiply is our
+    method's central assumption, so applying it to someone else's prediction
+    would render something neither method produced.
+
+    Strength defaults to 1.0 here, NOT to our 4.0, because a predicted colour
+    may already encode radiance and multiplying it is a second opinion about
+    brightness. Pass --emit_strength to match our panels' look, knowing that is
+    what you are doing.
+    """
+    stats = []
+    for f in facts:
+        mat, bsdf, slot = f["mat"], f.get("bsdf"), f["slot"]
+        area = float(areas[slot]) if slot < len(areas) else 0.0
+        st = {"material": mat.name if mat else None, "area": area,
+              "gt_emits": bool(f.get("emits")), "lit_frac": 0.0, "source": None}
+        if bsdf is None:
+            stats.append(st)
+            continue
+        nt = mat.node_tree
+        e_sock = bsdf.inputs["Emission Color"]
+        for l in list(e_sock.links):
+            nt.links.remove(l)
+
+        tex, const = emis.get(slot), uniform.get(slot)
+        if tex is None and const is None:
+            # not predicted: dark, whatever the asset itself does, so a miss
+            # reads as a miss rather than as the asset showing through
+            e_sock.default_value = (0, 0, 0, 1)
+            bsdf.inputs["Emission Strength"].default_value = 0.0
+            stats.append(st)
+            continue
+
+        if tex is None:
+            rgb = const if assume_linear else srgb_to_linear(const)
+            st["source"] = "uniform"
+            st["lit_frac"] = 1.0 if float(np.max(rgb)) > LIN_EPS else 0.0
+            e_sock.default_value = (*[float(x) for x in rgb], 1.0)
+            bsdf.inputs["Emission Strength"].default_value = (
+                strength if st["lit_frac"] else 0.0)
+            stats.append(st)
+            continue
+
+        rgb = tex if assume_linear else srgb_to_linear(tex)
+        st["source"] = "texture"
+        st["lit_frac"] = float((rgb.max(axis=-1) > LIN_EPS).mean())
+        if st["lit_frac"] <= 0:
+            e_sock.default_value = (0, 0, 0, 1)
+            bsdf.inputs["Emission Strength"].default_value = 0.0
+            stats.append(st)
+            continue
+        out = np.empty((*rgb.shape[:2], 4), dtype=np.float32)
+        out[..., :3] = rgb
+        out[..., 3] = 1.0
+        im = new_image(f"emis_{mat.name}", out)
+        node = nt.nodes.new("ShaderNodeTexImage")
+        node.image = im
+        # follow the asset's own UV wiring, so KHR_texture_transform and
+        # non-default UV sets carry over exactly as they do on the mask path
+        donor = f.get("e_node") or upstream_image(bsdf.inputs["Base Color"])
+        if donor is not None and donor.inputs["Vector"].is_linked:
+            nt.links.new(donor.inputs["Vector"].links[0].from_socket,
+                         node.inputs["Vector"])
+        nt.links.new(node.outputs["Color"], e_sock)
+        e_sock.default_value = (1, 1, 1, 1)
+        bsdf.inputs["Emission Strength"].default_value = strength
+        stats.append(st)
+    return stats
+
+
 def assert_slot_names(sid, obj, names):
     """Refuse a prediction whose material order is not the asset's."""
     mine = [s.material.name if s.material else None for s in obj.material_slots]
@@ -300,7 +438,8 @@ def assert_slot_names(sid, obj, names):
         f"{[(a, b) for _, a, b in bad]}")
 
 
-def rebuild_emission_predicted(obj, facts, areas, masks, uniform):
+def rebuild_emission_predicted(obj, facts, areas, masks, uniform,
+                               strength=EMIT_STRENGTH):
     """Emission = PREDICTED mask x albedo, on the source asset.
 
     Kept separate from rebuild_emission() so the ground-truth path stays exactly
@@ -362,7 +501,7 @@ def rebuild_emission_predicted(obj, facts, areas, masks, uniform):
                 e_sock.default_value = (1, 1, 1, 1)
             else:
                 e_sock.default_value = (*b_const, 1.0)
-            bsdf.inputs["Emission Strength"].default_value = EMIT_STRENGTH
+            bsdf.inputs["Emission Strength"].default_value = strength
             stats.append(st)
             continue
 
@@ -392,13 +531,13 @@ def rebuild_emission_predicted(obj, facts, areas, masks, uniform):
                          node.inputs["Vector"])
         nt.links.new(node.outputs["Color"], e_sock)
         e_sock.default_value = (1, 1, 1, 1)
-        bsdf.inputs["Emission Strength"].default_value = EMIT_STRENGTH
+        bsdf.inputs["Emission Strength"].default_value = strength
         stats.append(st)
     return stats
 
 
 # --------------------------------------------------------- emission rewrite
-def rebuild_emission(obj, facts, areas):
+def rebuild_emission(obj, facts, areas, strength=EMIT_STRENGTH):
     """Replace every material's emission with mask x albedo."""
     stats = []
     for f in facts:
@@ -414,7 +553,13 @@ def rebuild_emission(obj, facts, areas):
         e_sock = bsdf.inputs["Emission Color"]
         b_sock = bsdf.inputs["Base Color"]
         e_node, e_const = f["e_node"], f["e_const"]
-        strength = f["strength"]
+        # The asset's OWN authored strength, used only to reconstruct what the
+        # asset actually emits for the fidelity stats below. It must NOT shadow
+        # the `strength` parameter, which is the CLI's --emit_strength and is
+        # what the render is driven at: this function used to assign it to
+        # `strength`, so --emit_strength never reached the ground-truth render
+        # and every rung of a strength sweep came back bit-identical.
+        asset_strength = f["strength"]
         b_node = upstream_image(b_sock)
         b_const = socket_rgb(b_sock)
         st["emissive_texture"] = e_node is not None
@@ -431,12 +576,12 @@ def rebuild_emission(obj, facts, areas):
                 e_sock.default_value = (1, 1, 1, 1)
             else:
                 e_sock.default_value = (*b_const, 1.0)
-                true = e_const * strength
+                true = e_const * asset_strength
                 st["true_mean"] = float(true.mean())
                 st["ours_mean"] = float(b_const.mean())
                 st["rel_err"] = float(np.abs(b_const - true).sum()
                                       / max(true.sum(), 1e-6))
-            bsdf.inputs["Emission Strength"].default_value = EMIT_STRENGTH
+            bsdf.inputs["Emission Strength"].default_value = strength
             stats.append(st)
             continue
 
@@ -467,10 +612,10 @@ def rebuild_emission(obj, facts, areas):
             nt.links.remove(l)
         nt.links.new(node.outputs["Color"], e_sock)
         e_sock.default_value = (1, 1, 1, 1)
-        bsdf.inputs["Emission Strength"].default_value = EMIT_STRENGTH
+        bsdf.inputs["Emission Strength"].default_value = strength
 
         # how close is mask x albedo to the emission the asset actually carries?
-        true = e_arr * strength
+        true = e_arr * asset_strength
         sel = mask > 0
         st["true_mean"] = float(true[sel].mean())
         st["ours_mean"] = float(out[..., :3][sel].mean())
@@ -846,13 +991,24 @@ def one(sid, glb, out, args):
     # the only light in the scene and it sits in a room that can show what that
     # light does.
     if args.mode == "box":
-        if args.pred_masks:
+        if args.emission_source == "true":
+            # the asset's own native emission, unmodified, at --emit_strength:
+            # no mask, no albedo substitution. area_lit_frac below still needs
+            # a stats list shaped like rebuild_emission()'s, so build one from
+            # `facts` alone (every genuinely-emissive material counts as fully
+            # lit, since nothing here restricts it to a sub-region).
+            set_true_strength(facts, args.emit_strength)
+            stats = [{"area": float(areas[f["slot"]]) if f["slot"] < len(areas)
+                      else 0.0, "mask_frac": 1.0 if f.get("emits") else 0.0}
+                     for f in facts]
+        elif args.pred_masks:
             masks, uniform, names = load_pred(args.pred_masks, sid,
                                               len(obj.material_slots))
             assert_slot_names(sid, obj, names)
-            stats = rebuild_emission_predicted(obj, facts, areas, masks, uniform)
+            stats = rebuild_emission_predicted(obj, facts, areas, masks, uniform,
+                                               args.emit_strength)
         else:
-            stats = rebuild_emission(obj, facts, areas)
+            stats = rebuild_emission(obj, facts, areas, args.emit_strength)
         emission_only_box(obj, args.azimuth, wall=args.wall,
                           scale=args.box_scale, height=args.box_height,
                           depth=args.box_depth)
@@ -897,11 +1053,24 @@ def one(sid, glb, out, args):
             floor.location.z = -0.004
         bloom_or_clear(args)
         rng = np.random.default_rng(args.seed)
-        density = rebuild_emission_baseline(obj, facts, areas, args.mode, rng)
+        density = rebuild_emission_baseline(obj, facts, areas, args.mode, rng,
+                                            strength=args.emit_strength)
         render(os.path.join(out, f"{sid}_{args.mode}.png"), res, args.samples,
                False, args.view_transform, args.exposure)
         summary = {"sid": sid, "mode": args.mode, "density": density,
-                   "camera": list(map(float, pos))}
+                   "camera": list(map(float, pos)),
+                   # the baseline panels sit in the same figure as the method
+                   # ones and have to prove the same treatment; this block used
+                   # to be missing here and only here, which the comparison
+                   # guard only caught once its legacy exemptions were removed
+                   "treatment": {"view_transform": args.view_transform,
+                                 "exposure": args.exposure,
+                                 "key": args.key,
+                                 "bg": args.bg,
+                                 "samples": args.samples,
+                                 "bloom_size": args.bloom_size,
+                                 "bloom_threshold": args.bloom_threshold,
+                                 "bloom_mix": args.bloom_mix}}
         with open(os.path.join(out, f"{sid}_{args.mode}.json"), "w") as f:
             json.dump(summary, f, indent=1)
         return summary
@@ -918,19 +1087,31 @@ def one(sid, glb, out, args):
         dark_room(bg=args.bg, key=args.key)
         if floor is not None:
             floor.location.z = -0.004
-        set_true_strength(facts, EMIT_STRENGTH)
+        set_true_strength(facts, args.emit_strength)
         bloom_or_clear(args)
         render(os.path.join(out, f"{sid}_true.png"), res, args.samples,
                False, args.view_transform, args.exposure)
 
-    # 3. dark room, emission = mask x albedo
-    if args.pred_masks:
+    # 3. dark room, emission = mask x albedo, OR a predicted emission colour
+    if args.pred_emission:
+        # a method that predicts emission RGB: its values go in unchanged, with
+        # no albedo multiply, because that multiply is our method and not a
+        # neutral rendering step
+        emis, uniform, names = load_emission(args.pred_emission, sid,
+                                             len(obj.material_slots))
+        assert_slot_names(sid, obj, names)
+        stats = rebuild_emission_direct(
+            obj, facts, areas, emis, uniform,
+            strength=(args.emit_strength if args.emission_strength_ours else 1.0),
+            assume_linear=bool(args.emission_linear))
+    elif args.pred_masks:
         masks, uniform, names = load_pred(args.pred_masks, sid,
                                           len(obj.material_slots))
         assert_slot_names(sid, obj, names)
-        stats = rebuild_emission_predicted(obj, facts, areas, masks, uniform)
+        stats = rebuild_emission_predicted(obj, facts, areas, masks, uniform,
+                                               args.emit_strength)
     else:
-        stats = rebuild_emission(obj, facts, areas)
+        stats = rebuild_emission(obj, facts, areas, args.emit_strength)
     if not args.glb_only:
         render(os.path.join(out, f"{sid}_glow.png"), res, args.samples,
                False, args.view_transform, args.exposure)
@@ -961,7 +1142,8 @@ def one(sid, glb, out, args):
                 print(f"  glb export {fmt} failed: {exc}", flush=True)
 
     total = float(sum(s["area"] for s in stats)) or 1.0
-    lit_area = float(sum(s["area"] * s["mask_frac"] for s in stats))
+    lit_area = float(sum(s["area"] * s.get("mask_frac", s.get("lit_frac", 0.0))
+                         for s in stats))
     summary = {
         "sid": sid,
         "n_materials": len(stats),
@@ -972,8 +1154,10 @@ def one(sid, glb, out, args):
                       "samples": args.samples,
                       "bloom_size": args.bloom_size,
                       "bloom_threshold": args.bloom_threshold,
-                      "bloom_mix": args.bloom_mix},
+                      "bloom_mix": args.bloom_mix,
+                      "emit_strength": args.emit_strength},
         "pred_masks": args.pred_masks,
+        "pred_emission": args.pred_emission,
         "textures": tex_info,
         "faces": faces_info,
         "bbox": [list(lo), list(hi)],
@@ -1042,10 +1226,44 @@ def main():
     ap.add_argument("--box_depth", type=float, default=1.8)
     ap.add_argument("--max_bounces", type=int, default=32)
     ap.add_argument("--diffuse_bounces", type=int, default=16)
+    ap.add_argument("--emission_source", default="mask", choices=["mask", "true"],
+                    help="box mode only. 'mask' (default, unchanged): emission = "
+                         "mask x albedo, our method's own formulation, via "
+                         "rebuild_emission()/rebuild_emission_predicted(). "
+                         "'true': the asset's own native emission texture at "
+                         "--emit_strength, via set_true_strength() (the same "
+                         "path mode=method's _true.png uses), with no mask or "
+                         "albedo substitution at all. Lets a box render show "
+                         "either the method's formulation or the asset's own "
+                         "emission, so the two can be compared at every "
+                         "strength with nothing else different.")
     ap.add_argument("--pred_masks", default=None,
                     help="directory of predicted per-material masks; "
                          "replaces the asset's own mask, and switches OFF "
                          "any material the model did not select")
+    ap.add_argument("--pred_emission", default=None,
+                    help="directory of predicted emission COLOUR textures, same "
+                         "file convention and slot-name contract as "
+                         "--pred_masks. Use this when your method predicts "
+                         "emission RGB: the values are written in unchanged, "
+                         "with NO multiply by the asset's albedo")
+    ap.add_argument("--emission_linear", type=int, default=0,
+                    help="1 if --pred_emission files are already linear. The "
+                         "default treats 8-bit PNGs as sRGB, which is what they "
+                         "almost always are; getting this wrong shifts the "
+                         "midtones by about a factor of two and looks like a "
+                         "brightness disagreement between methods")
+    ap.add_argument("--emission_strength_ours", type=int, default=0,
+                    help="1 multiplies --pred_emission values by "
+                         "--emit_strength, matching our panels' look. The "
+                         "default of 0 leaves predicted radiance alone, because "
+                         "scaling someone else's prediction is a second opinion "
+                         "about brightness rather than a rendering choice")
+    ap.add_argument("--emit_strength", type=float, default=EMIT_STRENGTH,
+                    help=f"emission strength for the mask paths (default "
+                         f"{EMIT_STRENGTH}). A LOOK CHOICE, not recovered from "
+                         f"the data: the bake stores emission as uint8 and drops "
+                         f"KHR_materials_emissive_strength")
     ap.add_argument("--camera_json", default=None,
                     help="{\"position\":[x,y,z],\"target\":[x,y,z]}; use a\n                         camera solved from ANOTHER mesh, so a remeshed\n                         prediction is framed like the shape it predicts")
     ap.add_argument("--tag", default="",
