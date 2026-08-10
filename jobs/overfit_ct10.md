@@ -2,8 +2,11 @@ title: Overfit diagnostic, 10 shapes (pw5 cond/zero + pw1 control)
 executor: overfit-test
 status: ongoing
 started: 2026-08-08 21:38
-updated: 2026-08-09 15:09
-slurm: train pw5 cond 240857 (done), zero 240858 (done); pw1 control 242172 (running); maskxfer reshard array 242142 (running, resubmitted after 240862 timed out serial at case 29/30); render pending resubmit
+updated: 2026-08-09 17:15
+slurm: 242210 (single-shape run), 242211 (400-epoch run); earlier: 240857, 240858, 242172, 242142, 242178 all completed
 link: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/_preview/overfit_condtest/
-now: page live with pw5 verdict (plateau, does not overfit); pw1 control (--pos_weight 1.0) running to tell apart broken-pipeline vs pos_weight-5-specific failure; maskxfer resharded to a 30-task array after first serial attempt timed out and stranded the render job; render to be resubmitted by hand (no dependency chain) once maskxfer array is verified fully done
+motivation: If the model cannot even memorize 10 training shapes, no 72k run can succeed; this isolates why training fails before spending more compute.
+log:
+- 2026-08-09 17:15 The model fails to memorize the 10 training shapes at either pos_weight setting (best IoU 0.42 and 0.28, against a 0.96 ceiling). So pos_weight 5 is not the sole cause of the training failures; something else in the current setup blocks memorization, or 10 shapes need far more epochs.
+- 2026-08-09 17:15 The diagnostic page is complete: rendered examples for all 10 shapes plus both training curves. Two follow-up runs are training now. One trains on a single shape to test whether the current code can still memorize at all (in July it could). The other extends the pos_weight-1 run to 400 epochs so the two settings are compared at equal length. The page updates automatically when they finish.
 outcome: 

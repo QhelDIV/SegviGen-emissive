@@ -4,8 +4,30 @@
 Same architecture as inventory_pages.py (the console Pages tab), applied to the
 jobs registry: jobs/*.md (one file per job, one writer per file) -> jobs.json
 manifest served from PUBLISH_DEST, plus a sortable/searchable offline-DataTables
-widget fragment that fetches it at load. Columns include started/updated and a
-computed freshness cell so staleness is sortable, which the owner asked for.
+widget fragment that fetches it at load.
+
+DATA MODEL (2026-08-09 log redesign, owner-directed): each job carries a
+`motivation:` (one sentence, written at registration, shown under the title)
+and an append-only `log:` block (one `- YYYY-MM-DD HH:MM <sentence>` line per
+update, newest last -- see tools/build_jobs.py's docstring for the entry-format
+contract agents write to). The table's "updated" column and staleness check are
+DERIVED from the last log line's timestamp, not the file's `updated:` field
+(kept in the file for a human skimming the raw text, but the log is now the
+authoritative continuously-appended record -- an agent could forget to bump
+`updated:` when appending a log line, but the line's own timestamp can't drift).
+`slurm:` stays in the file as reference detail (job ids belong inside log
+sentences, e.g. "training started as job 242211") but no longer gets a table
+column. `outcome:` stays for done jobs: it is the final log entry's summary,
+rendered with distinct styling both in the "latest" cell and the expanded
+timeline (see render_timeline_html()).
+
+Each row's full log renders as a DataTables CHILD ROW (native row.child() API,
+reached via the jQuery instance the offline bundle exports alongside ITable --
+see render_fragment()'s init script), toggled by clicking anywhere on the row
+(except real links). The hidden `log_full` column carries the pre-rendered
+timeline HTML AND makes the full log text searchable (DataTables searches
+column data regardless of `visible`, the same mechanism the "important" and
+"state-order" sentinel columns already relied on).
 
 Modes:
     --manifest            jobs/*.md -> PUBLISH_DEST/jobs.json   (stdlib only)
@@ -28,23 +50,41 @@ STALE_H = 3.0
 ORDER = {"ongoing": 0, "frozen": 1, "done": 2}
 BADGE_BG = {"ongoing": "#1d7a46", "frozen": "#8a6d1a", "done": "#5a6472"}
 
-COLUMNS = ["job", "status", "executor", "slurm", "started", "updated", "state-order"]
+COLUMNS = ["job", "status", "executor", "latest", "started", "updated", "log_full", "state-order"]
 # per-column <th> class, same order as COLUMNS (see render_fragment(); the
-# matching <td> classes are applied via columnDefs' className below).
-# "now / outcome" and "age" fold into the "job" / "updated" cells as a
-# .db-subline instead of getting their own column -- fewer, denser columns
-# beat a wide table that needs to scroll (2026-08-09 redesign, see
-# theme3.css's .dbwrap history comment for why scrollX + nowrap broke).
-HEAD_CLASSES = ["", "dt-nowrap", "dt-nowrap dt-hide-narrow", "dt-hide-narrow",
-                "dt-nowrap dt-right dt-hide-narrow", "dt-nowrap dt-right", ""]
+# matching <td> classes are applied via columnDefs' className below). Narrow
+# width (see theme3.css's mobile block) keeps job/status/latest visible --
+# the log-first point of this board -- and defers executor/started/updated.
+HEAD_CLASSES = ["", "dt-nowrap", "dt-nowrap dt-hide-narrow", "",
+                "dt-nowrap dt-right dt-hide-narrow",
+                "dt-nowrap dt-right dt-hide-narrow", "", ""]
+
+LOG_LINE_RE = re.compile(r"^-\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+(.*)$")
 
 
 def parse(path):
-    e = {"slug": path.stem}
-    for line in path.read_text().splitlines():
-        m = re.match(r"^(\w+):\s*(.*)$", line)
+    """Plain "key: value" lines, plus a multi-line `log:` block: every line
+    immediately after `log:` matching `- YYYY-MM-DD HH:MM <text>` is consumed
+    into e["log"] (a list of (timestamp, text) tuples, file order == append
+    order == chronological, newest last) until a line that doesn't match --
+    normally the next `key:` field (`outcome:`)."""
+    e = {"slug": path.stem, "log": []}
+    lines = path.read_text().splitlines()
+    i = 0
+    while i < len(lines):
+        m = re.match(r"^(\w+):\s*(.*)$", lines[i])
+        if m and m.group(1).lower() == "log":
+            i += 1
+            while i < len(lines):
+                lm = LOG_LINE_RE.match(lines[i])
+                if not lm:
+                    break
+                e["log"].append((lm.group(1), lm.group(2).strip()))
+                i += 1
+            continue
         if m:
             e[m.group(1).lower()] = m.group(2).strip()
+        i += 1
     return e
 
 
@@ -56,33 +96,69 @@ def age_h(ts):
         return None
 
 
+def render_timeline_html(log, has_outcome):
+    """The child-row expansion: a formatted timeline, timestamps in their own
+    column (CSS grid, see theme3.css .log-entry) so they align regardless of
+    sentence length. The final entry of a job with a recorded outcome gets a
+    distinct tag + accent (has_outcome is a status/outcome-field flag, not a
+    text match, so it can't drift from what render_fragment() considers
+    "done")."""
+    n = len(log)
+    parts = ['<div class="log-timeline">']
+    for i, (ts, text) in enumerate(log):
+        is_outcome = has_outcome and i == n - 1
+        cls = "log-entry log-entry-outcome" if is_outcome else "log-entry"
+        tag = '<span class="log-outcome-tag">outcome</span>' if is_outcome else ""
+        parts.append(f'<div class="{cls}"><span class="log-ts">{html.escape(ts)}</span>'
+                     f'<span class="log-text">{tag}{html.escape(text)}</span></div>')
+    parts.append("</div>")
+    return "".join(parts)
+
+
 def rows():
     out = []
     for p in sorted(JOBS.glob("*.md")):
         e = parse(p)
         st = e.get("status", "ongoing")
-        a = age_h(e.get("updated", ""))
+        log = e["log"] or [(e.get("updated", ""), "")]  # defensive: pre-migration file
+        has_outcome = bool(e.get("outcome", "").strip())
+        last_ts, last_text = log[-1]
+        a = age_h(last_ts)
         stale = st == "ongoing" and a is not None and a > STALE_H
+
         title = html.escape(e.get("title", e["slug"]))
         if e.get("link"):
             title = f'<a href="{html.escape(e["link"])}">{title}</a>'
-        line = e.get("outcome") if st != "ongoing" and e.get("outcome") else e.get("now", "")
-        if line:
-            title += f'<span class="db-subline">{html.escape(line)}</span>'
+        if e.get("motivation"):
+            title += f'<span class="db-subline">{html.escape(e["motivation"])}</span>'
+
         badge = ('<span class="db-badge" style="background:%s;color:#fff">%s</span>'
                  % (BADGE_BG.get(st, "#5a6472"), st))
         if stale:
             badge += ' <span class="db-badge" style="background:#8f2f2f;color:#fff">stale</span>'
-        updated = e.get("updated", "")
+
+        n = len(log)
+        is_outcome_last = has_outcome
+        tag = '<span class="log-outcome-tag">outcome</span> ' if is_outcome_last else ""
+        toggle = (f'<button type="button" class="log-toggle" aria-expanded="false">'
+                  f'{n} update{"s" if n != 1 else ""}<span class="log-chevron">&#9662;</span></button>')
+        latest = (f'<div class="log-latest{" log-latest-outcome" if is_outcome_last else ""}">'
+                  f'<span class="log-ts">{html.escape(last_ts)}</span>'
+                  f'<span class="log-text">{tag}{html.escape(last_text)}</span>{toggle}</div>')
+
+        updated = last_ts
         if a is not None:
-            # a can go slightly negative when an entry's "updated" timestamp
-            # lands after render time (clock skew, or the file was written
+            # a can go slightly negative when a log line's timestamp lands
+            # after render time (clock skew, or the file was written
             # mid-scan) -- clamp rather than show a nonsensical "-0.3h ago".
             age = "just now" if a < 0 else (f"{a:.1f}h ago" if a < 48 else f"{a/24:.0f}d ago")
             updated += f'<span class="db-subline">{age}</span>'
+
+        log_full_html = render_timeline_html(log, has_outcome)
+
         out.append([title, badge, html.escape(e.get("executor", e.get("owner", ""))),
-                    html.escape(e.get("slurm", "")), e.get("started", ""),
-                    updated, ORDER.get(st, 3)])
+                    latest, e.get("started", ""), updated, log_full_html,
+                    ORDER.get(st, 3)])
     return out
 
 
@@ -114,14 +190,14 @@ DT_ARGS = {
     "autoWidth": False,
     "scrollX": False,
     # ongoing first (state sentinel), then most recently updated
-    "order": [[6, "asc"], [5, "desc"]],
+    "order": [[7, "asc"], [5, "desc"]],
     "columnDefs": [
         {"targets": 1, "className": "dt-nowrap"},
         {"targets": 2, "className": "dt-nowrap dt-hide-narrow"},
-        {"targets": 3, "className": "dt-hide-narrow"},
         {"targets": 4, "className": "dt-nowrap dt-right dt-hide-narrow"},
-        {"targets": 5, "className": "dt-nowrap dt-right"},
-        {"targets": 6, "visible": False},
+        {"targets": 5, "className": "dt-nowrap dt-right dt-hide-narrow"},
+        {"targets": 6, "visible": False},  # log_full (searchable, drives the child row)
+        {"targets": 7, "visible": False},  # state-order sentinel (searchable)
     ],
     "text_in_header_can_be_selected": True,
     "style": {"caption-side": "bottom", "margin": "auto",
@@ -131,7 +207,8 @@ DT_ARGS = {
 # click anywhere on a sortable header (not just the tiny order-indicator
 # glyph) to sort -- same convenience delegate as inventory_pages.py's
 # CHROME_JS, duplicated rather than shared since this is the only piece of
-# that script jobs also needs.
+# that script jobs also needs. The row-expand delegate lives in
+# render_fragment()'s init script, not here, since it needs the DataTable API.
 SORT_CLICK_JS = """<script>
 document.addEventListener('click', function (e) {
   var th = e.target.closest('th.dt-orderable-asc, th.dt-orderable-desc');
@@ -163,10 +240,18 @@ def render_fragment():
                 'Loading the live jobs board&hellip;</td></tr></tbody></table>'
                 '<noscript><p>JavaScript required; raw data at '
                 f'<a href="{SITE_ROOT}/jobs.json">jobs.json</a>.</p></noscript>')
+    # Row-click-to-expand: reads the DataTable API off the SAME table element
+    # via the jQuery the offline bundle exports (`$(table).DataTable()`
+    # returns the ALREADY-initialized instance, it does not re-init --
+    # verified live before relying on it), so row.child() -- DataTables'
+    # native per-row detail-panel API -- is available without needing to
+    # dig into ITable's own internals. log_full (column index 6, hidden)
+    # carries the pre-rendered timeline HTML; row.data()[6] reads it
+    # regardless of the column's visible/hidden CSS state.
     init_script = f"""<script type="module">
     (async () => {{
         async function init() {{
-            const {{ ITable }} = await window.{version_var};
+            const {{ ITable, jQuery: $ }} = await window.{version_var};
             const table = document.querySelector("#jobsdb:not(.dataTable)");
             if (!table) return;
             const resp = await fetch("{SITE_ROOT}/jobs.json", {{ cache: "no-cache" }});
@@ -174,6 +259,25 @@ def render_fragment():
             let dt_args = {json.dumps(dt_args)};
             dt_args["data_json"] = JSON.stringify(manifest.data);
             new ITable(table, dt_args);
+            const dt = $(table).DataTable();
+            // jQuery delegation on "tbody tr" also matches the child row's
+            // OWN <tr> (the one DataTables inserts to hold the expanded
+            // timeline) -- dt.row() on that node is not reliably an empty
+            // selection, so guard on CONTENT (.log-timeline ancestor) rather
+            // than trust row.length; a click inside the expanded panel must
+            // never toggle it shut or touch an unrelated row.
+            $(table).on("click", "tbody tr", function (e) {{
+                if (e.target.closest("a") || e.target.closest(".log-timeline")) return;
+                const row = dt.row(this);
+                if (!row.length) return;
+                if (row.child.isShown()) {{
+                    row.child.hide();
+                    this.classList.remove("log-expanded");
+                }} else {{
+                    row.child(row.data()[6]).show();
+                    this.classList.add("log-expanded");
+                }}
+            }});
         }}
         if (window.{version_var}) {{ await init(); }}
         else {{ document.addEventListener("DOMContentLoaded", init); }}
