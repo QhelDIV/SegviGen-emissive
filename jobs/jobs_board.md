@@ -2,7 +2,7 @@ title: Jobs board evolution (design and data model)
 executor: jobs-redesign
 status: ongoing
 started: 2026-08-09 14:30
-updated: 2026-08-09 18:27
+updated: 2026-08-09 18:31
 slurm: 
 link: 
 page: none (the board itself is the deliverable)
@@ -21,4 +21,8 @@ log:
 - 2026-08-09 18:21 [master] Owner refinement round dispatched: log lines get author labels with real agent names, owner lines slightly weighted, and review asks become permanent violet log lines instead of vanishing when a flag clears.
 - 2026-08-09 18:26 [master] For your review: Expand this row's log timeline: every line now names its speaker (agent names in gray, owner in heavier text), and this very ask appears there as a violet line. Is the who-said-what now clear?
 - 2026-08-09 18:27 [jobs-redesign] Verified live: every timeline line now names its speaker in gray, the owner would read heavier if present, and this row's own review ask appears as the one violet line, confirmed in both themes at both widths.
+- 2026-08-09 18:31 [owner] I see the change, but one thing not clear: I saw both 'executor' and 'jobs-redesigner'. They are the same one?
+- 2026-08-09 18:31 [master] Same agent. The word executor was the generic label on lines written before authorship existed; the board now shows the real executor name on those lines too, so the generic word no longer appears anywhere.
+- 2026-08-09 18:31 [owner] Also, I don't see my words/feedback/review after the master For your review message in the jobs redesign entry?
+- 2026-08-09 18:31 [master] Correct, and fixed as standing practice: the owner's feedback now enters this log verbatim as owner lines at the moment the master relays it, so the timeline carries the full exchange, not just one side.
 outcome: 
