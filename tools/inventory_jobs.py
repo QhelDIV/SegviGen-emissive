@@ -237,7 +237,14 @@ def rows():
             title += f'<span class="db-subline">{html.escape(e["motivation"])}</span>'
 
         needs_raw = (e.get("needs") or "").strip()
-        needs_eval = needs_raw.lower() == NEEDS_EVAL
+        # `needs: evaluation` may carry the review ask after a colon or pipe:
+        #   needs: evaluation: Open the board and judge the pinned rows.
+        # The ask is REQUIRED in practice (owner feedback 2026-08-09: a bare
+        # flag gives no hint what to review); a bare flag still pins but
+        # renders a generic instruction.
+        m_eval = re.match(r"(?i)^evaluation\s*(?:[:|]\s*(.*))?$", needs_raw)
+        needs_eval = bool(m_eval)
+        review_ask = ((m_eval.group(1) or "").strip() if m_eval else "")
 
         badge = ('<span class="db-badge" style="background:%s;color:#fff">%s</span>'
                  % (BADGE_BG.get(st, "#5a6472"), st))
@@ -264,6 +271,11 @@ def rows():
         latest = (f'<div class="log-latest{" log-latest-outcome" if is_outcome_last else ""}">'
                   f'<span class="log-ts">{html.escape(last_ts)}</span>'
                   f'<span class="log-text">{tag}{html.escape(last_text)}</span>{toggle}</div>')
+        if needs_eval:
+            ask_text = review_ask or ("Open the linked page, judge it with your own eyes, "
+                                      "and give a verdict in the CLI.")
+            latest = (f'<div class="log-review-ask">Review: {html.escape(ask_text)}</div>'
+                      + latest)
 
         updated = last_ts
         if a is not None:
