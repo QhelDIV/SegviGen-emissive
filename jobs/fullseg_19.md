@@ -1,5 +1,6 @@
 title: Original SegviGen part segmentation, 19 shapes
 executor: fullseg-19b
+track: research
 status: done
 started: 2026-08-08 23:10
 updated: 2026-08-09 16:20

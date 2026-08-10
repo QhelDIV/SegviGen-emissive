@@ -24,6 +24,13 @@ one line per common case:
     tools/xgjobs reopen <slug> "why it's active again"
     tools/xgjobs flag <slug> --ask "what to open and judge"  # MASTER-ONLY;
     tools/xgjobs unflag <slug>                               # --ask is REQUIRED
+    tools/xgjobs set-track <slug> research|tooling|paper
+
+`--track` is REQUIRED on `start` (2026-08-10, owner-directed: separate
+tool-development jobs from research jobs on the board); `set-track` corrects
+it on an existing job. Only those three values exist -- the board renders a
+muted chip per track and an All/Research/Tooling/Paper filter above the
+table.
 
 Every verb that appends a log line stamps WHO is speaking (`--as NAME`, else
 the XGJOBS_ACTOR environment variable, else a per-verb default -- "executor"
@@ -38,8 +45,9 @@ be misread as someone else's, especially not the owner's.
 Hand-editing jobs/*.md directly is DEPRECATED for agents; it remains a
 documented EMERGENCY path only (e.g. recovering a file the CLI refuses to
 touch). If you ever do need to hand-edit, the field order inventory_jobs.py
-expects is: title / executor / status(ongoing|done|frozen) / started /
-updated / slurm / link / page / needs / motivation / log: / outcome. `page:`
+expects is: title / executor / track(research|tooling|paper) /
+status(ongoing|done|frozen) / started / updated / slurm / link / page /
+needs / motivation / log: / outcome. `page:`
 is the canonical pages.json name for this job's results page (not a URL;
 `page: none (<reason>)` for a job that legitimately produces none -- a DONE
 job with `page:` unset entirely gets an amber "no page" flag as a prompt).

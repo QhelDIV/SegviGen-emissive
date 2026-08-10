@@ -1,5 +1,6 @@
 title: xgjobs CLI (the board's command vocabulary)
 executor: jobs-redesign
+track: tooling
 status: done
 started: 2026-08-09 18:05
 updated: 2026-08-09 18:26

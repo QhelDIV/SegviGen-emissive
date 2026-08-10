@@ -1,5 +1,6 @@
 title: Overfit diagnostic, 10 shapes (pw5 cond/zero + pw1 control)
 executor: overfit-test
+track: research
 status: ongoing
 started: 2026-08-08 21:38
 updated: 2026-08-09 17:15

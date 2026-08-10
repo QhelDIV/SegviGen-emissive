@@ -1,8 +1,9 @@
 title: Name and document the project's rendering setups
 executor: render-doc
+track: research
 status: ongoing
 started: 2026-08-09 18:05
-updated: 2026-08-09 20:10
+updated: 2026-08-09 18:18
 slurm: 242221 (condition render), 242225 (segmentation inference), 242222 (sweep video frames, 11-task array)
 link: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/workspace/rendering/
 page: workspace/rendering
@@ -13,4 +14,6 @@ log:
 - 2026-08-09 19:40 Three things the scripts say that the agreed definitions did not. The bright studio setup covers two different renders, one of which is the actual image fed to the model and one of which is only a reference panel, and they share no lighting or camera. The part-colour setup likewise covers two, and the one currently in use is not flat-shaded but ordinary studio shading over the model's own colours. And three of the published settings are not the scripts' own defaults, so a command that leans on defaults will quietly produce something else.
 - 2026-08-09 19:55 Re-checked the live state on request. The page and its deep link both load, all twelve images on it load, and the link the console tree points at is exactly the address that was published, so the earlier missing-page report was from before it went up. The workspace landing page was rebuilt as well so its own copy of the navigation lists the new page rather than relying on the runtime refresh.
 - 2026-08-09 20:10 Reopened for the owner's three upgrades: put all five setups on one asset in the opening figure, turn the strength ladder into a short looping video, and get page versioning in place. The condition render of the weapon is done, its segmentation is running on a GPU, and the video frames are rendering. One finding already: the versioning tool was ported into this repo three days ago and is in production on another page, so that item needed a written policy for which pages version rather than a port.
+- 2026-08-10 01:20 The opening figure stays on the sci-fi weapon. Every asset that already has the box and key-lit renders needed for the figure comes from the emissive set, and the pretrained segmentation model does badly on all of them, so switching would not have bought a better segmentation panel. Switching to a shape that segments well is not possible either, because those shapes do not emit and their box render would be a black frame. The segmentation panel is therefore labelled as the weakest of the five, and the four other predictions go on the page as evidence that the weakness is family-wide rather than one unlucky asset. The condition renders, the segmentation runs and the four-asset check are all finished; the video frames are two thirds remaining and the encoder is written and already tested end to end on stand-in frames.
+- 2026-08-09 18:18 [executor] The sweep video frames are two thirds rendered and every frame checked so far was made with the box settings from one fixed camera. The five setups are settled: the opening figure stays on the sci-fi weapon, because the four other emissive assets I tested segment even worse than it does, and shapes that segment well do not emit so their box render would be a black frame.
 outcome: RENDERING.md at the repo root plus a workspace page, both covering all five setups with verified parameters and a side-by-side figure of one asset under three of them. The page passed the width checks at six widths including phone width, and every image on it loads.

@@ -16,10 +16,15 @@ source (this workstation's local clock, never a file mtime or a hand-typed
 guess), and a fixed field layout that only this tool writes.
 
 Verbs:
-    xgjobs start <slug> --title T --motivation M --executor E
+    xgjobs start <slug> --title T --motivation M --executor E --track TRACK
         (--page NAME | --no-page REASON) [--log SENTENCE]
         Create jobs/<slug>.md. Refuses if the file already exists -- use
-        log/done/frozen/reopen to update an existing job.
+        log/done/frozen/reopen to update an existing job. --track is
+        REQUIRED (research | tooling | paper -- see TRACK below).
+    xgjobs set-track <slug> TRACK
+        Set or correct an existing job's track (research | tooling | paper).
+        A pure metadata correction, not a narrated event: no log line, no
+        `updated:` bump.
     xgjobs log <slug> "sentence"
         Append one dated log line to an existing job.
     xgjobs done <slug> --outcome "sentence"
@@ -41,6 +46,14 @@ Verbs:
         exists to prevent -- omitting it is an error, not a shortcut.
     xgjobs unflag <slug>
         Clear needs: evaluation (the master, after the owner's verdict).
+
+TRACK (2026-08-10, owner-directed: "many of the jobs are tool develops
+(xgpage, xgtop, ...), we mingle them with the lightgen jobs" -- separate the
+genres): every job carries a `track:` -- research, tooling, or paper. --track
+is REQUIRED on `start`; `set-track` corrects it on an existing job. Any other
+value is refused (argparse choices enforce the three; there is no free-text
+track). The board renders it as a small muted chip next to the status badge
+and offers an All/Research/Tooling/Paper filter.
 
 Every verb: reads the current file (if any) under an flock'd per-slug lock
 so two concurrent calls on the same slug never interleave (see locked());
@@ -73,10 +86,11 @@ as someone else's, especially not the owner's -- that confusion is exactly
 what this feature exists to prevent.
 
 Examples (one per verb):
-    tools/xgjobs start render_doc --executor render-doc \\
+    tools/xgjobs start render_doc --executor render-doc --track research \\
         --title "Name and document the project's rendering setups" \\
         --motivation "Figures use several lighting setups and nobody can tell which one a figure used." \\
         --no-page "not started yet"
+    tools/xgjobs set-track render_doc research
     tools/xgjobs log render_doc "Read every render script and cross-checked each parameter against a real published render."
     tools/xgjobs done render_doc --outcome "RENDERING.md and a workspace page cover all five setups with verified parameters."
     tools/xgjobs frozen render_doc --reason "Blocked on a render farm allocation."
@@ -108,7 +122,11 @@ TIME_FMT = "%Y-%m-%d %H:%M"
 # canonical field order; "needs" (optional, omitted when unset) and
 # "motivation" are appended after this run, then log:/outcome -- see
 # serialize(). Matches every hand-migrated jobs/*.md file already on disk.
-FIELD_ORDER = ["title", "executor", "status", "started", "updated", "slurm", "link", "page"]
+FIELD_ORDER = ["title", "executor", "track", "status", "started", "updated", "slurm", "link", "page"]
+# the only three genres the board separates (2026-08-10) -- no free-text
+# track, so there is nothing for lint() to judge here: argparse `choices`
+# on both start's --track and set-track's positional IS the validation.
+TRACK_CHOICES = ["research", "tooling", "paper"]
 
 BANNED_WORDS = ["corpus", "audit", "contact sheet"]
 TASK_ID_RE = re.compile(r"#\d+")
@@ -219,7 +237,8 @@ def safe_write(path, e, expected_log_len):
     ok = (len(reparsed["log"]) == expected_log_len
           and reparsed.get("title") == (e.get("title") or "")
           and reparsed.get("status") == (e.get("status") or "")
-          and reparsed.get("needs", "") == (e.get("needs") or ""))
+          and reparsed.get("needs", "") == (e.get("needs") or "")
+          and reparsed.get("track", "") == (e.get("track") or ""))
     if not ok:
         tmp.unlink(missing_ok=True)
         sys.exit("error: the file this command produced did not round-trip through the "
@@ -257,11 +276,26 @@ def cmd_start(args):
                      f'use log/done/frozen/reopen to update it.')
         ts = now()
         author = resolve_actor(args, args.executor)
-        e = {"title": args.title, "executor": args.executor, "status": "ongoing",
-             "started": ts, "updated": ts, "slurm": "", "link": "", "page": page_value,
-             "motivation": args.motivation, "log": [(ts, author, first_log)], "outcome": ""}
+        e = {"title": args.title, "executor": args.executor, "track": args.track,
+             "status": "ongoing", "started": ts, "updated": ts, "slurm": "", "link": "",
+             "page": page_value, "motivation": args.motivation,
+             "log": [(ts, author, first_log)], "outcome": ""}
         safe_write(path, e, expected_log_len=1)
     print(f"jobs/{args.slug}.md created", file=sys.stderr)
+    rebuild_board()
+
+
+def cmd_set_track(args):
+    """Corrects/sets an existing job's track. A pure metadata fix, not a
+    narrated event (unlike every other verb here): no log line, no
+    `updated:` bump -- this is the tool equivalent of fixing a typo in a
+    field, not something that happened at a point in time."""
+    path = require_exists(args.slug)
+    with locked(args.slug):
+        e = ij.parse(path)
+        e["track"] = args.track
+        safe_write(path, e, expected_log_len=len(e["log"]))
+    print(f"jobs/{args.slug}.md: track set to {args.track}", file=sys.stderr)
     rebuild_board()
 
 
@@ -384,11 +418,19 @@ def main():
     p.add_argument("--title", required=True)
     p.add_argument("--motivation", required=True)
     p.add_argument("--executor", required=True)
+    p.add_argument("--track", required=True, choices=TRACK_CHOICES,
+                    help="which genre this job belongs to (owner-directed 2026-08-10: "
+                         "separate tool-development work from research work)")
     p.add_argument("--page", help="the canonical pages.json name this job's results page will use")
     p.add_argument("--no-page", metavar="REASON", help="this job legitimately produces no page")
     p.add_argument("--log", help='first log line (default: "Job started.")')
     add_as_arg(p, '"executor"')
     p.set_defaults(func=cmd_start)
+
+    p = sub.add_parser("set-track", help="set/correct an existing job's track")
+    p.add_argument("slug")
+    p.add_argument("track", choices=TRACK_CHOICES)
+    p.set_defaults(func=cmd_set_track)
 
     p = sub.add_parser("log", help="append one dated update line")
     p.add_argument("slug")

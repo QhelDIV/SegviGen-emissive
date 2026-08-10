@@ -1,11 +1,12 @@
 title: Page-relationship graph console view
 executor: xgpage-designer
-status: done
-needs: evaluation: Open the Graph tab. Drag, zoom, search a page name, click a node, hover to see its neighborhood. Is this map useful for orienting in the project? Verdict in the CLI.
+track: tooling
+status: ongoing
 started: 2026-08-09 16:30
-updated: 2026-08-09 17:55
-slurm:
+updated: 2026-08-09 18:43
+slurm: 
 link: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/graph.html
+page: 
 motivation: The owner asked for an Obsidian-style graph of the project's published pages, so the owner and future agents can see how pages relate and how the project developed, as a permanent tab on the console rather than a one-off page.
 log:
 - 2026-08-09 16:45 found that the page-relationship graph needed pages the console's own page inventory could not see: workspace/rendering, workspace/render_sweep, workspace/diagnostics, and workspace/paper_skeleton live one directory level under workspace/, and the existing scan only ever looked at the top level, so those four pages were invisible everywhere, not just in the graph. Added a "workspace" tier to the page scan so they show up in the Pages tab too, not only the graph.
@@ -14,5 +15,7 @@ log:
 - 2026-08-09 17:35 fixed the unreadable labels (node markers now stay a constant readable size no matter how far the view is zoomed out) and fixed a real bug where the initial view was cropping out most of the graph instead of framing it, found by checking every node's on-screen position rather than trusting a screenshot alone.
 - 2026-08-09 17:50 full QA pass done: rebuilding the graph twice with no changes reproduces the exact same layout, adding a new linked page leaves every existing page's position untouched, all the interactions were driven and checked by script, and the page loads with zero requests to any external site. Verdict: done, live on the console as the new Graph tab.
 - 2026-08-09 17:59 fixed a build ordering bug the team lead flagged: the console's full build was reading yesterday's job list when it built the pages table, because it built the pages tab before the jobs tab; swapped the order so jobs always refresh first. Also wrapped the graph tab's own build step so a bug in it can never take down anyone else's console rebuild, and confirmed the temporary QA fixture page from the layout test left no trace anywhere (page list, graph data, or the page-scan cache).
+- 2026-08-09 18:43 [owner] It is in general a good first version. I don't want to give too detailed feedbacks, but I want to say this in general: currently the dev of this does not include a simulated user for it, and no evaluation on the interaction results. For example, if I click one node, things get cluttered, and I have to refresh the page to reset. That's one feedback, have a real self-evaluation like a pro front end team does. The other feedback is I still dont' see clear patterns / linkage / logical flow from the visual.
+- 2026-08-09 18:43 [master] Review complete; flag cleared.
+- 2026-08-09 18:43 [master] Reopened for the owner's iteration round: an interaction state model with simulated-user QA, and structure that shows development flow (a timeline mode and curated relationship edges).
 outcome: The Graph tab is live on the console (41 pages, 24 real content links, 23 pages not yet cross-linked to anything). Positions are remembered between rebuilds so the owner's mental map of the graph stays stable; only genuinely new or newly-linked pages move.
-- 2026-08-09 17:59 The graph is master-reviewed: em dashes removed from the page prose, everything committed, and a 20-minute rebuild schedule now keeps the graph fresh no matter who publishes a page. Waiting on the owner to look.

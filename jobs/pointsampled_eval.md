@@ -1,5 +1,6 @@
 title: Point-sampled eval, five checkpoints + ceilings
 executor: pointsampled-eval
+track: research
 status: done
 started: 2026-08-07 16:20
 updated: 2026-08-09 15:07

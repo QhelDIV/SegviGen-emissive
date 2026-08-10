@@ -1,9 +1,16 @@
 title: Referable figures and thumbnail strip (engine features)
 executor: fig-ref
-status: ongoing
+track: tooling
+status: done
 started: 2026-08-09 17:45
+updated: 2026-08-09 18:00
+slurm: 
+link: 
 page: none (engine feature, visible on every rebuilt page)
 motivation: Figures should be citable like in a paper (numbered, clickable references) and each page should show its figures at a glance in the side rail, so dense pages can be scanned quickly.
 log:
 - 2026-08-09 17:45 Job started. Two engine features: automatic per-page figure numbering with clickable references, and a thumbnail strip of all figures under the page outline.
 - 2026-08-09 17:50 Registered late by the master during a board reconciliation; work dispatched minutes earlier.
+- 2026-08-09 18:00 Both features landed in the engine (~/studio/xgpage src/xgpage/core.py, assets/xg2.js, assets/xg3.js, assets/theme2.css, assets/theme3.css). Numbering is a marker/resolve pass in page(): every fig()/fig_row()/fig_grid()/method_matrix()/compare_slider()/annotated_figure()/hbar_chart(note=...) call embeds an inert marker, page() resolves all of them into real "Figure N." captions, #fig-N anchors, and figref() links in one pass at the end. 65 pytest cases pass (17 new, covering ordering, key vs position figref, forward references, the manual num= override staying fully separate from the auto sequence, duplicate-key and dangling-figref build errors, and the fig_numbers=False opt-out). 24 node:test JS unit cases pass unchanged after refactoring xg3.js's scrollspy into a shared makeSpy() factory used by both the section outline and the new thumbnail strip.
+- 2026-08-09 18:00 Verified with Playwright on a scratch page exercising every figure type plus figref by key/position/forward-reference: correct numbering order, working anchors, working thumbnail strip (image and SVG-chart thumbnails, click-jump, scrollspy highlight, internal scroll with many figures), no page overflow at 1600/1400/1320/1024/390, both themes. Rebuilt and republished the live lightgen console (tools/build_console.py --publish) as the real-repo verification: clean render, no leaked markers, no figure strip on a page with zero figures (correct). Deliberately did NOT rebuild web/_preview/rendering, render_sweep, paper_v3, fullseg_19, strength_ladder, overfit_condtest, or fig7_segvigen -- each has an actively-matching agent name in the session roster and web/_preview/ is untracked/uncommitted, so a rebuild risked clobbering in-flight work; render-doc's own note already says it will rebuild the Rendering setups page after this lands. Documented both features in the xgpage SKILL.md and the package's DESIGN.md (required, engine is the source of truth).
+outcome: Both features live in the xgpage engine (uncommitted, awaiting review): automatic figure numbering + figref() cross-references, and a runtime figure-thumbnail strip in the v3 outline rail. 65 pytest + 24 node:test cases pass; verified by Playwright (numbering order, anchors, figref by key/position/forward-reference, thumbnail click-jump, scrollspy, internal scroll, 5-width matrix, both themes) on a scratch page, plus a real republish of the live lightgen console with zero regressions. Did not touch web/_preview pages owned by other active agents (rendering, render_sweep, paper_v3, fullseg_19, strength_ladder, overfit_condtest, fig7_segvigen); render-doc will pick up the Rendering setups page rebuild.

@@ -1,5 +1,6 @@
 title: 24h conditioned training, pos_weight 1 (uncapped twin)
 executor: team-lead
+track: research
 status: done
 started: 2026-08-08 16:50
 updated: 2026-08-09 15:07

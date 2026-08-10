@@ -1,8 +1,9 @@
 title: Jobs board evolution (design and data model)
 executor: jobs-redesign
+track: tooling
 status: done
 started: 2026-08-09 14:30
-updated: 2026-08-09 18:35
+updated: 2026-08-09 18:56
 slurm: 
 link: 
 page: none (the board itself is the deliverable)
@@ -28,4 +29,7 @@ log:
 - 2026-08-09 18:34 [master] Owner labels are now small filled chips in the accent color, unmissable in a timeline while the sentence stays normal ink. The review flag is cleared on the owner's good.
 - 2026-08-09 18:34 [master] Review complete; flag cleared.
 - 2026-08-09 18:35 [master] The board is the owner's attention instrument, evolved through six feedback rounds in one night: a sortable database in the console, append-only per-job logs with authored lines (owner words verbatim, in accent chips), jobs and pages cross-linked, review flags that pin with a stated ask and leave a violet trace, recency heat, and the xgjobs tool enforcing all of it at write time. Owner verdict: good.
-outcome: The board is the owner's attention instrument, evolved through six feedback rounds in one night: a sortable database in the console, append-only per-job logs with authored lines (owner words verbatim, in accent chips), jobs and pages cross-linked, review flags that pin with a stated ask and leave a violet trace, recency heat, and the xgjobs tool enforcing all of it at write time. Owner verdict: good.
+- 2026-08-09 18:53 [jobs-redesign] Reopening for the track field round: separating tooling jobs from research jobs on the board, per owner feedback.
+- 2026-08-09 18:56 [jobs-redesign] Verified live: filtering to each track shows exactly the right rows (four tooling, one paper, eight research, thirteen with all selected), the track label sits quietly next to the status badge and reads correctly in both themes, and it hides below phone width along with everything else while the filter itself keeps working there. Also checked the track label sits cleanly next to the review flag when a job carries both.
+- 2026-08-09 18:56 [jobs-redesign] Every job now carries a track of research, tooling, or paper, set through the board's command-line tool and shown as a small muted label next to its status. A new filter above the table switches between all jobs and just one track, and the four tooling jobs (the board itself, its command tool, referable figures, and the page graph) now read separately from the eight research jobs and the one paper job.
+outcome: Every job now carries a track of research, tooling, or paper, set through the board's command-line tool and shown as a small muted label next to its status. A new filter above the table switches between all jobs and just one track, and the four tooling jobs (the board itself, its command tool, referable figures, and the page graph) now read separately from the eight research jobs and the one paper job.

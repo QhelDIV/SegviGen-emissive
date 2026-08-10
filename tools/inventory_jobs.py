@@ -60,6 +60,27 @@ for future use and renders as plain quiet text next to status, never a chip,
 never a pin -- an unrecognized value should never look like it's demanding
 attention it wasn't asked to demand.
 
+TRACK (2026-08-10, owner-directed: "many of the jobs are tool develops
+(xgpage, xgtop, ...), we mingle them with the lightgen jobs" -- separate the
+genres): each job carries a `track:` of research, tooling, or paper (see
+tools/xgjobs -- `--track` is required on `start`, `set-track` corrects an
+existing job; there is no free-text track). It renders as a small MUTED
+chip next to the status badge (deliberately quieter than the solid-color
+status/stale/no-page badges -- colored text on a faint tint, no white-on-
+saturated fill, so it reads as a category label, not another alert) and
+hides below the 640px mobile breakpoint (reuses the existing
+`.dt-hide-narrow` rule -- see the module docstring's mobile note -- so it
+never adds to the "badges stack up" problem at phone width; the filter
+still works there, it just has nothing to show in the row itself). An
+unrecognized track value (should not happen given xgjobs enforces the
+three, but the file format itself does not) renders as plain quiet text,
+same as an unrecognized `needs:` value -- never a colored chip. A hidden
+`track_raw` column (last column, see COLUMNS) carries the normalized value
+for the client-side All/Research/Tooling/Paper filter pills built in
+render_fragment() -- exact-match regex search on that column, "All" clears
+it. Default view is All; the filter does not change sort order or the
+attention bands.
+
 Recency heat (ongoing jobs only, latest-cell text + timestamp only, never
 the whole row, never a flagged row) is computed CLIENT-SIDE in
 render_fragment()'s init script from the hidden `last_ts` column, not
@@ -112,21 +133,24 @@ EVAL_BADGE_BG = "var(--violet-ink)"  # theme-aware (unlike the other fixed-hex b
 # on purpose: it's a CSS custom property, correct in both themes automatically); distinct
 # hue from amber (no-page) and the green/gray/red status+stale badges -- "for your review"
 NEEDS_EVAL = "evaluation"
+TRACK_VALUES = {"research", "tooling", "paper"}  # see TRACK in module docstring
 
-# page_name, slug, last_ts, status_raw: hidden (see module docstring's
-# JOB-PAGE JOIN and ATTENTION BANDS sections). last_ts/status_raw are plain
-# (unescaped-for-display) values purely for the client-side heat computation
-# -- parsing them back out of rendered HTML would be needless fragility when
+# page_name, slug, last_ts, status_raw, track_raw: hidden (see module
+# docstring's JOB-PAGE JOIN, ATTENTION BANDS, and TRACK sections).
+# last_ts/status_raw/track_raw are plain (unescaped-for-display) values
+# purely for client-side computation (recency heat, the track filter) --
+# parsing them back out of rendered HTML would be needless fragility when
 # Python already has them as plain strings.
 COLUMNS = ["job", "status", "executor", "latest", "started", "updated",
-           "log_full", "state-order", "page_name", "slug", "last_ts", "status_raw"]
+           "log_full", "state-order", "page_name", "slug", "last_ts", "status_raw",
+           "track_raw"]
 # per-column <th> class, same order as COLUMNS (see render_fragment(); the
 # matching <td> classes are applied via columnDefs' className below). Narrow
 # width (see theme3.css's mobile block) keeps job/status/latest visible --
 # the log-first point of this board -- and defers executor/started/updated.
 HEAD_CLASSES = ["", "dt-nowrap", "dt-nowrap dt-hide-narrow", "",
                 "dt-nowrap dt-right dt-hide-narrow",
-                "dt-nowrap dt-right dt-hide-narrow", "", "", "", "", "", ""]
+                "dt-nowrap dt-right dt-hide-narrow", "", "", "", "", "", "", ""]
 
 LOG_LINE_RE = re.compile(r"^-\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+(?:\[([^\]]+)\]\s+)?(.*)$")
 NONE_PAGE_RE = re.compile(r"(?i)^none\b\s*(?:\(([^)]*)\))?")
@@ -302,6 +326,19 @@ def rows():
             badge += (' <span class="db-badge" style="background:%s;color:#fff" '
                       'title="done with no page: recorded -- add one, or page: none (reason)">'
                       'no page</span>' % NO_PAGE_BADGE_BG)
+        track = (e.get("track") or "").strip().lower()
+        if track in TRACK_VALUES:
+            # muted chip (see module docstring's TRACK section): colored
+            # text on a faint tint, not another white-on-solid alert badge.
+            # dt-hide-narrow reuses the mobile table rule as-is (it targets
+            # any descendant of table.dbtable, not just th/td).
+            badge += (f' <span class="db-badge-track db-badge-track-{track} dt-hide-narrow">'
+                      f'{track}</span>')
+        elif track:
+            # a track value outside the three xgjobs enforces -- should not
+            # happen, but the raw file format doesn't stop a hand-edit typo.
+            # Plain quiet text, same treatment as an unrecognized needs:.
+            badge += f' <span class="db-note-inline dt-hide-narrow">{html.escape(track)}</span>'
         if needs_eval:
             badge = ('<span class="db-badge db-badge-eval" style="background:%s;color:#fff">'
                       'for your review</span> ' % EVAL_BADGE_BG) + badge
@@ -342,7 +379,7 @@ def rows():
 
         out.append([title, badge, html.escape(e.get("executor", e.get("owner", ""))),
                     latest, e.get("started", ""), updated, log_full_html,
-                    band, page_name, e["slug"], last_ts, st])
+                    band, page_name, e["slug"], last_ts, st, track])
     return out
 
 
@@ -386,6 +423,7 @@ DT_ARGS = {
         {"targets": 9, "visible": False},  # slug (row-id anchor target)
         {"targets": 10, "visible": False},  # last_ts (client-side heat computation)
         {"targets": 11, "visible": False},  # status_raw (client-side heat: ongoing only)
+        {"targets": 12, "visible": False},  # track_raw (client-side track filter)
     ],
     "text_in_header_can_be_selected": True,
     "style": {"caption-side": "bottom", "margin": "auto",
@@ -428,6 +466,18 @@ def render_fragment():
                 'Loading the live jobs board&hellip;</td></tr></tbody></table>'
                 '<noscript><p>JavaScript required; raw data at '
                 f'<a href="{SITE_ROOT}/jobs.json">jobs.json</a>.</p></noscript>')
+    # Track filter pills (2026-08-10, see module docstring's TRACK section):
+    # a plain hand-built control, not a DataTables "layout" feature -- wired
+    # up below against the same `dt` instance the row-expand delegate uses.
+    # Sits directly above the table, next to the search/pageLength toolbar
+    # DataTables inserts when it wraps the <table>. Single-select: exactly
+    # one pill is aria-pressed at a time, "All" by default (no filter).
+    track_filter = ('<div class="track-filter" role="group" aria-label="filter jobs by track">'
+                    '<button type="button" class="track-pill" data-track="" aria-pressed="true">All</button>'
+                    '<button type="button" class="track-pill" data-track="research" aria-pressed="false">Research</button>'
+                    '<button type="button" class="track-pill" data-track="tooling" aria-pressed="false">Tooling</button>'
+                    '<button type="button" class="track-pill" data-track="paper" aria-pressed="false">Paper</button>'
+                    '</div>')
     # Row-click-to-expand: reads the DataTable API off the SAME table element
     # via the jQuery the offline bundle exports (`$(table).DataTable()`
     # returns the ALREADY-initialized instance, it does not re-init --
@@ -459,6 +509,20 @@ def render_fragment():
             dt_args["data_json"] = JSON.stringify(manifest.data);
             new ITable(table, dt_args);
             const dt = $(table).DataTable();
+            // Track filter pills (column index 12 = track_raw, hidden --
+            // must match COLUMNS' order in inventory_jobs.py). Exact-match
+            // regex (^val$) rather than a plain substring search so a real
+            // future track name can't accidentally match another one as a
+            // prefix/suffix; "All" clears the column search entirely.
+            document.querySelectorAll(".track-pill").forEach(function (btn) {{
+                btn.addEventListener("click", function () {{
+                    document.querySelectorAll(".track-pill").forEach(
+                        b => b.setAttribute("aria-pressed", "false"));
+                    btn.setAttribute("aria-pressed", "true");
+                    const val = btn.dataset.track;
+                    dt.column(12).search(val ? "^" + val + "$" : "", true, false).draw();
+                }});
+            }});
             // Piecewise-linear, continuous decay (age in minutes -> [0,1]).
             // colorMix: 1 = full warm accent, 0 = normal ink; opacity fades
             // ONLY past the "normal" point, so a job updated within the
@@ -570,7 +634,7 @@ def render_fragment():
               'the master\'s review and is waiting on your look; those rows always stay on '
               'top and never fade. An ongoing job\'s latest-update line warms up right after '
               'it is touched and cools toward gray the longer it sits untouched.</p>')
-    return offline + init_datatables + skeleton + init_script + SORT_CLICK_JS + legend
+    return offline + init_datatables + track_filter + skeleton + init_script + SORT_CLICK_JS + legend
 
 
 def main():

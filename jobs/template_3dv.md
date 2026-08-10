@@ -1,5 +1,6 @@
 title: Paper conversion to the 3DV 2026 template
 executor: tmpl-3dv
+track: paper
 status: done
 started: 2026-08-08 15:50
 updated: 2026-08-09 15:07
