@@ -2,7 +2,7 @@ title: Jobs board evolution (design and data model)
 executor: jobs-redesign
 status: ongoing
 started: 2026-08-09 14:30
-updated: 2026-08-09 18:26
+updated: 2026-08-09 18:27
 slurm: 
 link: 
 page: none (the board itself is the deliverable)
@@ -20,4 +20,5 @@ log:
 - 2026-08-09 18:07 [master] Correction for the record: the 18:05 first-person assessment above was written by the executing agent, not the owner. The owner reviewed the board in the CLI and said it looks good; their one change request was to show log timelines newest first, which is now implemented. The review flag is cleared.
 - 2026-08-09 18:21 [master] Owner refinement round dispatched: log lines get author labels with real agent names, owner lines slightly weighted, and review asks become permanent violet log lines instead of vanishing when a flag clears.
 - 2026-08-09 18:26 [master] For your review: Expand this row's log timeline: every line now names its speaker (agent names in gray, owner in heavier text), and this very ask appears there as a violet line. Is the who-said-what now clear?
+- 2026-08-09 18:27 [jobs-redesign] Verified live: every timeline line now names its speaker in gray, the owner would read heavier if present, and this row's own review ask appears as the one violet line, confirmed in both themes at both widths.
 outcome: 

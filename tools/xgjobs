@@ -148,9 +148,14 @@ def now():
 def resolve_actor(args, default):
     """Every log-appending verb stamps WHO said a line, not just when (see
     inventory_jobs.py's LOG-LINE AUTHORSHIP): --as NAME wins if given, else
-    the XGJOBS_ACTOR environment variable, else `default` (the caller
-    passes "executor" for the normal progress-report verbs, "master" for
-    flag/unflag -- verbs that by convention only the master runs)."""
+    the XGJOBS_ACTOR environment variable, else `default`. Owner refinement
+    2026-08-09: the default should be the ACTUAL agent name, not a generic
+    "executor" label -- [master] and [owner] stay role tokens, everything
+    else is a real name. Callers pass the job's own `executor:` field value
+    for log/done/frozen/reopen (the verbs an agent runs on its own job;
+    cmd_start passes args.executor since the file doesn't exist yet to read
+    one back from), and the literal string "master" for flag/unflag (verbs
+    that by convention only the master runs, regardless of whose job it is)."""
     return getattr(args, "as_", None) or os.environ.get("XGJOBS_ACTOR") or default
 
 
@@ -251,7 +256,7 @@ def cmd_start(args):
             sys.exit(f'error: jobs/{args.slug}.md already exists. "start" never overwrites; '
                      f'use log/done/frozen/reopen to update it.')
         ts = now()
-        author = resolve_actor(args, "executor")
+        author = resolve_actor(args, args.executor)
         e = {"title": args.title, "executor": args.executor, "status": "ongoing",
              "started": ts, "updated": ts, "slurm": "", "link": "", "page": page_value,
              "motivation": args.motivation, "log": [(ts, author, first_log)], "outcome": ""}
@@ -266,7 +271,7 @@ def cmd_log(args):
     with locked(args.slug):
         e = ij.parse(path)
         ts = now()
-        e["log"].append((ts, resolve_actor(args, "executor"), args.sentence))
+        e["log"].append((ts, resolve_actor(args, e.get("executor") or "executor"), args.sentence))
         e["updated"] = ts
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: logged", file=sys.stderr)
@@ -282,7 +287,7 @@ def cmd_done(args):
         e["status"] = "done"
         e["outcome"] = args.outcome
         e["updated"] = ts
-        e["log"].append((ts, resolve_actor(args, "executor"), args.outcome))
+        e["log"].append((ts, resolve_actor(args, e.get("executor") or "executor"), args.outcome))
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: done", file=sys.stderr)
     rebuild_board()
@@ -297,7 +302,7 @@ def cmd_frozen(args):
         ts = now()
         e["status"] = "frozen"
         e["updated"] = ts
-        e["log"].append((ts, resolve_actor(args, "executor"), line))
+        e["log"].append((ts, resolve_actor(args, e.get("executor") or "executor"), line))
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: frozen", file=sys.stderr)
     rebuild_board()
@@ -311,7 +316,7 @@ def cmd_reopen(args):
         ts = now()
         e["status"] = "ongoing"
         e["updated"] = ts
-        e["log"].append((ts, resolve_actor(args, "executor"), args.why))
+        e["log"].append((ts, resolve_actor(args, e.get("executor") or "executor"), args.why))
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: reopened", file=sys.stderr)
     rebuild_board()
