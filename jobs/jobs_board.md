@@ -1,8 +1,8 @@
 title: Jobs board evolution (design and data model)
 executor: jobs-redesign
-status: ongoing
+status: done
 started: 2026-08-09 14:30
-updated: 2026-08-09 18:34
+updated: 2026-08-09 18:35
 slurm: 
 link: 
 page: none (the board itself is the deliverable)
@@ -27,4 +27,5 @@ log:
 - 2026-08-09 18:34 [owner] Good, last comment is the owner's feedback should be somewhat more apparent. currently it is just black 'owner' one don't notice it quickly
 - 2026-08-09 18:34 [master] Owner labels are now small filled chips in the accent color, unmissable in a timeline while the sentence stays normal ink. The review flag is cleared on the owner's good.
 - 2026-08-09 18:34 [master] Review complete; flag cleared.
-outcome: 
+- 2026-08-09 18:35 [master] The board is the owner's attention instrument, evolved through six feedback rounds in one night: a sortable database in the console, append-only per-job logs with authored lines (owner words verbatim, in accent chips), jobs and pages cross-linked, review flags that pin with a stated ask and leave a violet trace, recency heat, and the xgjobs tool enforcing all of it at write time. Owner verdict: good.
+outcome: The board is the owner's attention instrument, evolved through six feedback rounds in one night: a sortable database in the console, append-only per-job logs with authored lines (owner words verbatim, in accent chips), jobs and pages cross-linked, review flags that pin with a stated ask and leave a violet trace, recency heat, and the xgjobs tool enforcing all of it at write time. Owner verdict: good.
