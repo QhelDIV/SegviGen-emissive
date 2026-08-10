@@ -67,3 +67,4 @@
 *token*
 *secret*
 *.credentials.json
+jobs/.locks/

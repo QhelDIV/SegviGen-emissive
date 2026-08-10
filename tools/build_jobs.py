@@ -1,76 +1,49 @@
 #!/usr/bin/env python3
 """Thin driver: rebuild only the console's Jobs tab (jobs.html), the cheap
-per-job-update rebuild command for agents. Full genre/composition lives in
+per-job-update rebuild command. Full genre/composition lives in
 build_console.py's build_jobs_tab() (console shell, no hero — see that
 module); this file just calls it against the live publish dest, no full
 console rebuild and no asset resync.
 
-Entry format for jobs/*.md (2026-08-09 log redesign + job-page join +
-attention bands, owner-directed):
-  title / executor / status(ongoing|done|frozen) / started / updated / slurm /
-  link / page / needs / motivation / log: / outcome
+THE INTERFACE IS tools/xgjobs (2026-08-09, owner-directed): agents update
+the board by running the CLI, never by hand-editing jobs/*.md. It owns every
+mechanical detail this file used to just document and hope for -- local-
+clock timestamps (no more NFS-skew or hand-typed-timestamp bugs), an flock
+per job file (safe under concurrent writers), format validation against
+inventory_jobs.py's own parser before anything is written, the writing-
+standard lint (no em dash, no banned words, no #<task-id> references), and
+an inline rebuild (this file) after every call, so publishing is never a
+separate step. `tools/xgjobs --help` documents every verb with an example;
+one line per common case:
 
-  title, executor, status, started, updated, slurm: plain "key: value"
-  lines, unchanged.
+    tools/xgjobs start <slug> --title T --motivation M --executor E \\
+        (--page NAME | --no-page REASON)
+    tools/xgjobs log <slug> "what happened, one plain sentence"
+    tools/xgjobs done <slug> --outcome "the final one-sentence summary"
+    tools/xgjobs frozen <slug> [--reason "..."]
+    tools/xgjobs reopen <slug> "why it's active again"
+    tools/xgjobs flag <slug>     # MASTER-ONLY by convention: pins the row
+    tools/xgjobs unflag <slug>   # for the owner's review until cleared
 
-  page: the canonical name pages.json uses for this job's results page (the
-  same name shown in the Pages tab's "name" column, e.g. "fullseg_19" or
-  "workspace/rendering") -- NOT a URL. The board resolves it against the
-  live page inventory and links the job title there; the page, in turn,
-  shows a "job" chip back to this row. RULE: a non-trivial job is expected
-  to end with a results page; a DONE job with no `page:` at all gets an
-  amber "no page" flag on the board as a prompt to add one. If a job
-  legitimately produces no page (a training run whose results land on
-  someone else's page, an investigation whose deliverable was a file on
-  scratch, a paper PDF, ...), write `page: none (<short reason>)` instead --
-  that's a normal, expected, DOCUMENTED state and renders as a quiet note,
-  not a flag. If the page doesn't exist yet but will (e.g. you're mid-build),
-  it's fine to leave `page:` unset until you know the name rather than guess
-  wrong -- just don't leave a DONE job that way.
+Hand-editing jobs/*.md directly is DEPRECATED for agents; it remains a
+documented EMERGENCY path only (e.g. recovering a file the CLI refuses to
+touch). If you ever do need to hand-edit, the field order inventory_jobs.py
+expects is: title / executor / status(ongoing|done|frozen) / started /
+updated / slurm / link / page / needs / motivation / log: / outcome. `page:`
+is the canonical pages.json name for this job's results page (not a URL;
+`page: none (<reason>)` for a job that legitimately produces none -- a DONE
+job with `page:` unset entirely gets an amber "no page" flag as a prompt).
+`needs: evaluation` pins the row with a violet "for your review" chip.
+`log:` is APPEND-ONLY, one `- YYYY-MM-DD HH:MM <sentence>` line per update,
+newest last -- the board's "updated" column and staleness check read the
+LAST log line's timestamp, not the `updated:` field. `outcome:` is the
+final summary for a done job, also appended as the log's last line. Writing
+standard: complete plain sentences for the owner, no internal artifact
+names, no task ids, no compressed jargon -- exactly what the CLI's lint
+enforces mechanically, so hand-edits meet the same bar.
 
-  link: a fallback arbitrary URL, for when a job's result genuinely isn't a
-  tracked page (an external doc, a paper PDF on Overleaf, ...) -- keeps
-  working exactly as before. When `page:` resolves, it wins; `link:` only
-  links the title when `page:` doesn't.
-
-  needs: set/cleared by the MASTER ONLY, never by the executing agent.
-  `needs: evaluation` means a deliverable passed the master's own review and
-  is waiting on the OWNER's eyes -- it pins the row above every other job on
-  the board with an unmistakable violet "for your review" chip that never
-  fades, until the master clears the field once the owner has looked. An
-  executing agent reports done with an outcome; it does not flag its own
-  work for review. Any other `needs:` value is reserved for future use and
-  renders as plain quiet text, never a pin, never a chip -- don't invent new
-  values expecting them to flag anything yet.
-
-  motivation: one sentence, written ONCE at registration -- why this job
-  exists. Shown under the title on the board; it does not change as the job
-  runs.
-
-  log: an APPEND-ONLY block. Every line under it that matches
-  "- YYYY-MM-DD HH:MM <sentence>" is one update; write a new line, NEVER edit
-  or delete an old one (the board renders every line you have ever written as
-  a timeline). Newest line goes LAST. The board's "updated" column and its
-  staleness check (ongoing + no update in 3h = flagged stale) are computed
-  from your last log line's timestamp, not from the `updated:` field -- keep
-  bumping `updated:` too for anyone reading the raw file, but the log line's
-  own timestamp is what the board actually trusts.
-
-  outcome: for a DONE job only, the final one-sentence-or-few summary --
-  also append it as your last log line (it renders distinctly there, tagged
-  "outcome"). Leave blank while the job is ongoing or frozen.
-
-  slurm: stays in the file as reference detail (grep-able job ids) but does
-  NOT get its own column on the board -- if a job id matters to the reader,
-  say it inside a log sentence ("training started as job 242211"), don't
-  make them go find the slurm field.
-
-  WRITING STANDARD for motivation and log lines: complete plain sentences,
-  written for the owner reading the board, not for another agent. No
-  internal artifact names, no task ids, no compressed jargon -- say what
-  happened and why it matters, the way you'd say it out loud.
-
-Rebuild + publish:  .venv_console/bin/python tools/build_jobs.py
+Rebuild + publish (after a hand-edit, or on its own):
+    .venv_console/bin/python tools/build_jobs.py
 """
 import pathlib
 import sys
