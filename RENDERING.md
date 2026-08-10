@@ -225,13 +225,23 @@ rather than one, `transforms_v0.json` (camera A, shared with the input render)
 and `transforms_v1.json` (camera B, about 140 degrees around); and the input is
 the predicted GLB rather than the source asset.
 
-**Known caveat.** The predicted mesh's up-axis often differs from the source
-asset's, so a segmentation panel frequently shows the object tumbled relative to
-the input panel beside it, under the same nominal camera. On the 19-shape
-gallery only a minority of shapes come out aligned. This is an open issue in the
-segmentation pipeline, not a property of the setup. Do not build a figure whose
-argument depends on the two panels registering unless you have checked that
-particular shape.
+**Known caveat 1, orientation.** The predicted mesh's up-axis often differs from
+the source asset's, so a segmentation panel frequently shows the object tumbled
+relative to the input panel beside it, under the same nominal camera. Of six
+shapes from the 19-shape gallery inspected by eye, one was aligned. This is an
+open issue in the segmentation pipeline, not a property of the setup. Do not
+build a figure whose argument depends on the two panels registering unless you
+have checked that particular shape.
+
+**Known caveat 2, the emissive asset family.** Run zero-shot on the emissive
+assets this project actually works with, the pretrained model does not
+reconstruct the object at all: a jack-o'-lantern comes back as a smooth ball
+with the carved face gone, a headphone stand as a barrel and a plate, three
+candles as a single disc, a vending machine as a bare box. All five assets
+tested returned a plausible part count anyway, so a metric alone does not
+surface this. Rendered evidence is on the workspace page, section 05. A
+segmentation render of an emissive asset is therefore not currently usable as a
+figure that argues anything about parts.
 
 ### 4b. Flat palette colours (the earlier mesh and voxel pages)
 
@@ -288,6 +298,15 @@ once without, to get both bands.
 | box variant | the published ladder page runs the same rungs through `--mode box`, via its own shell driver, so the primary band is a box render at each strength | the page's `img/<sid>_box_mask_s*.png` |
 | per-rung check | a rung that produced no file fails the run, rather than trusting exit status | `strength_ladder.py:93-95` |
 | output | one PNG per rung plus a labelled montage and a JSON index | `strength_ladder.py:97-116` |
+
+**As a video.** The workspace page shows the sweep as a short looping clip
+rather than only as stills, which makes the growth of the light pool on the
+floor readable in a way a row of thumbnails is not. It is built by rendering
+the upward half of the ramp only (33 strengths, eased with a smoothstep) and
+ping-ponging those frames to 64 at 24 fps, so the loop is exactly symmetric and
+the cluster cost is halved. Encoder:
+`web/_preview/rendering/make_video.py`, which writes VP9 WebM, H.264 MP4 and a
+poster still, and fails if the encoded frame count does not match the sequence.
 
 **What to expect, so a correct result is not read as a bug.** The bloom grows
 as strength rises. The Glare threshold is 1.0 in linear space, so raising

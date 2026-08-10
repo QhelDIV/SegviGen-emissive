@@ -16,6 +16,23 @@ A versioned page is a LIVING URL backed by immutable numbered snapshots:
 
 Once a page has a v/ directory this tool is its ONLY writer.
 
+WHICH PAGES VERSION (policy, owner-set 2026-08-09)
+--------------------------------------------------
+Version the LIVING workspace pages, the ones listed in
+workspace_zone.LIVING_PAGES: they carry a stable URL a collaborator may cite
+or annotate, they change over time, and a reader needs to be able to go back
+to the state they were shown. Everything else does not version:
+
+  - date-stamped pages (daily reports and anything whose identity already IS
+    a date) are immutable by construction, so a snapshot would duplicate what
+    the date already fixes;
+  - web/_preview/ pages are build outputs and staging copies, not addresses
+    anyone cites; they are rebuilt freely and carry no promise.
+
+The practical consequence: a page gets a v/ directory only after it has been
+added to workspace_zone.LIVING_PAGES, never before (see register_in_tree's
+DURABILITY note for the mechanism that makes the two lists agree).
+
 LIVING-PAGE-CANONICAL (this is the contract the SHIPPED RUNTIME implements)
 --------------------------------------------------------------------------
 assets/xg3.js (VLOGIC.bannerVisible / rowIsCurrent, and the picker block that
