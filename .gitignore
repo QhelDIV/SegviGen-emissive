@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Model weights and checkpoints (live on the cluster, not in git)
+*.ckpt
+*.safetensors
+*.bin
+*.onnx
+ckpt/
+ckpts/
+checkpoints/
+microsoft/
+
+# Datasets and built training tuples
+dataset/
+dataset_direct/
+data/
+*.parquet
+*.npz
+*.npy
+
+# Run outputs
+outputs/
+out/
+results/
+pred/
+pred_voxels/
+pred_masks/
+gt_parts*/
+vis_data/
+wandb/
+
+# Logs
+*.log
+slurm-*.out
+*.out
+*.err
+
+# Rendered media
+*.mp4
+*.webm
+*.webp
+*.gif
+
+# Local environment
+.venv/
+venv/
+.env
