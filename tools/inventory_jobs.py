@@ -245,6 +245,12 @@ def render_timeline_html(log, has_outcome, none_reason=None):
     for i, (ts, author, text) in sorted(enumerate(log), key=lambda p: p[0], reverse=True):
         is_outcome = has_outcome and i == n - 1
         cls = "log-entry log-entry-outcome" if is_outcome else "log-entry"
+        # Review asks are the one fully-violet line class (owner-ratified):
+        # the needs: banner is current state; these lines are the permanent
+        # record of what was asked. Keyed on the master author plus the exact
+        # prefix xgjobs' flag verb emits (tool-emitted string, not free prose).
+        if (author or "").lower() == "master" and text.startswith("For your review:"):
+            cls += " log-entry-review"
         tag = '<span class="log-outcome-tag">outcome</span>' if is_outcome else ""
         parts.append(f'<div class="{cls}"><span class="log-ts">{html.escape(ts)}</span>'
                      f'<span class="log-text">{_author_label(author)}{tag}{html.escape(text)}</span></div>')

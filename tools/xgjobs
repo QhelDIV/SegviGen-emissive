@@ -335,7 +335,10 @@ def cmd_flag(args):
         author = resolve_actor(args, "master")
         e["needs"] = f"evaluation: {args.ask}"
         e["updated"] = ts
-        e["log"].append((ts, author, "Flagged for the owner's review."))
+        # The ask goes INTO the log (owner-ratified): the needs: banner is
+        # current state and vanishes when cleared; this line is the permanent
+        # record. The renderer styles master lines with this prefix violet.
+        e["log"].append((ts, author, f"For your review: {args.ask}"))
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: flagged for review", file=sys.stderr)
     rebuild_board()
