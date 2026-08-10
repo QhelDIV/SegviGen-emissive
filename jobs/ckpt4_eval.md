@@ -6,7 +6,7 @@ started: 2026-08-10 01:38
 updated: 2026-08-10 06:54
 slurm: 
 link: 
-page: none (page pending; will hold the eval results and renders)
+page: ckpt4_eval
 needs: evaluation: The first honest 72k number: held-out 0.17 at epoch 4 (averaged, 5 draws), already past the old pipeline's 0.15 but under the 0.22 zero-shot bound. Read the verdict table and the box-render gallery (seen/held-out labels on every panel): is this trajectory worth letting the run continue past epoch 8, and do you want the epoch-8 checkpoint evaluated the same way when it lands?
 motivation: The capped 72k run finally produced a checkpoint; the project needs to know whether conditioned training on the full dataset beats the zero-shot oracle and the old runs, measured with the averaged protocol so single-draw luck cannot mislead again.
 log:
