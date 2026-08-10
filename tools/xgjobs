@@ -30,14 +30,15 @@ Verbs:
         given).
     xgjobs reopen <slug> "why"
         Set status=ongoing again, with a log line explaining why.
-    xgjobs flag <slug> [--ask "what to check"]
+    xgjobs flag <slug> --ask "what to open and judge"
         Set needs: evaluation -- MASTER-ONLY BY CONVENTION (not enforced by
         this tool, there is no identity system to enforce it against): an
         executing agent reports done with an outcome, it does not flag its
         own work for the owner's review. Pins the row to the top of the
-        board with a violet "for your review" chip until unflagged, and
-        with --ask, shows the owner exactly what to look at (recommended:
-        a bare flag gives no hint what to review).
+        board with a violet "for your review" chip until unflagged. --ask
+        is REQUIRED: a bare flag pins the row but gives the owner no hint
+        what to open or judge, which is exactly the failure this verb
+        exists to prevent -- omitting it is an error, not a shortcut.
     xgjobs unflag <slug>
         Clear needs: evaluation (the master, after the owner's verdict).
 
@@ -54,6 +55,23 @@ completely untouched. Rebuilds the live board's jobs tab as its last step
 (tools/build_jobs.py under .venv_console, the same thin driver a human
 would run by hand), so publishing is never a separate step.
 
+AUTHORSHIP (2026-08-09, owner-directed: a first-person log line once read as
+if it might be the owner's own words, when it was the executing agent's
+self-assessment -- see inventory_jobs.py's LOG-LINE AUTHORSHIP section for
+the render side). Every verb that appends a log line stamps WHO is speaking,
+not just when: `--as NAME` if given, else the XGJOBS_ACTOR environment
+variable if set, else a per-verb default -- "executor" for
+start/log/done/frozen/reopen (the normal progress-report verbs, run by the
+agent doing the work), "master" for flag/unflag (verbs that by convention
+only the master runs, since they touch the master-owned needs: field). The
+board renders the stamp as a small quiet label before the sentence; [owner]
+alone reads with a touch more weight since owner words are the record of
+verdicts, not progress notes. Every log line you write through this tool
+states a fact in the SPEAKER's own voice ("self-check found: two things
+that bother me about the layout"), never in a voice that could be misread
+as someone else's, especially not the owner's -- that confusion is exactly
+what this feature exists to prevent.
+
 Examples (one per verb):
     tools/xgjobs start render_doc --executor render-doc \\
         --title "Name and document the project's rendering setups" \\
@@ -63,13 +81,15 @@ Examples (one per verb):
     tools/xgjobs done render_doc --outcome "RENDERING.md and a workspace page cover all five setups with verified parameters."
     tools/xgjobs frozen render_doc --reason "Blocked on a render farm allocation."
     tools/xgjobs reopen render_doc "The allocation came through."
-    tools/xgjobs flag render_doc
+    tools/xgjobs flag render_doc --ask "Open the page and check the comparison figure reads correctly."
     tools/xgjobs unflag render_doc
+    tools/xgjobs log render_doc "Self-check found: the comparison figure's caption is missing units." --as jobs-redesign
 """
 import argparse
 import contextlib
 import datetime
 import fcntl
+import os
 import pathlib
 import re
 import subprocess
@@ -125,6 +145,15 @@ def now():
     return datetime.datetime.now().strftime(TIME_FMT)
 
 
+def resolve_actor(args, default):
+    """Every log-appending verb stamps WHO said a line, not just when (see
+    inventory_jobs.py's LOG-LINE AUTHORSHIP): --as NAME wins if given, else
+    the XGJOBS_ACTOR environment variable, else `default` (the caller
+    passes "executor" for the normal progress-report verbs, "master" for
+    flag/unflag -- verbs that by convention only the master runs)."""
+    return getattr(args, "as_", None) or os.environ.get("XGJOBS_ACTOR") or default
+
+
 @contextlib.contextmanager
 def locked(slug):
     """One flock'd lockfile per slug (not the job file itself, so `start`
@@ -162,8 +191,11 @@ def serialize(e):
         lines.append(f"needs: {e['needs']}")
     lines.append(f"motivation: {e.get('motivation') or ''}")
     lines.append("log:")
-    for ts, text in e["log"]:
-        lines.append(f"- {ts} {text}")
+    for ts, author, text in e["log"]:
+        # author is None for a legacy line read back unchanged (never add a
+        # label to a line that didn't have one); a real author renders as
+        # the "[name]" token inventory_jobs.py's LOG_LINE_RE expects.
+        lines.append(f"- {ts} [{author}] {text}" if author else f"- {ts} {text}")
     lines.append(f"outcome: {e.get('outcome') or ''}")
     return "\n".join(lines) + "\n"
 
@@ -219,9 +251,10 @@ def cmd_start(args):
             sys.exit(f'error: jobs/{args.slug}.md already exists. "start" never overwrites; '
                      f'use log/done/frozen/reopen to update it.')
         ts = now()
+        author = resolve_actor(args, "executor")
         e = {"title": args.title, "executor": args.executor, "status": "ongoing",
              "started": ts, "updated": ts, "slurm": "", "link": "", "page": page_value,
-             "motivation": args.motivation, "log": [(ts, first_log)], "outcome": ""}
+             "motivation": args.motivation, "log": [(ts, author, first_log)], "outcome": ""}
         safe_write(path, e, expected_log_len=1)
     print(f"jobs/{args.slug}.md created", file=sys.stderr)
     rebuild_board()
@@ -233,7 +266,7 @@ def cmd_log(args):
     with locked(args.slug):
         e = ij.parse(path)
         ts = now()
-        e["log"].append((ts, args.sentence))
+        e["log"].append((ts, resolve_actor(args, "executor"), args.sentence))
         e["updated"] = ts
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: logged", file=sys.stderr)
@@ -249,7 +282,7 @@ def cmd_done(args):
         e["status"] = "done"
         e["outcome"] = args.outcome
         e["updated"] = ts
-        e["log"].append((ts, args.outcome))
+        e["log"].append((ts, resolve_actor(args, "executor"), args.outcome))
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: done", file=sys.stderr)
     rebuild_board()
@@ -264,7 +297,7 @@ def cmd_frozen(args):
         ts = now()
         e["status"] = "frozen"
         e["updated"] = ts
-        e["log"].append((ts, line))
+        e["log"].append((ts, resolve_actor(args, "executor"), line))
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: frozen", file=sys.stderr)
     rebuild_board()
@@ -278,27 +311,31 @@ def cmd_reopen(args):
         ts = now()
         e["status"] = "ongoing"
         e["updated"] = ts
-        e["log"].append((ts, args.why))
+        e["log"].append((ts, resolve_actor(args, "executor"), args.why))
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: reopened", file=sys.stderr)
     rebuild_board()
 
 
 def cmd_flag(args):
-    # `needs: evaluation` alone still flags and pins the row (the board's
-    # parser treats a bare "evaluation" and "evaluation: <ask>" the same
-    # way), but a bare flag gives the owner no hint what to look at or why
-    # -- an --ask makes that concrete, e.g. "Open the new page and check
-    # figure 3 reads correctly." Recommended, not required.
-    if args.ask:
-        lint(args.ask, "--ask")
+    # --ask is REQUIRED (owner feedback 2026-08-09): a bare flag pins the
+    # row but gives the owner no hint what to open or judge, which is
+    # exactly the failure this verb exists to prevent. Checked here (not
+    # via argparse required=True) so the error explains WHY, not just that
+    # an argument is missing.
+    if not args.ask:
+        sys.exit('error: --ask is required. A bare review flag pins the row but gives the '
+                 'owner no hint what to open or judge; say what to check in one sentence, '
+                 'e.g. --ask "Open the new page and check figure 3 reads correctly."')
+    lint(args.ask, "--ask")
     path = require_exists(args.slug)
     with locked(args.slug):
         e = ij.parse(path)
         ts = now()
-        e["needs"] = f"evaluation: {args.ask}" if args.ask else "evaluation"
+        author = resolve_actor(args, "master")
+        e["needs"] = f"evaluation: {args.ask}"
         e["updated"] = ts
-        e["log"].append((ts, "Flagged for the owner's review."))
+        e["log"].append((ts, author, "Flagged for the owner's review."))
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: flagged for review", file=sys.stderr)
     rebuild_board()
@@ -309,12 +346,24 @@ def cmd_unflag(args):
     with locked(args.slug):
         e = ij.parse(path)
         ts = now()
+        author = resolve_actor(args, "master")
         e["needs"] = ""
         e["updated"] = ts
-        e["log"].append((ts, "Review complete; flag cleared."))
+        e["log"].append((ts, author, "Review complete; flag cleared."))
         safe_write(path, e, expected_log_len=len(e["log"]))
     print(f"jobs/{args.slug}.md: unflagged", file=sys.stderr)
     rebuild_board()
+
+
+def add_as_arg(p, default_hint):
+    """--as is on every verb that appends a log line: explicit attribution
+    beats the XGJOBS_ACTOR env var beats this verb's own default (see
+    resolve_actor()). Shared here so the seven subparsers describe it
+    identically instead of drifting."""
+    p.add_argument("--as", dest="as_", metavar="NAME",
+                   help=f'who is speaking in this line (default: {default_hint}, or the '
+                        f'XGJOBS_ACTOR environment variable if set) -- "executor", "master", '
+                        f'"owner", or an agent\'s actual name all work, rendered exactly as given')
 
 
 def main():
@@ -330,37 +379,47 @@ def main():
     p.add_argument("--page", help="the canonical pages.json name this job's results page will use")
     p.add_argument("--no-page", metavar="REASON", help="this job legitimately produces no page")
     p.add_argument("--log", help='first log line (default: "Job started.")')
+    add_as_arg(p, '"executor"')
     p.set_defaults(func=cmd_start)
 
     p = sub.add_parser("log", help="append one dated update line")
     p.add_argument("slug")
     p.add_argument("sentence")
+    add_as_arg(p, '"executor"')
     p.set_defaults(func=cmd_log)
 
     p = sub.add_parser("done", help="mark the job done with an outcome")
     p.add_argument("slug")
     p.add_argument("--outcome", required=True)
+    add_as_arg(p, '"executor"')
     p.set_defaults(func=cmd_done)
 
     p = sub.add_parser("frozen", help="mark the job frozen")
     p.add_argument("slug")
     p.add_argument("--reason")
+    add_as_arg(p, '"executor"')
     p.set_defaults(func=cmd_frozen)
 
     p = sub.add_parser("reopen", help="set an already done/frozen job back to ongoing")
     p.add_argument("slug")
     p.add_argument("why")
+    add_as_arg(p, '"executor"')
     p.set_defaults(func=cmd_reopen)
 
     p = sub.add_parser("flag", help="set needs: evaluation (MASTER-ONLY by convention)")
     p.add_argument("slug")
-    p.add_argument("--ask", help='what the owner should look at, e.g. '
-                   '"Open the new page and check figure 3." (recommended: a bare '
-                   'flag with no --ask gives no hint what to review)')
+    # NOT argparse required=True on purpose: cmd_flag() checks this itself
+    # so the error explains WHY --ask is required, not just that it's
+    # missing (argparse's own "required" error can't carry that context).
+    p.add_argument("--ask", help='REQUIRED: what the owner should open and '
+                   'judge, one sentence, e.g. "Open the new page and check figure 3 reads '
+                   'correctly." A bare flag with no ask gives the owner nothing to act on.')
+    add_as_arg(p, '"master"')
     p.set_defaults(func=cmd_flag)
 
     p = sub.add_parser("unflag", help="clear needs: evaluation (MASTER-ONLY by convention)")
     p.add_argument("slug")
+    add_as_arg(p, '"master"')
     p.set_defaults(func=cmd_unflag)
 
     args = ap.parse_args()

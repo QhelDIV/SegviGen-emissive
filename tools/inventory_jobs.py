@@ -70,6 +70,23 @@ heatOpacity(). It reads --accent/--ink-3 via getComputedStyle at apply time
 re-applies on a MutationObserver watching <html data-theme> so a live theme
 toggle updates it immediately rather than waiting for the next redraw.
 
+LOG-LINE AUTHORSHIP (2026-08-09, owner-directed: a first-person log line
+once read as if it might be the owner's own words, when it was the
+executing agent's self-assessment): a log line may carry an optional author
+token right after its timestamp -- `- YYYY-MM-DD HH:MM [executor] sentence`
+-- with conventional values [executor], [master], [owner], or an agent's
+actual name (e.g. [jobs-redesign]; rendered exactly as given, no lookup or
+validation). A line WITHOUT the token is legacy: it still parses (see
+LOG_LINE_RE's optional group) and renders as "executor" by default -- the
+FILE is never rewritten to insert a label into an old line, only the
+DISPLAY defaults it. See _author_label(): a small quiet label (same size
+class as the timestamp, --ink-3) immediately before the sentence, in both
+the expanded timeline and the "latest" cell; [owner] alone gets a touch
+more visual weight (medium font-weight, full --ink) since owner words are
+the record of verdicts, not just progress notes. tools/xgjobs stamps this
+automatically on every verb that appends a log line -- see that script's
+docstring for --as / XGJOBS_ACTOR.
+
 Modes:
     --manifest            jobs/*.md -> PUBLISH_DEST/jobs.json   (stdlib only)
     --out <fragment.html> the widget fragment (NEEDS .venv_itables)
@@ -111,14 +128,16 @@ HEAD_CLASSES = ["", "dt-nowrap", "dt-nowrap dt-hide-narrow", "",
                 "dt-nowrap dt-right dt-hide-narrow",
                 "dt-nowrap dt-right dt-hide-narrow", "", "", "", "", "", ""]
 
-LOG_LINE_RE = re.compile(r"^-\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+(.*)$")
+LOG_LINE_RE = re.compile(r"^-\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+(?:\[([^\]]+)\]\s+)?(.*)$")
 NONE_PAGE_RE = re.compile(r"(?i)^none\b\s*(?:\(([^)]*)\))?")
 
 
 def parse(path):
     """Plain "key: value" lines, plus a multi-line `log:` block: every line
-    immediately after `log:` matching `- YYYY-MM-DD HH:MM <text>` is consumed
-    into e["log"] (a list of (timestamp, text) tuples, file order == append
+    immediately after `log:` matching `- YYYY-MM-DD HH:MM [author] <text>`
+    (the `[author]` token is OPTIONAL, see LOG_LINE_RE and the module
+    docstring's LOG-LINE AUTHORSHIP section) is consumed into e["log"] (a
+    list of (timestamp, author_or_None, text) tuples, file order == append
     order == chronological, newest last) until a line that doesn't match --
     normally the next `key:` field (`outcome:`)."""
     e = {"slug": path.stem, "log": []}
@@ -132,7 +151,7 @@ def parse(path):
                 lm = LOG_LINE_RE.match(lines[i])
                 if not lm:
                     break
-                e["log"].append((lm.group(1), lm.group(2).strip()))
+                e["log"].append((lm.group(1), lm.group(2), lm.group(3).strip()))
                 i += 1
             continue
         if m:
@@ -192,6 +211,19 @@ def _resolve_page(e, pages_index):
     return href, none_reason, page_name
 
 
+def _author_label(author):
+    """A log line's small quiet attribution label (see module docstring's
+    LOG-LINE AUTHORSHIP section): author is the raw bracket content LOG_LINE_RE
+    captured, or None for a legacy untagged line, which defaults to
+    "executor" for DISPLAY ONLY -- the file itself is never rewritten to add
+    a label to an old line. Rendered exactly as given (no lookup/validation);
+    "owner" alone gets a touch more visual weight since owner words are the
+    record of verdicts, not just progress notes."""
+    label = (author or "executor").strip()
+    cls = " log-author-owner" if label.lower() == "owner" else ""
+    return f'<span class="log-author{cls}">{html.escape(label)}</span>'
+
+
 def render_timeline_html(log, has_outcome, none_reason=None):
     """The child-row expansion: a formatted timeline, timestamps in their own
     column (CSS grid, see theme3.css .log-entry) so they align regardless of
@@ -210,12 +242,12 @@ def render_timeline_html(log, has_outcome, none_reason=None):
     # Rendered NEWEST FIRST (owner-ratified 2026-08-09): the reader arrives
     # from the collapsed row's latest entry and scans backward in time. The
     # FILE stays append-only newest-last; only the rendering reverses.
-    for i, (ts, text) in sorted(enumerate(log), key=lambda p: p[0], reverse=True):
+    for i, (ts, author, text) in sorted(enumerate(log), key=lambda p: p[0], reverse=True):
         is_outcome = has_outcome and i == n - 1
         cls = "log-entry log-entry-outcome" if is_outcome else "log-entry"
         tag = '<span class="log-outcome-tag">outcome</span>' if is_outcome else ""
         parts.append(f'<div class="{cls}"><span class="log-ts">{html.escape(ts)}</span>'
-                     f'<span class="log-text">{tag}{html.escape(text)}</span></div>')
+                     f'<span class="log-text">{_author_label(author)}{tag}{html.escape(text)}</span></div>')
     parts.append("</div>")
     return "".join(parts)
 
@@ -226,9 +258,9 @@ def rows():
     for p in sorted(JOBS.glob("*.md")):
         e = parse(p)
         st = e.get("status", "ongoing")
-        log = e["log"] or [(e.get("updated", ""), "")]  # defensive: pre-migration file
+        log = e["log"] or [(e.get("updated", ""), None, "")]  # defensive: pre-migration file
         has_outcome = bool(e.get("outcome", "").strip())
-        last_ts, last_text = log[-1]
+        last_ts, last_author, last_text = log[-1]
         a = age_h(last_ts)
         stale = st == "ongoing" and a is not None and a > STALE_H
 
@@ -273,7 +305,7 @@ def rows():
                   f'{n} update{"s" if n != 1 else ""}<span class="log-chevron">&#9662;</span></button>')
         latest = (f'<div class="log-latest{" log-latest-outcome" if is_outcome_last else ""}">'
                   f'<span class="log-ts">{html.escape(last_ts)}</span>'
-                  f'<span class="log-text">{tag}{html.escape(last_text)}</span>{toggle}</div>')
+                  f'<span class="log-text">{_author_label(last_author)}{tag}{html.escape(last_text)}</span>{toggle}</div>')
         if needs_eval:
             ask_text = review_ask or ("Open the linked page, judge it with your own eyes, "
                                       "and give a verdict in the CLI.")
