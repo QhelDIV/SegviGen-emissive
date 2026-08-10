@@ -5,12 +5,33 @@ build_console.py's build_jobs_tab() (console shell, no hero — see that
 module); this file just calls it against the live publish dest, no full
 console rebuild and no asset resync.
 
-Entry format for jobs/*.md (2026-08-09 log redesign, owner-directed):
+Entry format for jobs/*.md (2026-08-09 log redesign + job-page join,
+owner-directed):
   title / executor / status(ongoing|done|frozen) / started / updated / slurm /
-  link / motivation / log: / outcome
+  link / page / motivation / log: / outcome
 
-  title, executor, status, started, updated, slurm, link: plain "key: value"
+  title, executor, status, started, updated, slurm: plain "key: value"
   lines, unchanged.
+
+  page: the canonical name pages.json uses for this job's results page (the
+  same name shown in the Pages tab's "name" column, e.g. "fullseg_19" or
+  "workspace/rendering") -- NOT a URL. The board resolves it against the
+  live page inventory and links the job title there; the page, in turn,
+  shows a "job" chip back to this row. RULE: a non-trivial job is expected
+  to end with a results page; a DONE job with no `page:` at all gets an
+  amber "no page" flag on the board as a prompt to add one. If a job
+  legitimately produces no page (a training run whose results land on
+  someone else's page, an investigation whose deliverable was a file on
+  scratch, a paper PDF, ...), write `page: none (<short reason>)` instead --
+  that's a normal, expected, DOCUMENTED state and renders as a quiet note,
+  not a flag. If the page doesn't exist yet but will (e.g. you're mid-build),
+  it's fine to leave `page:` unset until you know the name rather than guess
+  wrong -- just don't leave a DONE job that way.
+
+  link: a fallback arbitrary URL, for when a job's result genuinely isn't a
+  tracked page (an external doc, a paper PDF on Overleaf, ...) -- keeps
+  working exactly as before. When `page:` resolves, it wins; `link:` only
+  links the title when `page:` doesn't.
 
   motivation: one sentence, written ONCE at registration -- why this job
   exists. Shown under the title on the board; it does not change as the job

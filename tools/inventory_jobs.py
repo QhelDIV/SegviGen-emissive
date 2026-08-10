@@ -29,6 +29,23 @@ timeline HTML AND makes the full log text searchable (DataTables searches
 column data regardless of `visible`, the same mechanism the "important" and
 "state-order" sentinel columns already relied on).
 
+JOB-PAGE JOIN (2026-08-09, owner-approved): each job carries `page:`, either
+the canonical name pages.json uses for its results page (e.g. "fullseg_19" or
+"workspace/rendering"), or `page: none (<reason>)` for a job that legitimately
+produces no page. `link:` keeps working as a fallback arbitrary URL -- when
+`page:` resolves against pages.json that wins; otherwise `link:` (if set)
+still links the title. A DONE job with `page:` never set at all (not even to
+"none (...)") gets an amber "no page" badge next to its status -- the prompt
+that it probably should have said something. An explicit "none (reason)" is a
+documented, intentional state: it renders as a quiet note in the expanded
+timeline instead, never a badge. See _resolve_page(). Two hidden columns
+(page_name, slug) carry the plain resolved page name and this job's file stem
+so inventory_pages.py can join back the other direction (which page(s) does a
+job produce, and inherit its motivation as a blurb fallback) by reading
+jobs.json -- see that module's _load_jobs_index(). Every row also gets a
+stable DOM id (`job-<slug>`, assigned in render_fragment()'s init script) so
+a page's "job" chip can deep-link straight to the row, not just to jobs.html.
+
 Modes:
     --manifest            jobs/*.md -> PUBLISH_DEST/jobs.json   (stdlib only)
     --out <fragment.html> the widget fragment (NEEDS .venv_itables)
@@ -46,20 +63,25 @@ SITE_ROOT = "/projects/omages/yanxg/lightgen"
 JOBS = REPO / "jobs"
 PUBLISH_DEST = pathlib.Path("/project/3dlg-hcvc/omages/www/yanxg/lightgen")
 MANIFEST = PUBLISH_DEST / "jobs.json"
+PAGES_MANIFEST = PUBLISH_DEST / "pages.json"
 STALE_H = 3.0
 ORDER = {"ongoing": 0, "frozen": 1, "done": 2}
 BADGE_BG = {"ongoing": "#1d7a46", "frozen": "#8a6d1a", "done": "#5a6472"}
+NO_PAGE_BADGE_BG = "#a67c00"  # amber -- a prompt to add page:, not an error color
 
-COLUMNS = ["job", "status", "executor", "latest", "started", "updated", "log_full", "state-order"]
+# page_name, slug: hidden (see module docstring's JOB-PAGE JOIN section).
+COLUMNS = ["job", "status", "executor", "latest", "started", "updated",
+           "log_full", "state-order", "page_name", "slug"]
 # per-column <th> class, same order as COLUMNS (see render_fragment(); the
 # matching <td> classes are applied via columnDefs' className below). Narrow
 # width (see theme3.css's mobile block) keeps job/status/latest visible --
 # the log-first point of this board -- and defers executor/started/updated.
 HEAD_CLASSES = ["", "dt-nowrap", "dt-nowrap dt-hide-narrow", "",
                 "dt-nowrap dt-right dt-hide-narrow",
-                "dt-nowrap dt-right dt-hide-narrow", "", ""]
+                "dt-nowrap dt-right dt-hide-narrow", "", "", "", ""]
 
 LOG_LINE_RE = re.compile(r"^-\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+(.*)$")
+NONE_PAGE_RE = re.compile(r"(?i)^none\b\s*(?:\(([^)]*)\))?")
 
 
 def parse(path):
@@ -96,15 +118,64 @@ def age_h(ts):
         return None
 
 
-def render_timeline_html(log, has_outcome):
+def _load_pages_index():
+    """name -> live URL, parsed out of pages.json's already-rendered <a
+    href> (no raw url survives into that manifest -- see inventory_pages.py's
+    render_data_rows()). Missing/unreadable manifest -> empty index; a job's
+    page: then just fails to resolve, same as any not-yet-published page."""
+    try:
+        data = json.loads(PAGES_MANIFEST.read_text())
+    except (OSError, ValueError):
+        return {}
+    idx = {}
+    for row in data.get("data", []):
+        m_href = re.search(r'href="([^"]*)"', row[0])
+        m_name = re.search(r">([^<]*)</a>", row[0])
+        if m_href and m_name:
+            idx[html.unescape(m_name.group(1))] = m_href.group(1)
+    return idx
+
+
+def _resolve_page(e, pages_index):
+    """Returns (href_or_None, none_reason_or_None, page_name_for_join).
+    href priority: `page:` resolved against pages.json, else `link:` as the
+    fallback arbitrary URL (its original role, kept working). page_name is
+    the raw resolved name, for the hidden join column (empty when page: is
+    unset or "none (...)")."""
+    raw = (e.get("page") or "").strip()
+    href = None
+    none_reason = None
+    page_name = ""
+    if raw:
+        m = NONE_PAGE_RE.match(raw)
+        if m:
+            none_reason = (m.group(1) or "").strip()
+        elif raw in pages_index:
+            href = pages_index[raw]
+            page_name = raw
+        # else: page: names a page not (yet) in pages.json -- pending work
+        # elsewhere; left unlinked rather than guessing a URL that could be
+        # wrong once that page actually publishes.
+    if not href and e.get("link"):
+        href = e.get("link")
+    return href, none_reason, page_name
+
+
+def render_timeline_html(log, has_outcome, none_reason=None):
     """The child-row expansion: a formatted timeline, timestamps in their own
     column (CSS grid, see theme3.css .log-entry) so they align regardless of
     sentence length. The final entry of a job with a recorded outcome gets a
     distinct tag + accent (has_outcome is a status/outcome-field flag, not a
     text match, so it can't drift from what render_fragment() considers
-    "done")."""
+    "done"). A job with an explicit "page: none (reason)" leads with a quiet
+    note (none_reason is None when page: didn't say "none" at all, so this
+    never fires for a job that simply hasn't recorded a page yet)."""
     n = len(log)
     parts = ['<div class="log-timeline">']
+    if none_reason is not None:
+        note = html.escape(none_reason) if none_reason else "no results page recorded"
+        parts.append(f'<div class="log-page-note">no results page: {note}</div>'
+                     if none_reason else f'<div class="log-page-note">{note}</div>')
     for i, (ts, text) in enumerate(log):
         is_outcome = has_outcome and i == n - 1
         cls = "log-entry log-entry-outcome" if is_outcome else "log-entry"
@@ -116,6 +187,7 @@ def render_timeline_html(log, has_outcome):
 
 
 def rows():
+    pages_index = _load_pages_index()
     out = []
     for p in sorted(JOBS.glob("*.md")):
         e = parse(p)
@@ -126,9 +198,10 @@ def rows():
         a = age_h(last_ts)
         stale = st == "ongoing" and a is not None and a > STALE_H
 
+        href, none_reason, page_name = _resolve_page(e, pages_index)
         title = html.escape(e.get("title", e["slug"]))
-        if e.get("link"):
-            title = f'<a href="{html.escape(e["link"])}">{title}</a>'
+        if href:
+            title = f'<a href="{html.escape(href)}">{title}</a>'
         if e.get("motivation"):
             title += f'<span class="db-subline">{html.escape(e["motivation"])}</span>'
 
@@ -136,6 +209,11 @@ def rows():
                  % (BADGE_BG.get(st, "#5a6472"), st))
         if stale:
             badge += ' <span class="db-badge" style="background:#8f2f2f;color:#fff">stale</span>'
+        page_field_set = bool((e.get("page") or "").strip())
+        if st == "done" and not page_field_set:
+            badge += (' <span class="db-badge" style="background:%s;color:#fff" '
+                      'title="done with no page: recorded -- add one, or page: none (reason)">'
+                      'no page</span>' % NO_PAGE_BADGE_BG)
 
         n = len(log)
         is_outcome_last = has_outcome
@@ -154,11 +232,11 @@ def rows():
             age = "just now" if a < 0 else (f"{a:.1f}h ago" if a < 48 else f"{a/24:.0f}d ago")
             updated += f'<span class="db-subline">{age}</span>'
 
-        log_full_html = render_timeline_html(log, has_outcome)
+        log_full_html = render_timeline_html(log, has_outcome, none_reason)
 
         out.append([title, badge, html.escape(e.get("executor", e.get("owner", ""))),
                     latest, e.get("started", ""), updated, log_full_html,
-                    ORDER.get(st, 3)])
+                    ORDER.get(st, 3), page_name, e["slug"]])
     return out
 
 
@@ -198,6 +276,8 @@ DT_ARGS = {
         {"targets": 5, "className": "dt-nowrap dt-right dt-hide-narrow"},
         {"targets": 6, "visible": False},  # log_full (searchable, drives the child row)
         {"targets": 7, "visible": False},  # state-order sentinel (searchable)
+        {"targets": 8, "visible": False},  # page_name (join key for inventory_pages.py)
+        {"targets": 9, "visible": False},  # slug (row-id anchor target)
     ],
     "text_in_header_can_be_selected": True,
     "style": {"caption-side": "bottom", "margin": "auto",
@@ -248,6 +328,17 @@ def render_fragment():
     # dig into ITable's own internals. log_full (column index 6, hidden)
     # carries the pre-rendered timeline HTML; row.data()[6] reads it
     # regardless of the column's visible/hidden CSS state.
+    #
+    # Row ids (job-<slug>, column index 9) are assigned manually rather than
+    # via DataTables' own `createdRow`/`rowId` options passed through
+    # dt_args, to not depend on whether ITable forwards those particular
+    # keys -- assignRowIds() runs once right after init (covers the first,
+    # synchronous draw that happens inside `new ITable(...)`, before any
+    # listener could have been attached) and again on every future "draw"
+    # event (sort/search/page-length changes). A page's "job" chip links to
+    # "jobs.html#job-<slug>"; on load, a matching hash scrolls to and
+    # expands that row so the reader lands on the actual update, not just
+    # somewhere on the page.
     init_script = f"""<script type="module">
     (async () => {{
         async function init() {{
@@ -260,6 +351,15 @@ def render_fragment():
             dt_args["data_json"] = JSON.stringify(manifest.data);
             new ITable(table, dt_args);
             const dt = $(table).DataTable();
+            function assignRowIds() {{
+                dt.rows().every(function () {{
+                    var node = this.node();
+                    var d = this.data();
+                    if (node && d && d[9]) node.id = "job-" + d[9];
+                }});
+            }}
+            assignRowIds();
+            dt.on("draw", assignRowIds);
             // jQuery delegation on "tbody tr" also matches the child row's
             // OWN <tr> (the one DataTables inserts to hold the expanded
             // timeline) -- dt.row() on that node is not reliably an empty
@@ -278,6 +378,17 @@ def render_fragment():
                     this.classList.add("log-expanded");
                 }}
             }});
+            if (location.hash.indexOf("#job-") === 0) {{
+                const target = document.getElementById(location.hash.slice(1));
+                if (target) {{
+                    target.scrollIntoView({{ behavior: "smooth", block: "center" }});
+                    const row = dt.row(target);
+                    if (row.length && !row.child.isShown()) {{
+                        row.child(row.data()[6]).show();
+                        target.classList.add("log-expanded");
+                    }}
+                }}
+            }}
         }}
         if (window.{version_var}) {{ await init(); }}
         else {{ document.addEventListener("DOMContentLoaded", init); }}

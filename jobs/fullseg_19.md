@@ -5,6 +5,7 @@ started: 2026-08-08 23:10
 updated: 2026-08-09 16:20
 slurm: 242177, 242192, 242193, 242194
 link: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/_preview/fullseg_19/
+page: fullseg_19
 motivation: See what the original SegviGen part segmentation produces on our 19 benchmark shapes, as a reference for the emissive variant.
 log:
 - 2026-08-09 16:20 tiny-INPUT panel defect (34170054845344..., 0.01% of pixels) diagnosed (stray unrelated 'Icosphere' mesh in the source GLB inflating the auto-scale bbox), fixed, republished, confirmed by eye against its own SEG views

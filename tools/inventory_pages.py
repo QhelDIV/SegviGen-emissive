@@ -14,6 +14,15 @@ project-console skill "Storage constraint"):
     keeps one standalone page per day (updates/<date>/) rather than somages'
     single continuous journal page, so those entries need their own scan pass
     to appear in the database at all.
+  - A second extra tier, "workspace" (PUBLISH_DEST/workspace/<name>/index.html,
+    added 2026-08-09 for the page-graph console view): the research-workspace
+    zone's living tree pages (paper_skeleton, render_sweep, diagnostics,
+    rendering) sit one level under workspace/, same shape as the update tier
+    above, and were invisible to this scan before (only workspace/index.html
+    itself, a root-tier page, was ever seen). theme3.css already ships a
+    `.tier-workspace` badge (the xgpage skill's rule 0(e), added for cobalt3d's
+    equivalent gap) so this tier renders correctly with no CSS change. name
+    carries the "workspace/" prefix, same convention as "updates/<date>".
 
 RUNTIME DATA: the table's rows live in web/pages.json (served from
 PUBLISH_DEST), fetched at page load — pages.html carries only the widget
@@ -54,6 +63,7 @@ PUBLISH_DEST = pathlib.Path("/project/3dlg-hcvc/omages/www/yanxg/lightgen")
 WEBDIR = PUBLISH_DEST
 PREVIEW_DIR = WEBDIR / "_preview"
 UPDATES_DIR = WEBDIR / "updates"
+WORKSPACE_DIR = WEBDIR / "workspace"
 NOTES_DIR = REPO / "notes"
 PAGES_YAML = REPO / "web" / "pages.yaml"
 MANIFEST = WEBDIR / "pages.json"
@@ -250,6 +260,16 @@ def scan_rows(use_cache: bool = False):
             one(d, "update", f"{BASE_URL}/updates/{d.name}/index.html",
                 name=f"updates/{d.name}")
 
+    # workspace tier (see module docstring): one level under workspace/, same
+    # shape as the update tier above. Skip workspace/index.html itself (that's
+    # scanned as a root-tier page in the loop above, not a duplicate).
+    if WORKSPACE_DIR.exists():
+        for d in sorted(WORKSPACE_DIR.iterdir()):
+            if not d.is_dir() or d.name.startswith("."):
+                continue
+            one(d, "workspace", f"{BASE_URL}/workspace/{d.name}/index.html",
+                name=f"workspace/{d.name}")
+
     if use_cache:
         try:
             CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -291,24 +311,70 @@ def load_curation():
 # ------------------------------------------------------------- rendering ----
 IMP_ATTR = ' class="db-imp" title="important page"'
 
+# job-page join, the reverse direction (2026-08-09, owner-approved): a job
+# records `page: <name>` pointing AT a page; this side reads jobs.json back
+# to find, for a given page name, which job(s) produced it.
+JOBS_MANIFEST = WEBDIR / "jobs.json"
+
+
+def _load_jobs_index():
+    """page_name -> [(job_title_plain, job_slug, job_motivation_plain), ...],
+    for the reverse join: a "job" chip on the page's row (linked to
+    jobs.html#job-<slug>, matching the row-id inventory_jobs.py's
+    render_fragment() assigns client-side) and a blurb fallback (a page
+    with no curated pages.yaml blurb inherits its producing job's
+    motivation). Regex-extracted from jobs.json's already-rendered "job"
+    cell HTML (title, optionally linked, then a .db-subline motivation)
+    rather than adding yet more hidden columns there -- the format is
+    simple and fully owned by this same project. html.unescape() undoes
+    inventory_jobs.py's html.escape() so this module can re-escape for its
+    OWN context (a tooltip attribute needs quote=True; double-escaping
+    would otherwise corrupt entities like an apostrophe)."""
+    try:
+        data = json.loads(JOBS_MANIFEST.read_text())
+    except (OSError, ValueError):
+        return {}
+    idx = {}
+    for row in data.get("data", []):
+        job_html = row[0]
+        page_name = row[8] if len(row) > 8 else ""
+        slug = row[9] if len(row) > 9 else ""
+        if not page_name or not slug:
+            continue
+        m_title = re.search(r"^(?:<a[^>]*>)?([^<]*)(?:</a>)?", job_html)
+        m_motiv = re.search(r'<span class="db-subline">([^<]*)</span>', job_html)
+        title = html.unescape(m_title.group(1)) if m_title else page_name
+        motivation = html.unescape(m_motiv.group(1)) if m_motiv else ""
+        idx.setdefault(page_name, []).append((title, slug, motivation))
+    return idx
+
 
 def render_data_rows(rows):
     """Pre-rendered cell values (HTML strings + raw numerics) in COLUMNS
     order, newest-modified first. Server-side rendering keeps the client
     init dumb and the delegated chrome handlers unchanged."""
     cur = load_curation()
+    jobs_idx = _load_jobs_index()
     out = []
     for r in sorted(rows, key=lambda r: r["modified"], reverse=True):
         meta = cur.get(r["name"], {})
         tags = meta.get("tags", [])
         imp = meta.get("important", False)
         blurb = meta.get("blurb", "")
+        job_matches = jobs_idx.get(r["name"], [])
+        if not blurb and job_matches:
+            blurb = job_matches[0][2]  # inherit the producing job's motivation
         name_html = (f'<a href="{r["url"]}"{IMP_ATTR if imp else ""}'
                      f' target="_blank" rel="noopener">{html.escape(r["name"])}</a>')
         tier_html = f'<span class="badge tier-{r["tier"]}">{r["tier"]}</span>'
         title_html = (f'<span title="{html.escape(blurb, quote=True)}">'
                       f'{html.escape(r["title"])}</span>'
                       if blurb else html.escape(r["title"]))
+        if job_matches:
+            job_title, job_slug, _ = job_matches[0]
+            title_html += (f' <a class="job-chip" href="{SITE_ROOT}/jobs.html#job-'
+                           f'{html.escape(job_slug, quote=True)}" title="produced by: '
+                           f'{html.escape(job_title, quote=True)}">job</a>')
         n = _plain(r["notes"] or "")
         if n:
             title_html += f'<span class="db-subline">{html.escape(n)}</span>'
