@@ -183,6 +183,7 @@ def console_tree_entries(base):
             {"key": "roadmap", "label": "Roadmap", "href": f"{base}/roadmap.html"},
             {"key": "jobs", "label": "Jobs", "href": f"{base}/jobs.html"},
             {"key": "pages", "label": "Pages", "href": f"{base}/pages.html"},
+            {"key": "graph", "label": "Graph", "href": f"{base}/graph.html"},
             {"key": "notes", "label": "Agent notes", "href": f"{base}/notes/index.html"},
         ]},
         wz.console_workspace_group(),
@@ -572,9 +573,32 @@ def build(out_dir):
     xc.write_tree_json(out_dir, console_tree_entries(base), CONFIG.title, CONFIG.subtitle)
     build_overview(out_dir)
     build_roadmap_tab(out_dir)
-    build_pages_tab(out_dir)
+    # Jobs before Pages (2026-08-10 ordering fix): inventory_pages.py's
+    # job-page join (_load_jobs_index()) reads PUBLISH_DEST/jobs.json back
+    # to chip a page's row with the job that produced it, so a full build
+    # must refresh jobs.json before scanning pages, or the pages tab reads
+    # the PREVIOUS build's jobs data. build_jobs_tab() is the only writer
+    # of jobs.json here and has no dependency on anything build_pages_tab()
+    # produces, so a straight reorder is the whole fix.
     build_jobs_tab(out_dir)
     build_jobs_redirect(out_dir)
+    build_pages_tab(out_dir)
+    # Lazy import (not module-level): tools/build_graph.py imports THIS module
+    # (`import build_console as bc`) to reuse console_page/console_tree_entries/
+    # CONFIG, so a top-level import here would be circular. By the time build()
+    # runs, this module has already finished loading, so the nested import
+    # resolves cleanly. See build_graph.py's module docstring for the rest.
+    #
+    # Fail-soft (2026-08-10, owner-requested): build() is a SHARED path every
+    # agent's console rebuild goes through; an in-development bug in the
+    # graph tab must never take down everyone else's Overview/Roadmap/Jobs/
+    # Pages publish. The graph tab's own errors are caught and logged here;
+    # every OTHER tab still built above/below is unaffected either way.
+    try:
+        import build_graph as bg
+        bg.build_graph_tab(out_dir)
+    except Exception as e:
+        print(f"[graph tab] build FAILED, continuing without it: {e}", file=sys.stderr)
     build_notes_tabs(out_dir)
     build_doc_pages(out_dir)
     build_console_redirect(out_dir)

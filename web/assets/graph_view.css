@@ -1,0 +1,89 @@
+/* graph_view.css — the page-relationship graph (graph.html).
+ * Lightgen-local, NOT part of the xgpage package (project-specific
+ * component; see tools/build_graph.py's module docstring). Loaded only on
+ * graph.html, after theme.css/theme2.css/theme3.css, so it inherits the v3
+ * tokens (--bg/--panel/--border/--text/--muted/--accent/--good/--blue-ink/
+ * --violet-ink/--accent-ink) and only adds this page's own layout.
+ */
+.graph-page .graph-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin: 4px 0 14px;
+}
+.graph-page #graph-search {
+  font: inherit; font-size: .92rem; padding: 7px 12px; min-width: 220px;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--panel); color: var(--text);
+}
+.graph-page #graph-search:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.graph-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); }
+.graph-legend .gl-item { display: inline-flex; align-items: center; gap: 6px; }
+.graph-legend .gl-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+
+.graph-layout { display: flex; gap: 20px; align-items: flex-start; }
+.graph-canvas-wrap {
+  position: relative; flex: 1 1 auto; min-width: 0;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+  overflow: hidden;
+}
+.graph-svg { display: block; width: 100%; height: 62vh; min-height: 420px; touch-action: none; cursor: grab; }
+.graph-svg.panning { cursor: grabbing; }
+.graph-hint {
+  position: absolute; left: 10px; bottom: 8px; font-size: .72rem; color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 75%, transparent); padding: 2px 7px; border-radius: 5px;
+  pointer-events: none; letter-spacing: .01em;
+}
+
+.graph-orphans {
+  flex: 0 0 260px; max-width: 260px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+  padding: 14px 16px; max-height: 62vh; min-height: 420px; overflow-y: auto;
+}
+.graph-orphans h3 { margin: 0 0 4px; font-size: .95rem; }
+.graph-orphans .sub { margin: 0 0 10px; font-size: .78rem; color: var(--muted); }
+.graph-orphans ul { list-style: none; margin: 0; padding: 0; }
+.graph-orphans li { margin: 0 0 2px; }
+.graph-orphans a {
+  display: block; padding: 6px 8px; border-radius: 6px; text-decoration: none;
+  color: var(--text); font-size: .85rem; line-height: 1.35;
+}
+.graph-orphans a:hover { background: var(--panel2); color: var(--accent-ink); }
+.graph-orphans .go-tier { display: block; font-size: .7rem; color: var(--muted); margin-top: 1px; }
+.graph-orphans .go-empty { font-size: .82rem; color: var(--muted); }
+
+/* nodes + edges */
+.gn-node { cursor: pointer; }
+.gn-circle { stroke: var(--bg); stroke-width: 1.5; transition: opacity .12s ease; }
+.gn-label {
+  font-size: 10.5px; fill: var(--text); pointer-events: none; user-select: none;
+  paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round;
+  transition: opacity .12s ease;
+}
+.gn-edge { fill: none; stroke-width: 1.4; transition: opacity .12s ease, stroke-width .12s ease; }
+.gn-edge.lit { stroke-width: 2.4; }
+
+/* Orphan labels (23 of 41 nodes here) are hidden by default -- at overview
+ * zoom, 41 constant-size labels on a real sparse layout collide badly, and
+ * an unconnected page's title is already one click away in the "not yet
+ * connected" panel. The dot (colored by tier) still marks its position and
+ * still hovers/searches/clicks normally; only the label text is deferred. */
+.gn-orphan .gn-label { opacity: 0; }
+.gn-orphan.hi .gn-label, .gn-orphan.search-hit .gn-label,
+.gn-orphan:hover .gn-label { opacity: 1; }
+
+.graph-svg.dimmed .gn-node:not(.hi), .graph-svg.dimmed .gn-label:not(.hi) { opacity: .16; }
+.graph-svg.dimmed .gn-edge:not(.lit) { opacity: .07; }
+
+.gn-node.search-hit .gn-circle { stroke: var(--accent); stroke-width: 3px; }
+.gn-node.search-hit .gn-label { fill: var(--accent-ink); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .graph-layout { flex-direction: column; }
+  .graph-orphans { flex: 1 1 auto; max-width: none; max-height: 260px; min-height: 0; }
+  .graph-svg { height: 52vh; min-height: 340px; }
+}
+@media (max-width: 480px) {
+  .graph-page .graph-toolbar { flex-direction: column; align-items: stretch; }
+  .graph-page #graph-search { min-width: 0; width: 100%; }
+  .graph-svg { height: 46vh; min-height: 300px; }
+}

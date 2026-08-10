@@ -561,7 +561,8 @@ def main():
         print(f"inventory_pages: {len(rows)} pages "
               f"({sum(1 for r in rows if r['tier']=='root')} root, "
               f"{sum(1 for r in rows if r['tier']=='preview')} preview, "
-              f"{sum(1 for r in rows if r['tier']=='update')} update)",
+              f"{sum(1 for r in rows if r['tier']=='update')} update, "
+              f"{sum(1 for r in rows if r['tier']=='workspace')} workspace)",
               file=sys.stderr)
         fragment = render_table_fragment()
         out_path = pathlib.Path(args.out)
