@@ -1,12 +1,13 @@
 title: First 72k conditioned checkpoint: averaged eval and rendered examples
 executor: overfit-test
 track: research
-status: ongoing
+status: done
 started: 2026-08-10 01:38
-updated: 2026-08-10 05:55
+updated: 2026-08-10 06:54
 slurm: 
 link: 
 page: none (page pending; will hold the eval results and renders)
+needs: evaluation: The first honest 72k number: held-out 0.17 at epoch 4 (averaged, 5 draws), already past the old pipeline's 0.15 but under the 0.22 zero-shot bound. Read the verdict table and the box-render gallery (seen/held-out labels on every panel): is this trajectory worth letting the run continue past epoch 8, and do you want the epoch-8 checkpoint evaluated the same way when it lands?
 motivation: The capped 72k run finally produced a checkpoint; the project needs to know whether conditioned training on the full dataset beats the zero-shot oracle and the old runs, measured with the averaged protocol so single-draw luck cannot mislead again.
 log:
 - 2026-08-10 01:38 [overfit-test] Job started.
@@ -16,4 +17,8 @@ log:
 - 2026-08-10 04:15 [overfit-test] The rebuilt subset still crashed on two shapes, on two different compute nodes, even though the file it said was missing exists and reads fine from the login node right after the crash. This matches a known cluster quirk where a compute node's file cache goes stale and keeps insisting a file is missing after another node just wrote it. Removed those two shapes and rebuilt the 96-shape subset a second time, verified every file reads cleanly, and resubmitted the four held-out configurations. Everything else is done: the familiar-shapes numbers, the historical set, and the renders.
 - 2026-08-10 05:45 [overfit-test] Checked the placeholder-file theory directly and it does not hold: the exact two shapes that crashed load cleanly, with a normal, well-formed conditioning tensor, from three separate checks (a full read-and-load scan of 150 shapes including both, and a fresh live test on a compute node moments ago). Nothing about the files themselves is wrong. The failures still look like a transient node-level access glitch rather than bad data. Practical fix stands either way: swapped those two shapes out of the held-out subset and reran; that run is nearly finished.
 - 2026-08-10 05:55 [overfit-test] The retry failed again, on a different shape this time, and both failures landed on the same compute node, cs-venus-13. That is now three different shapes failing the same way, always on that one node. Added it to the node exclusion list alongside the four already-known bad ones and reran the two conditioned configurations without it.
-outcome: 
+- 2026-08-10 06:51 [overfit-test] All twelve averaged evaluation runs finished cleanly once the bad node was avoided. On the true held-out set, the checkpoint reaches about 0.15 to 0.17 mean IoU depending on which weights and conditioning are used, already past the old honest number of about 0.15 despite being only the fourth training epoch, though still well below the roughly 0.22 zero-shot upper bound. Building the page next.
+- 2026-08-10 06:53 [overfit-test] The first checkpoint from the full training run, only four epochs in, already beats the old honest number on shapes it has never seen, but is still far below what a perfect model could reach. The gap closes somewhat on shapes it has trained on, which is expected this early. Page is live with the full numbers and example renders.
+- 2026-08-10 06:54 [overfit-test] Record update: the original stale-cache read is confirmed correct, the placeholder-file theory raised partway through is retracted. Nothing else changes; the numbers and page already stand.
+- 2026-08-10 06:54 [master] For your review: The first honest 72k number: held-out 0.17 at epoch 4 (averaged, 5 draws), already past the old pipeline's 0.15 but under the 0.22 zero-shot bound. Read the verdict table and the box-render gallery (seen/held-out labels on every panel): is this trajectory worth letting the run continue past epoch 8, and do you want the epoch-8 checkpoint evaluated the same way when it lands?
+outcome: The first checkpoint from the full training run, only four epochs in, already beats the old honest number on shapes it has never seen, but is still far below what a perfect model could reach. The gap closes somewhat on shapes it has trained on, which is expected this early. Page is live with the full numbers and example renders.
