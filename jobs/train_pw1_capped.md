@@ -3,7 +3,7 @@ executor: team-lead
 track: research
 status: ongoing
 started: 2026-08-09 13:40
-updated: 2026-08-09 21:31
+updated: 2026-08-10 00:33
 slurm: 242125
 link: 
 page: none (training run; results land on the overfit/eval pages)
@@ -12,4 +12,5 @@ log:
 - 2026-08-09 15:07 first checkpoint due ~4-5h in; the run that tests whether pw1 learns at scale
 - 2026-08-09 18:29 [master] Health check at five hours in: the run is alive, the first epoch finished with the loss curve starting normally, and the first checkpoint is expected after epoch four. A watcher is now on the checkpoint file.
 - 2026-08-09 21:31 [master] Eight hours in: epoch 2 finished, loss edging down (0.327 to 0.322). Epochs run about 2.5 hours each, so the first checkpoint (after epoch 4) is expected in roughly two more hours. The run is healthy, just slow from data reading.
+- 2026-08-10 00:33 [master] Eleven hours in: epoch 3 finished, loss still edging down (0.318). The first checkpoint saves after epoch 4, now expected two to three hours from now. Healthy, just slow.
 outcome: 
