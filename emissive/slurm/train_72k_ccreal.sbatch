@@ -23,7 +23,8 @@
 # smoke log if s/shape drops materially. Run smoke_72k_ccreal.sbatch first.
 #
 # (Third delta vs train_72k_unfilt.sbatch, a bugfix not a training axis:
-# set -o pipefail so a training failure isn't masked by the awk timestamp pipe.)
+# capture the training exit code through the awk timestamp pipe and end the
+# job with it, so Slurm records a failed run as FAILED instead of COMPLETED.)
 set -o pipefail
 source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh
 conda activate trellis2
@@ -52,5 +53,7 @@ python emissive/train/train_emissive.py \
   --pos_weight 5.0 \
   --ema 0.999 \
   2>&1 | awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush() }'
+TRAIN_EXIT=${PIPESTATUS[0]}
 
-echo "RUN_END $(date -Is)"
+echo "RUN_END $(date -Is) train_exit=${TRAIN_EXIT}"
+exit ${TRAIN_EXIT}
