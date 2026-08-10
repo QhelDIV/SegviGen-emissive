@@ -1,8 +1,8 @@
 title: xgjobs CLI (the board's command vocabulary)
 executor: jobs-redesign
-status: ongoing
+status: done
 started: 2026-08-09 18:05
-updated: 2026-08-09 18:21
+updated: 2026-08-09 18:26
 slurm: 
 link: 
 page: none (tooling; the board itself shows the result)
@@ -11,4 +11,5 @@ log:
 - 2026-08-09 18:05 Job started. Building the tools/job command: start, log, done, flag; automatic timestamps, locking, format checks, and board rebuild on every call.
 - 2026-08-09 18:11 Master verification passed: help output, lint rejection without mutation, and the live rebuild path all checked directly.
 - 2026-08-09 18:21 [master] Same refinement round on the tool side: every verb that appends a log line stamps the author automatically, and the flag verb requires a stated review ask.
-outcome: 
+- 2026-08-09 18:26 [master] The board CLI is complete and master-verified: seven verbs, automatic timestamps and authorship, style linting, locking, and an inline board rebuild on every call. Agents now write the board only through it.
+outcome: The board CLI is complete and master-verified: seven verbs, automatic timestamps and authorship, style linting, locking, and an inline board rebuild on every call. Agents now write the board only through it.
