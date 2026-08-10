@@ -207,7 +207,10 @@ def render_timeline_html(log, has_outcome, none_reason=None):
         note = html.escape(none_reason) if none_reason else "no results page recorded"
         parts.append(f'<div class="log-page-note">no results page: {note}</div>'
                      if none_reason else f'<div class="log-page-note">{note}</div>')
-    for i, (ts, text) in enumerate(log):
+    # Rendered NEWEST FIRST (owner-ratified 2026-08-09): the reader arrives
+    # from the collapsed row's latest entry and scans backward in time. The
+    # FILE stays append-only newest-last; only the rendering reverses.
+    for i, (ts, text) in sorted(enumerate(log), key=lambda p: p[0], reverse=True):
         is_outcome = has_outcome and i == n - 1
         cls = "log-entry log-entry-outcome" if is_outcome else "log-entry"
         tag = '<span class="log-outcome-tag">outcome</span>' if is_outcome else ""
