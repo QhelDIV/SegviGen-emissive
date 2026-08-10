@@ -33,6 +33,7 @@ python emissive/train/train_emissive.py \
   --val_split val_72k \
   --out_dir /3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/emis_72k_unfilt/run1 \
   --cond zero \
+  --pbr_cond token \
   --init_ckpt full_seg \
   --epochs 24 \
   --n_per_epoch 3000 \

@@ -28,6 +28,7 @@ python -u emissive/train/train_emissive.py \
   --out_dir /3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/emis_72k_unfilt/smoke \
   --init_ckpt full_seg \
   --cond zero \
+  --pbr_cond token \
   --pos_weight 5.0 \
   --lr 1e-5 --lr_schedule const --ema 0.999 \
   --n_per_epoch 24 --epochs 3 --save_every 1 \

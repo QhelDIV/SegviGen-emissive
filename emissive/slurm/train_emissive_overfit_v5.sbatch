@@ -15,6 +15,7 @@
 #          whole split, so quick-val covers every sample) $8=init_ckpt (default full_seg)
 #          $9=save_every (default 5) ${10}=lr_schedule (default cosine) ${11}=select_on
 #          (default nonzero) ${12}=val_split (default = $1)
+#          ${13}=pbr_cond (channel|token, default token)
 source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh
 conda activate trellis2
 export HF_HOME=/3dlg-jupiter-project/lightgen/hf_cache
@@ -26,6 +27,7 @@ python emissive/train/train_emissive.py \
   --out_dir /3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/${2:-gate10_v5} \
   --epochs ${3:-60} --lr 1e-5 --train_split "$1" --val_split "${12:-$1}" --n_per_epoch ${6:-10} \
   --cond ${5:-real} --balanced_pos_weight ${4:-50} --pos_weight 1.0 \
+  --pbr_cond ${13:-token} \
   --lr_schedule ${10:-cosine} --select_on ${11:-nonzero} \
   --emis_oversample --ema 0.999 \
   --save_every ${9:-5} --val_quick ${7:-10}
