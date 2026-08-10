@@ -10,7 +10,12 @@ import sys
 import json
 
 ROOT = "/3dlg-jupiter-project/lightgen/segvigen_emissive/code"
-SEGVIGEN = os.path.join(ROOT, "SegviGen")
+while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
+    parent = os.path.dirname(ROOT)
+    if parent == ROOT:
+        raise RuntimeError(f"could not locate SegviGen repo root (inference_full.py) above {__file__}")
+    ROOT = parent   # walk up: this script now lives nested under emissive/probes/, not repo root
+SEGVIGEN = ROOT
 sys.path.insert(0, SEGVIGEN)
 os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 

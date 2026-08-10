@@ -17,7 +17,7 @@ The definition is CHECKED against paper-v3's independently produced `material_su
 on the 11 shapes both cover, rather than assumed to match. `--verify_only` runs just that
 check.
 
-  python code/textured_share.py --sids_json sids.json --glb_root /3dlg-falas/datasets/TexVerse-1K \
+  python emissive/eval/textured_share.py --sids_json sids.json --glb_root /3dlg-falas/datasets/TexVerse-1K \
       --split_json .../data_splits_74k.json --out textured_share.json
 """
 import os

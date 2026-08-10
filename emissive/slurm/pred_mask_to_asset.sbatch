@@ -41,7 +41,7 @@ N=${#ARR[@]}
 i=0
 for sid in "${ARR[@]}"; do
   i=$((i+1))
-  python code/pred_mask_to_asset.py \
+  python emissive/eval/pred_mask_to_asset.py \
     --npz $OUT/pred_voxels/$TAG/$sid.npz \
     --glb $GLB_SRC/$sid.glb \
     --out_dir $DEST \

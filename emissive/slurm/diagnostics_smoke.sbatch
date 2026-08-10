@@ -23,7 +23,7 @@ import torch, o_voxel, trellis2
 print('IMPORT_OK', torch.cuda.is_available())
 "
 
-python code/diagnostics_run.py \
+python emissive/diagnostics/diagnostics_run.py \
   --dataset /3dlg-jupiter-project/lightgen/segvigen_emissive/dataset_direct \
   --split val_72k \
   --ckpt /3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/emis_72k_unfilt/run1/best.ckpt \

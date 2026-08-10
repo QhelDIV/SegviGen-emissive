@@ -36,7 +36,7 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 # val_72k and cost the whole array its train_72k half. Coverage is asserted
 # separately, by counting cond.pth against the shape count, not by exit code.
 for SPLIT in val_72k train_72k; do
-  python code/build_cond_thumbnail.py \
+  python emissive/data_prep/build_cond_thumbnail.py \
     --split $SPLIT --shard $SLURM_ARRAY_TASK_ID --nshards 24
 done
 

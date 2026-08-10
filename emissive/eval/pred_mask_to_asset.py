@@ -34,7 +34,7 @@ emissive texture, which is the honest rendering of an empty prediction.
 
 Runs on CPU (numpy + scipy + Pillow). No GPU, no trimesh.
 
-  python code/pred_mask_to_asset.py --npz .../pred_voxels/<model>/<sid>.npz \
+  python emissive/eval/pred_mask_to_asset.py --npz .../pred_voxels/<model>/<sid>.npz \
       --glb .../glb_src/<sid>.glb --out_dir .../pred_assets/<model> --sid <sid> --thr 0.5
 """
 import os

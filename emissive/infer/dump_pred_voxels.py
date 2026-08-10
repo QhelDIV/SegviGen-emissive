@@ -16,7 +16,7 @@ diag3 and is a different number by construction; both get reported.
 Conditioning is "zero" -- the direct-ovoxel dataset carries no cond.pth.
 
 Usage (GPU node, trellis2 env):
-  python code/dump_pred_voxels.py --dataset .../dataset_direct --sids_json sids.json \
+  python emissive/infer/dump_pred_voxels.py --dataset .../dataset_direct --sids_json sids.json \
       --ckpt .../outputs/emis_72k_unfilt/run1/best.ckpt --out_dir .../pred_voxels/emis_72k --seed 0
 """
 import os
@@ -27,9 +27,14 @@ import argparse
 from collections import OrderedDict
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SEGVIGEN = os.path.join(ROOT, "SegviGen")
+while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
+    parent = os.path.dirname(ROOT)
+    if parent == ROOT:
+        raise RuntimeError(f"could not locate SegviGen repo root (inference_full.py) above {__file__}")
+    ROOT = parent   # walk up: this script now lives nested under emissive/infer/, not repo root
+SEGVIGEN = ROOT
 sys.path.insert(0, SEGVIGEN)
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "emissive", "eval"))  # sibling dir holding eval_emissive.py
 os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 
 import numpy as np

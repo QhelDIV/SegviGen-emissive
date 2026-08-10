@@ -19,7 +19,7 @@ texture masks, whose direct voxel-space IoU is already known. If lifted and dire
 the model, the lift is neutral and the baseline's lifted number is comparable. If they do
 not agree, the comparison is reported as invalid rather than quietly published.
 
-  python code/texture_mask_iou.py --masks .../pred_masks/albedo_matched \
+  python emissive/eval/texture_mask_iou.py --masks .../pred_masks/albedo_matched \
       --control .../pred_masks/emis_72k_unfilt --npz_root .../pred_voxels/emis_72k_unfilt \
       --glb_dir .../glb_src --survey .../material_survey.json --out iou.json
 """

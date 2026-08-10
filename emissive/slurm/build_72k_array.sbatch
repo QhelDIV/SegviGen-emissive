@@ -102,7 +102,7 @@ START=$((SHARD * SHARD_SIZE))
 
 echo "task=$TID split=$SPLIT shard=$SHARD start=$START" >&2
 
-python code/build_dataset_direct.py \
+python emissive/data_prep/build_dataset_direct.py \
   --split "$SPLIT" --shuffle_seed 42 \
   --start "$START" --n "$SHARD_SIZE" \
   --out_root /3dlg-jupiter-project/lightgen/segvigen_emissive/dataset_direct \

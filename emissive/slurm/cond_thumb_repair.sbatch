@@ -29,7 +29,7 @@ echo "REPAIR_START $(date -Is) on $(hostname)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
 for SPLIT in val_72k train_72k; do
-  python code/build_cond_thumbnail.py --split $SPLIT --repair
+  python emissive/data_prep/build_cond_thumbnail.py --split $SPLIT --repair
 done
 
 python - <<'PY'

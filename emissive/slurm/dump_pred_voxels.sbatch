@@ -29,7 +29,7 @@ for spec in "emis_1k_w1:$BASE/outputs/emis_1k_w1/best.ckpt" \
             "emis_72k_unfilt:$BASE/outputs/emis_72k_unfilt/run1/best.ckpt"; do
   TAG="${spec%%:*}"; CKPT="${spec#*:}"
   echo "MODEL_START $TAG"
-  python code/dump_pred_voxels.py \
+  python emissive/infer/dump_pred_voxels.py \
     --dataset $BASE/dataset_direct \
     --sids_json $OUT/gallery_sids.json \
     --ckpt "$CKPT" \

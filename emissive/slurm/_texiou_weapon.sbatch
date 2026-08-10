@@ -18,7 +18,7 @@ conda activate trellis2
 cd $BASE
 echo "RUN_START $(date -Is) on $(hostname) tag=$TAG"
 
-python code/texture_mask_iou.py \
+python emissive/eval/texture_mask_iou.py \
   --masks $PV3/pred_masks/$TAG \
   --control $PV3/pred_masks/emis_72k_unfilt \
   --control_summary $BASE/outputs/three_ckpt_eval/pred_voxels/emis_72k_unfilt/summary.json \

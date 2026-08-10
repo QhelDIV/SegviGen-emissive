@@ -8,6 +8,6 @@
 source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh
 conda activate trellis2
 cd /3dlg-jupiter-project/lightgen/segvigen_emissive
-python code/eval_emissive.py \
+python emissive/eval/eval_emissive.py \
   --dataset /3dlg-jupiter-project/lightgen/segvigen_emissive/dataset \
   --ckpt "$1" --split val_pred8_2k --cond real --draws 4 --bucket_by voxel --dump_vis "$2"

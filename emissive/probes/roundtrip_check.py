@@ -13,7 +13,7 @@ voxels sit on a 512 lattice) and too large dilates thin emissive regions. Calibr
 against GT is legitimate and is the point of the round-trip; it is fixed there and then
 applied unchanged to the predictions, never re-tuned per model or per shape.
 
-  python code/roundtrip_check.py --pv3 .../paper_v3 --gallery .../gallery.json \
+  python emissive/probes/roundtrip_check.py --pv3 .../paper_v3 --gallery .../gallery.json \
       --dirs gt_roundtrip_tol0.87 gt_roundtrip_tol1.0 gt_roundtrip_tol1.5 gt_roundtrip
 """
 import os

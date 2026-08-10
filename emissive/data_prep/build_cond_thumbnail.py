@@ -67,7 +67,12 @@ import argparse
 import traceback
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SEGVIGEN = os.path.join(ROOT, "SegviGen")
+while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
+    parent = os.path.dirname(ROOT)
+    if parent == ROOT:
+        raise RuntimeError(f"could not locate SegviGen repo root (inference_full.py) above {__file__}")
+    ROOT = parent   # walk up: this script now lives nested under emissive/data_prep/, not repo root
+SEGVIGEN = ROOT
 sys.path.insert(0, SEGVIGEN)
 sys.path.insert(0, os.path.join(SEGVIGEN, "data_toolkit"))
 

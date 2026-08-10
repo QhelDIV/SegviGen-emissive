@@ -24,7 +24,7 @@ cd $ROOT
 echo "SMOKE_START $(date -Is) on $(hostname)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
-python code/build_cond_thumbnail.py --split val_72k --limit 8 --verify
+python emissive/data_prep/build_cond_thumbnail.py --split val_72k --limit 8 --verify
 echo "COND_OK"
 
 # a throwaway split holding exactly the 8 shapes we just built cond for, so
@@ -44,7 +44,7 @@ for s in sids:
 print("smoke split:", sids)
 PY
 
-python code/train_emissive.py \
+python emissive/train/train_emissive.py \
   --dataset $ROOT/dataset_direct \
   --train_split condsmoke8 \
   --val_split condsmoke8 \

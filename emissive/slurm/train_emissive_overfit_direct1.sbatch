@@ -15,7 +15,7 @@ conda activate trellis2
 export HF_HOME=/3dlg-jupiter-project/lightgen/hf_cache
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 cd /3dlg-jupiter-project/lightgen/segvigen_emissive
-python code/train_emissive.py \
+python emissive/train/train_emissive.py \
   --dataset /3dlg-jupiter-project/lightgen/segvigen_emissive/dataset_direct \
   --init_ckpt full_seg \
   --out_dir /3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/overfit1_direct \

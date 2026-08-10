@@ -21,7 +21,7 @@ echo "SMOKE_START $(date -Iseconds) on $(hostname)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
 cd /3dlg-jupiter-project/lightgen/segvigen_emissive
-python -u code/train_emissive.py \
+python -u emissive/train/train_emissive.py \
   --dataset /3dlg-jupiter-project/lightgen/segvigen_emissive/dataset_direct \
   --train_split train_72k \
   --val_split val_72k \

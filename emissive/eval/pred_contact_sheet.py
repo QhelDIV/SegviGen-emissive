@@ -6,7 +6,7 @@ Empty predictions are labelled on the panel. A dark panel that says so is eviden
 panel that says nothing is indistinguishable from a broken render, and 4 of these 11 are
 empty.
 
-  python code/pred_contact_sheet.py --gt .../final2 --pred .../pred/emis_72k_unfilt_method \
+  python emissive/eval/pred_contact_sheet.py --gt .../final2 --pred .../pred/emis_72k_unfilt_method \
       --summary .../pred_voxels/emis_72k_unfilt/summary.json --out sheet.png
 """
 import os

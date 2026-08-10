@@ -14,7 +14,7 @@ source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh
 conda activate trellis2
 cd $BASE
 echo "RUN_START $(date -Is) on $(hostname)"
-python code/textured_share.py \
+python emissive/eval/textured_share.py \
   --diagnostics $BASE/outputs/emis_72k_unfilt/run1/diagnostics.json \
   --survey $PV3/material_survey.json \
   --out $BASE/outputs/three_ckpt_eval/textured_share_300.json

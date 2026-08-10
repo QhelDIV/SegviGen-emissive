@@ -10,7 +10,7 @@ the flat mean is carried only to show what it hides.
 
 Run locally -- reads json, no GPU, no torch.
 
-  python code/three_ckpt_table.py --out_dir outputs/three_ckpt_eval
+  python emissive/diagnostics/three_ckpt_table.py --out_dir outputs/three_ckpt_eval
 """
 import os
 import json

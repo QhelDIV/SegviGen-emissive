@@ -27,7 +27,7 @@ cd /3dlg-jupiter-project/lightgen/segvigen_emissive
 echo "RUN_START $(date -Is) on $(hostname)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
-python code/train_emissive.py \
+python emissive/train/train_emissive.py \
   --dataset /3dlg-jupiter-project/lightgen/segvigen_emissive/dataset_direct \
   --train_split train_72k \
   --val_split val_72k \

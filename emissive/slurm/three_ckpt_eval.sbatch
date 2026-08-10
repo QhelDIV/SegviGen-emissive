@@ -36,12 +36,12 @@ mkdir -p $OUT_DIR
 cp -n $REF_DIR/_diag12_raw_seed0_n300.json $OUT_DIR/_diag12_raw_seed0_n300.json
 echo "DIAG12_CACHE_READY"
 
-python code/diag3_only.py \
+python emissive/diagnostics/diag3_only.py \
   --dataset $BASE/dataset_direct --split val_72k \
   --ckpt "$CKPT" --out_dir $OUT_DIR \
   --n 300 --draws 3 --steps 12 --seed 0
 
-python code/diagnostics_run.py --aggregate_only \
+python emissive/diagnostics/diagnostics_run.py --aggregate_only \
   --dataset $BASE/dataset_direct --split val_72k \
   --ckpt "$CKPT" --train_curve "$CURVE" \
   --out $OUT_DIR/diagnostics.json \

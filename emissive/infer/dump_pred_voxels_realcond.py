@@ -1,7 +1,7 @@
 """
 fbv1_repro real-conditioning test (2026-08-07): dump_pred_voxels_repro.py always fed
 zero conditioning, matching what "tonight's" runs used. But emis_1k_w1 / emis_1k_w5
-trained on Path A data with cond=real (see code/three_ck_table.py's MODELS list), so
+trained on Path A data with cond=real (see emissive/diagnostics/three_ckpt_table.py's MODELS list), so
 scoring them zero-cond may be starving them of conditioning they were never trained
 without. This script is dump_pred_voxels_repro.py with exactly one change: cond is
 loaded from a Path A dataset dir's own cond.pth instead of zeros. Everything else --
@@ -10,7 +10,7 @@ the canonical direct-ovoxel data) -- is unchanged, so this isolates the conditio
 variable rather than also swapping the underlying sample representation.
 
 Usage (GPU node, trellis2 env):
-  python code/dump_pred_voxels_realcond.py --dataset .../dataset_direct \
+  python emissive/infer/dump_pred_voxels_realcond.py --dataset .../dataset_direct \
       --cond_dir .../dataset/val_96 --sids_json sids.json \
       --ckpt .../outputs/emis_1k_w1/epoch_0016_ema.ckpt \
       --out_dir .../pred_voxels/w1_ema_realcond --seed 0 --draws 3
@@ -23,9 +23,14 @@ import argparse
 from collections import OrderedDict
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-SEGVIGEN = os.path.join(ROOT, "SegviGen")
+while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
+    parent = os.path.dirname(ROOT)
+    if parent == ROOT:
+        raise RuntimeError(f"could not locate SegviGen repo root (inference_full.py) above {__file__}")
+    ROOT = parent   # walk up: this script now lives nested under emissive/infer/, not repo root
+SEGVIGEN = ROOT
 sys.path.insert(0, SEGVIGEN)
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "emissive", "eval"))  # sibling dir holding eval_emissive.py
 os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 
 import numpy as np
