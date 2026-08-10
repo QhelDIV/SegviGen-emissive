@@ -5,10 +5,10 @@ build_console.py's build_jobs_tab() (console shell, no hero — see that
 module); this file just calls it against the live publish dest, no full
 console rebuild and no asset resync.
 
-Entry format for jobs/*.md (2026-08-09 log redesign + job-page join,
-owner-directed):
+Entry format for jobs/*.md (2026-08-09 log redesign + job-page join +
+attention bands, owner-directed):
   title / executor / status(ongoing|done|frozen) / started / updated / slurm /
-  link / page / motivation / log: / outcome
+  link / page / needs / motivation / log: / outcome
 
   title, executor, status, started, updated, slurm: plain "key: value"
   lines, unchanged.
@@ -32,6 +32,16 @@ owner-directed):
   tracked page (an external doc, a paper PDF on Overleaf, ...) -- keeps
   working exactly as before. When `page:` resolves, it wins; `link:` only
   links the title when `page:` doesn't.
+
+  needs: set/cleared by the MASTER ONLY, never by the executing agent.
+  `needs: evaluation` means a deliverable passed the master's own review and
+  is waiting on the OWNER's eyes -- it pins the row above every other job on
+  the board with an unmistakable violet "for your review" chip that never
+  fades, until the master clears the field once the owner has looked. An
+  executing agent reports done with an outcome; it does not flag its own
+  work for review. Any other `needs:` value is reserved for future use and
+  renders as plain quiet text, never a pin, never a chip -- don't invent new
+  values expecting them to flag anything yet.
 
   motivation: one sentence, written ONCE at registration -- why this job
   exists. Shown under the title on the board; it does not change as the job

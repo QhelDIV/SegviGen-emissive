@@ -46,6 +46,30 @@ jobs.json -- see that module's _load_jobs_index(). Every row also gets a
 stable DOM id (`job-<slug>`, assigned in render_fragment()'s init script) so
 a page's "job" chip can deep-link straight to the row, not just to jobs.html.
 
+ATTENTION BANDS + RECENCY HEAT (2026-08-09, owner-approved): `needs:
+evaluation` on a job means a deliverable passed the MASTER's own review and
+is waiting on the owner's eyes -- set and cleared only by the master (see
+tools/build_jobs.py's docstring). It does two things: a violet "for your
+review" chip (deliberately a color no other badge on this board uses --
+amber is "no page", green/gray/red are status/stale) that never fades, and
+pins the row into its own band ABOVE every ongoing and done/frozen row
+regardless of the job's own status (the `state-order` sentinel, column 7, now
+encodes THREE bands: 0 = needs evaluation, 1 = ongoing, 2 = done/frozen --
+see the `band` computation in rows()). Any OTHER `needs:` value is reserved
+for future use and renders as plain quiet text next to status, never a chip,
+never a pin -- an unrecognized value should never look like it's demanding
+attention it wasn't asked to demand.
+
+Recency heat (ongoing jobs only, latest-cell text + timestamp only, never
+the whole row, never a flagged row) is computed CLIENT-SIDE in
+render_fragment()'s init script from the hidden `last_ts` column, not
+server-side, specifically so it stays true while the page sits open across
+its existing 120s auto-reload -- see decorateRows()'s heatColorMix()/
+heatOpacity(). It reads --accent/--ink-3 via getComputedStyle at apply time
+(not hardcoded hex) so it's correct in both themes automatically, and
+re-applies on a MutationObserver watching <html data-theme> so a live theme
+toggle updates it immediately rather than waiting for the next redraw.
+
 Modes:
     --manifest            jobs/*.md -> PUBLISH_DEST/jobs.json   (stdlib only)
     --out <fragment.html> the widget fragment (NEEDS .venv_itables)
@@ -65,20 +89,27 @@ PUBLISH_DEST = pathlib.Path("/project/3dlg-hcvc/omages/www/yanxg/lightgen")
 MANIFEST = PUBLISH_DEST / "jobs.json"
 PAGES_MANIFEST = PUBLISH_DEST / "pages.json"
 STALE_H = 3.0
-ORDER = {"ongoing": 0, "frozen": 1, "done": 2}
 BADGE_BG = {"ongoing": "#1d7a46", "frozen": "#8a6d1a", "done": "#5a6472"}
 NO_PAGE_BADGE_BG = "#a67c00"  # amber -- a prompt to add page:, not an error color
+EVAL_BADGE_BG = "var(--violet-ink)"  # theme-aware (unlike the other fixed-hex badges here
+# on purpose: it's a CSS custom property, correct in both themes automatically); distinct
+# hue from amber (no-page) and the green/gray/red status+stale badges -- "for your review"
+NEEDS_EVAL = "evaluation"
 
-# page_name, slug: hidden (see module docstring's JOB-PAGE JOIN section).
+# page_name, slug, last_ts, status_raw: hidden (see module docstring's
+# JOB-PAGE JOIN and ATTENTION BANDS sections). last_ts/status_raw are plain
+# (unescaped-for-display) values purely for the client-side heat computation
+# -- parsing them back out of rendered HTML would be needless fragility when
+# Python already has them as plain strings.
 COLUMNS = ["job", "status", "executor", "latest", "started", "updated",
-           "log_full", "state-order", "page_name", "slug"]
+           "log_full", "state-order", "page_name", "slug", "last_ts", "status_raw"]
 # per-column <th> class, same order as COLUMNS (see render_fragment(); the
 # matching <td> classes are applied via columnDefs' className below). Narrow
 # width (see theme3.css's mobile block) keeps job/status/latest visible --
 # the log-first point of this board -- and defers executor/started/updated.
 HEAD_CLASSES = ["", "dt-nowrap", "dt-nowrap dt-hide-narrow", "",
                 "dt-nowrap dt-right dt-hide-narrow",
-                "dt-nowrap dt-right dt-hide-narrow", "", "", "", ""]
+                "dt-nowrap dt-right dt-hide-narrow", "", "", "", "", "", ""]
 
 LOG_LINE_RE = re.compile(r"^-\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s+(.*)$")
 NONE_PAGE_RE = re.compile(r"(?i)^none\b\s*(?:\(([^)]*)\))?")
@@ -205,6 +236,9 @@ def rows():
         if e.get("motivation"):
             title += f'<span class="db-subline">{html.escape(e["motivation"])}</span>'
 
+        needs_raw = (e.get("needs") or "").strip()
+        needs_eval = needs_raw.lower() == NEEDS_EVAL
+
         badge = ('<span class="db-badge" style="background:%s;color:#fff">%s</span>'
                  % (BADGE_BG.get(st, "#5a6472"), st))
         if stale:
@@ -214,6 +248,13 @@ def rows():
             badge += (' <span class="db-badge" style="background:%s;color:#fff" '
                       'title="done with no page: recorded -- add one, or page: none (reason)">'
                       'no page</span>' % NO_PAGE_BADGE_BG)
+        if needs_eval:
+            badge = ('<span class="db-badge db-badge-eval" style="background:%s;color:#fff">'
+                      'for your review</span> ' % EVAL_BADGE_BG) + badge
+        elif needs_raw:
+            # reserved for future needs: values -- plain quiet text, never a
+            # chip and never a pin (see module docstring).
+            badge += f' <span class="db-note-inline">needs: {html.escape(needs_raw)}</span>'
 
         n = len(log)
         is_outcome_last = has_outcome
@@ -234,9 +275,14 @@ def rows():
 
         log_full_html = render_timeline_html(log, has_outcome, none_reason)
 
+        # three attention bands (see module docstring): needs-evaluation
+        # rows pin above everything regardless of their own status; within
+        # a band, the secondary "updated" DESC sort (DT_ARGS) still applies.
+        band = 0 if needs_eval else (1 if st == "ongoing" else 2)
+
         out.append([title, badge, html.escape(e.get("executor", e.get("owner", ""))),
                     latest, e.get("started", ""), updated, log_full_html,
-                    ORDER.get(st, 3), page_name, e["slug"]])
+                    band, page_name, e["slug"], last_ts, st])
     return out
 
 
@@ -275,9 +321,11 @@ DT_ARGS = {
         {"targets": 4, "className": "dt-nowrap dt-right dt-hide-narrow"},
         {"targets": 5, "className": "dt-nowrap dt-right dt-hide-narrow"},
         {"targets": 6, "visible": False},  # log_full (searchable, drives the child row)
-        {"targets": 7, "visible": False},  # state-order sentinel (searchable)
+        {"targets": 7, "visible": False},  # state-order sentinel: 3-band pin/ongoing/done
         {"targets": 8, "visible": False},  # page_name (join key for inventory_pages.py)
         {"targets": 9, "visible": False},  # slug (row-id anchor target)
+        {"targets": 10, "visible": False},  # last_ts (client-side heat computation)
+        {"targets": 11, "visible": False},  # status_raw (client-side heat: ongoing only)
     ],
     "text_in_header_can_be_selected": True,
     "style": {"caption-side": "bottom", "margin": "auto",
@@ -351,15 +399,79 @@ def render_fragment():
             dt_args["data_json"] = JSON.stringify(manifest.data);
             new ITable(table, dt_args);
             const dt = $(table).DataTable();
-            function assignRowIds() {{
+            // Piecewise-linear, continuous decay (age in minutes -> [0,1]).
+            // colorMix: 1 = full warm accent, 0 = normal ink; opacity fades
+            // ONLY past the "normal" point, so a job updated within the
+            // last 6h never looks faded, just gradually less warm.
+            function heatColorMix(ageMin) {{
+                if (ageMin <= 15) return 1;
+                if (ageMin >= 360) return 0;
+                if (ageMin <= 60) return 1 - 0.5 * (ageMin - 15) / 45;
+                return 0.5 - 0.5 * (ageMin - 60) / 300;
+            }}
+            function heatOpacity(ageMin) {{
+                if (ageMin <= 360) return 1;
+                if (ageMin >= 2880) return 0.4;
+                if (ageMin <= 1440) return 1 - 0.35 * (ageMin - 360) / 1080;
+                return 0.65 - 0.25 * (ageMin - 1440) / 1440;
+            }}
+            function hexToRgb(hex) {{
+                hex = (hex || "").trim().replace("#", "");
+                if (hex.length === 3) hex = hex.split("").map(c => c + c).join("");
+                const n = parseInt(hex, 16) || 0;
+                return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+            }}
+            // Row ids (job-<slug>, column index 9) are assigned manually
+            // rather than via DataTables' own createdRow/rowId passthrough,
+            // to not depend on whether ITable forwards those particular
+            // keys. The needs-evaluation row class and recency heat are
+            // computed in the SAME per-row pass for efficiency (~10 rows,
+            // still one loop, not three). decorateRows() runs once right
+            // after init (covers the first, synchronous draw inside `new
+            // ITable(...)`, before any listener could have been attached),
+            // again on every future "draw" event (sort/search/page-length
+            // changes), and again on a live theme toggle (see the
+            // MutationObserver below) so heat colors -- read from
+            // --accent/--ink-3 via getComputedStyle, not hardcoded hex --
+            // are correct in whichever theme is showing right now.
+            function decorateRows() {{
+                const accentRgb = hexToRgb(getComputedStyle(document.documentElement)
+                    .getPropertyValue("--accent"));
+                const inkRgb = hexToRgb(getComputedStyle(document.documentElement)
+                    .getPropertyValue("--ink-3"));
+                const now = Date.now();
                 dt.rows().every(function () {{
-                    var node = this.node();
-                    var d = this.data();
-                    if (node && d && d[9]) node.id = "job-" + d[9];
+                    const node = this.node();
+                    const d = this.data();
+                    if (!node || !d) return;
+                    if (d[9]) node.id = "job-" + d[9];
+                    const flagged = !!node.querySelector(".db-badge-eval");
+                    node.classList.toggle("needs-eval-row", flagged);
+                    const latestEl = node.querySelector(".log-latest");
+                    if (!latestEl) return;
+                    const tsEl = latestEl.querySelector(".log-ts");
+                    const textEl = latestEl.querySelector(".log-text");
+                    // heat applies to ongoing, unflagged jobs only -- a
+                    // flagged row "never fades regardless of age", and
+                    // done/frozen rows are never warm to begin with.
+                    if (flagged || d[11] !== "ongoing" || !d[10]) {{
+                        if (tsEl) {{ tsEl.style.color = ""; tsEl.style.opacity = ""; }}
+                        if (textEl) {{ textEl.style.color = ""; textEl.style.opacity = ""; }}
+                        return;
+                    }}
+                    const ageMin = Math.max(0, (now - Date.parse(d[10].replace(" ", "T"))) / 60000);
+                    const mix = heatColorMix(ageMin);
+                    const op = heatOpacity(ageMin);
+                    const rgb = [0, 1, 2].map(i => Math.round(accentRgb[i] * mix + inkRgb[i] * (1 - mix)));
+                    const colorStr = "rgb(" + rgb.join(",") + ")";
+                    if (tsEl) {{ tsEl.style.color = colorStr; tsEl.style.opacity = op; }}
+                    if (textEl) {{ textEl.style.color = colorStr; textEl.style.opacity = op; }}
                 }});
             }}
-            assignRowIds();
-            dt.on("draw", assignRowIds);
+            decorateRows();
+            dt.on("draw", decorateRows);
+            new MutationObserver(decorateRows).observe(document.documentElement,
+                {{ attributes: true, attributeFilter: ["data-theme"] }});
             // jQuery delegation on "tbody tr" also matches the child row's
             // OWN <tr> (the one DataTables inserts to hold the expanded
             // timeline) -- dt.row() on that node is not reliably an empty
@@ -394,7 +506,11 @@ def render_fragment():
         else {{ document.addEventListener("DOMContentLoaded", init); }}
     }})();
     </script>"""
-    return offline + init_datatables + skeleton + init_script + SORT_CLICK_JS
+    legend = ('<p class="sub">A violet "for your review" chip means a deliverable passed '
+              'the master\'s review and is waiting on your look; those rows always stay on '
+              'top and never fade. An ongoing job\'s latest-update line warms up right after '
+              'it is touched and cools toward gray the longer it sits untouched.</p>')
+    return offline + init_datatables + skeleton + init_script + SORT_CLICK_JS + legend
 
 
 def main():
