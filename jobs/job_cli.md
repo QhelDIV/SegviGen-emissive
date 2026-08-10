@@ -1,4 +1,4 @@
-title: Job CLI (the board's command vocabulary)
+title: xgjobs CLI (the board's command vocabulary)
 executor: jobs-redesign
 status: ongoing
 started: 2026-08-09 18:05
