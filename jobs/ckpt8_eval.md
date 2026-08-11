@@ -3,7 +3,7 @@ executor: overfit-test
 track: research
 status: done
 started: 2026-08-10 16:38
-updated: 2026-08-10 19:49
+updated: 2026-08-10 19:52
 slurm: 
 link: 
 page: ckpt8_eval
@@ -31,4 +31,6 @@ log:
 - 2026-08-10 19:49 [master] Master review passed on an own screenshot of the live page: verdict headline, epoch comparison, all three galleries with per-shape numbers and corrected labels, and the one excluded defective render disclosed in provenance. Flagged for the owner.
 - 2026-08-10 19:49 [master] Review complete; flag cleared.
 - 2026-08-10 19:49 [master] For your review: The complete epoch-8 page: trajectory (held-out 0.198 vs the 0.220 zero-shot bound, all configs improved), the paper's eleven shapes as a true held-out gallery, your showcase twelve (train-split, labeled), and the familiar 8. Read the verdict and the jack-o'-lantern and world-map panels: the model over-fires confidently on held-out shapes. Decision: continue training from the epoch 7 seed, and should the over-firing get its own investigation before more compute?
+- 2026-08-10 19:52 [owner] I have checked the results, I strongly believe the results is bugy, compared to the 8 'familiar' examples we saw previous, the results on the paper examples are significantly worse, and especially having buggy patterns we never saw in the 'familiar' examples.
+- 2026-08-10 19:52 [master] Investigation opened rather than argued: the paper-examples gallery ran through pipeline pieces built yesterday (a new material-slot survey, an adapted inference script, backfill-era conditioning files) while the familiar gallery used the long-validated path, so a gallery-specific bug is structurally plausible. The differential check compares prediction files against renders per shape and validates the new pieces one by one.
 outcome: Four more epochs of training moved the checkpoint from about 0.15 to about 0.20 mean IoU on shapes it has never seen, closing roughly two thirds of the remaining gap to the zero-shot upper bound. Every one of the twelve measured configurations improved, none got worse. On the 8 familiar training shapes the score nearly doubled. Page is live with the full comparison against epoch 4.
