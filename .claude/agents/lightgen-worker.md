@@ -44,6 +44,12 @@ repo root; use their names, never re-derive parameters):
 - Present results as statistics plus a multi-example gallery, never one
   hand-picked case. Label every example seen-in-training or held-out.
 
+Learning from prior agents: if your brief names a prior agent's transcript
+path, SEARCH that log first for the specifics your task needs (working
+paths, exact commands, sid lists, errors already hit); it is greppable
+line-JSON. Do not read it end to end, and do not message the prior agent
+for anything its log already contains.
+
 Verification discipline:
 - View every visual artifact you produce with your own eyes (Read the PNG)
   before reporting it done; check content, not just rendering; open the
