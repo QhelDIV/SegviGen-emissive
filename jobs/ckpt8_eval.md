@@ -3,7 +3,7 @@ executor: overfit-test
 track: research
 status: done
 started: 2026-08-10 16:38
-updated: 2026-08-10 20:19
+updated: 2026-08-11 13:57
 slurm: 
 link: 
 page: ckpt8_eval
@@ -40,4 +40,5 @@ log:
 - 2026-08-10 20:18 [overfit-test] Rewrote the page's verdict from a closed-gap headline to the honest tension: the held-out accuracy gain is real and every configuration improved, but the same checkpoint confidently over-predicts on shapes with little or no ground truth, including several of its own training shapes. Added a calibration section with the raw-versus-EMA numbers, showing EMA weights are less accurate on average than raw on the familiar 8, not more, and only look cleaner because their draw-to-draw variance is near zero. Folded in the full adversarial check of the gallery patterns the owner flagged: they hold up as model behavior, not a pipeline bug, and the gallery captions now carry a note that a fully saturated prediction can look streaky purely because of how the render handles the mesh's UV layout.
 - 2026-08-10 20:19 [master] Review complete; flag cleared.
 - 2026-08-10 20:19 [master] For your review: The final honest page: held-out IoU 0.198 is real, but the checkpoint buys it by predicting emissive broadly, with confident false positives even on its own training shapes (raw error 0.31 vs EMA 0.54; EMA is wronger but calmer). Your gallery challenge drove this whole finding. Decision: continue training from the epoch 7 seed as-is, attack the calibration problem first (loss reweighting, threshold study, or training-signal balance), or hold 72k spend until a fix is designed?
+- 2026-08-11 13:57 [overfit-test] Added the figure the owner asked for: a four-panel walkthrough of why the pumpkin's prediction looks streaky, sitting inside the calibration section. It shows the saturated prediction mask next to its atlas, the same material's ground truth run through the identical code for comparison, and the two rendered results side by side. The caption argues the point directly: the streaks are the mesh's own UV layout showing through a fully lit prediction, not a spatially broken output, and the ground-truth panel proves the same code is not biased toward painting streaks. The gallery captions now link to this figure instead of describing the mechanism in words alone. Exported it as a real image so it shows correctly in the side thumbnail strip, and checked the finished page live in both light and dark reading modes.
 outcome: Four more epochs of training moved the checkpoint from about 0.15 to about 0.20 mean IoU on shapes it has never seen, closing roughly two thirds of the remaining gap to the zero-shot upper bound. Every one of the twelve measured configurations improved, none got worse. On the 8 familiar training shapes the score nearly doubled. Page is live with the full comparison against epoch 4.
