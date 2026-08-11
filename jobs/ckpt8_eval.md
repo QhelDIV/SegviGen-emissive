@@ -3,7 +3,7 @@ executor: overfit-test
 track: research
 status: done
 started: 2026-08-10 16:38
-updated: 2026-08-10 19:22
+updated: 2026-08-10 19:48
 slurm: 
 link: 
 page: ckpt8_eval
@@ -25,4 +25,6 @@ log:
 - 2026-08-10 19:02 [master] For your review: The trajectory page: held-out 0.20 at epoch 8 (from 0.17), all twelve configurations improved, two thirds of the gap to the 0.22 zero-shot bound closed, while memorization on training shapes doubled and the hot dog's false glow got STRONGER. Decision: continue training from the epoch 7 seed, or hold until the training-target decode check answers whether the false glow is a data bug?
 - 2026-08-10 19:15 [master] The hold condition on this entry's decision is resolved: the training-target decode check refuted the data-bug hypothesis, so the epoch 8 gains are real learning on the correct target. The decision is now purely whether to continue training from the epoch 7 seed; the false-glow symptom is being attributed (model behavior versus visualization) as the last loose end.
 - 2026-08-10 19:22 [overfit-test] gallery-runner: showcase render restructured into a per-frame array per team-lead's direction (job 242924 was serial, ~2min/frame, only 10/36 done in 36 min). Cancelled 242924, submitted array 242950 (36 tasks = 3 variants x 12 sids, one render_emissive.py --only <sid> call per task, skips frames already on disk). Confirmed fanning out across 3+ nodes immediately. Lesson for remaining stages: render fans out per frame, not per job.
+- 2026-08-10 19:46 [overfit-test] Added the two extra example galleries from gallery-runner's output: the paper's eleven figure-7 shapes, all genuinely held out, and our own twelve picked emissive examples, all seen in training. Each shows ground truth against prediction with per-shape five-draw IoU and an honest seen-or-held-out label. Found and worked around one rendering defect along the way: one shape's prediction panel rendered solid black despite its own numbers showing full coverage; that one panel is excluded with the number kept, everything else checked out including own-eyes review of several examples.
+- 2026-08-10 19:48 [master] Label dispute resolved by direct directory check: the twelve showcase shapes ARE training data (present in the train split since August 7), so the page's seen-in-training labels were right and the example-sets manifest was wrong; the manifest is corrected. The held-out read among the galleries is the paper's eleven, which are all in the validation split.
 outcome: Four more epochs of training moved the checkpoint from about 0.15 to about 0.20 mean IoU on shapes it has never seen, closing roughly two thirds of the remaining gap to the zero-shot upper bound. Every one of the twelve measured configurations improved, none got worse. On the 8 familiar training shapes the score nearly doubled. Page is live with the full comparison against epoch 4.
