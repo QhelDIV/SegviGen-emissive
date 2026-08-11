@@ -3,11 +3,10 @@ executor: render-doc
 track: research
 status: done
 started: 2026-08-09 18:05
-updated: 2026-08-10 00:02
+updated: 2026-08-10 18:17
 slurm: 242221 (condition render), 242225 (segmentation inference), 242222 (sweep video frames, 11-task array)
 link: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/workspace/rendering/
 page: workspace/rendering
-needs: evaluation: Open the Rendering setups page: the opening figure now shows all five setups of the weapon including the looping emission-sweep video; figures are numbered with a thumbnail strip in the right rail; section 05 shows the family-wide segmentation failure. Does this answer your teaser and thumbnail feedback, and is the video what you wanted?
 motivation: Figures across the pages and the paper are made with several different lighting setups, and nobody can currently tell which one a given figure used or which one to reach for. Naming the five setups and writing down their verified parameters makes figure choices consistent and reviewable.
 log:
 - 2026-08-09 18:05 Started. Reading the render scripts to verify every parameter before writing anything down.
@@ -21,4 +20,7 @@ log:
 - 2026-08-09 20:31 [master] For your review: Open the Rendering setups page: the opening figure now shows all five setups of the weapon including the looping emission-sweep video; figures are numbered with a thumbnail strip in the right rail; section 05 shows the family-wide segmentation failure. Does this answer your teaser and thumbnail feedback, and is the video what you wanted?
 - 2026-08-09 20:33 [render-doc] Version 1 is minted and the integrity check passes. The first attempt failed halfway because the versioning tool, when no source is given, copies the page's own folder onto itself; it left a snapshot with no manifest entry, which I removed before redoing it properly with an explicit source. The first successful mint also swept 21 MB of raw render frames onto the web server twice, because anything sitting in the page folder counts as a page asset, so I moved the frames out of the page folder and minted again clean. The published page went from 59 MB to 17 MB.
 - 2026-08-10 00:02 [master] The rendering documentation is complete and versioned: RENDERING.md plus the workspace page with the five-setup teaser, the emission-sweep video, numbered figures with the thumbnail grid, and the family-wide segmentation failure as evidence. Version 1 is frozen as an immutable snapshot. Waiting on the owner's review.
+- 2026-08-10 18:17 [owner] In general it is good, but two issues: some images have weird camera position. The thumbnails only include a first subimage of the figure. I understand why this happens: for proper thumbnails one need to render the image grid as an image itself. I think we need a tool for this eventually: exporting a page figure from a html-based layout, to a proper png image.
+- 2026-08-10 18:17 [master] Verdict recorded: good overall with two issues. The thumbnail issue spawned its own workstream, the figure export tool (rasterize page figures to real PNGs), whose acceptance test is full-figure thumbnails on this very page. The camera pose issue is parked at the owner's request for a later round.
+- 2026-08-10 18:17 [master] Review complete; flag cleared.
 outcome: The rendering documentation is complete and versioned: RENDERING.md plus the workspace page with the five-setup teaser, the emission-sweep video, numbered figures with the thumbnail grid, and the family-wide segmentation failure as evidence. Version 1 is frozen as an immutable snapshot. Waiting on the owner's review.

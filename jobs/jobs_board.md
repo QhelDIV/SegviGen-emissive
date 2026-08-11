@@ -3,7 +3,7 @@ executor: jobs-redesign
 track: tooling
 status: done
 started: 2026-08-09 14:30
-updated: 2026-08-09 18:56
+updated: 2026-08-10 17:35
 slurm: 
 link: 
 page: none (the board itself is the deliverable)
@@ -32,4 +32,5 @@ log:
 - 2026-08-09 18:53 [jobs-redesign] Reopening for the track field round: separating tooling jobs from research jobs on the board, per owner feedback.
 - 2026-08-09 18:56 [jobs-redesign] Verified live: filtering to each track shows exactly the right rows (four tooling, one paper, eight research, thirteen with all selected), the track label sits quietly next to the status badge and reads correctly in both themes, and it hides below phone width along with everything else while the filter itself keeps working there. Also checked the track label sits cleanly next to the review flag when a job carries both.
 - 2026-08-09 18:56 [jobs-redesign] Every job now carries a track of research, tooling, or paper, set through the board's command-line tool and shown as a small muted label next to its status. A new filter above the table switches between all jobs and just one track, and the four tooling jobs (the board itself, its command tool, referable figures, and the page graph) now read separately from the eight research jobs and the one paper job.
+- 2026-08-10 17:35 [jobs-redesign] Confirmed the live production incident during this migration: the deeper cause was the itables virtual environment not yet having the package installed during part of the jobs board extraction, now installed and verified in both environments; a direct call to this tool also briefly resolved to a system interpreter with no package installed at all, now fixed by pinning the tool to the correct interpreter. Ran a full round trip just now to confirm both are solid.
 outcome: Every job now carries a track of research, tooling, or paper, set through the board's command-line tool and shown as a small muted label next to its status. A new filter above the table switches between all jobs and just one track, and the four tooling jobs (the board itself, its command tool, referable figures, and the page graph) now read separately from the eight research jobs and the one paper job.
