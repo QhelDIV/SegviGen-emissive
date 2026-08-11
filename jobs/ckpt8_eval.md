@@ -3,7 +3,7 @@ executor: overfit-test
 track: research
 status: done
 started: 2026-08-10 16:38
-updated: 2026-08-10 19:15
+updated: 2026-08-10 19:22
 slurm: 
 link: 
 page: ckpt8_eval
@@ -24,4 +24,5 @@ log:
 - 2026-08-10 19:01 [overfit-test] Four more epochs of training moved the checkpoint from about 0.15 to about 0.20 mean IoU on shapes it has never seen, closing roughly two thirds of the remaining gap to the zero-shot upper bound. Every one of the twelve measured configurations improved, none got worse. On the 8 familiar training shapes the score nearly doubled. Page is live with the full comparison against epoch 4.
 - 2026-08-10 19:02 [master] For your review: The trajectory page: held-out 0.20 at epoch 8 (from 0.17), all twelve configurations improved, two thirds of the gap to the 0.22 zero-shot bound closed, while memorization on training shapes doubled and the hot dog's false glow got STRONGER. Decision: continue training from the epoch 7 seed, or hold until the training-target decode check answers whether the false glow is a data bug?
 - 2026-08-10 19:15 [master] The hold condition on this entry's decision is resolved: the training-target decode check refuted the data-bug hypothesis, so the epoch 8 gains are real learning on the correct target. The decision is now purely whether to continue training from the epoch 7 seed; the false-glow symptom is being attributed (model behavior versus visualization) as the last loose end.
+- 2026-08-10 19:22 [overfit-test] gallery-runner: showcase render restructured into a per-frame array per team-lead's direction (job 242924 was serial, ~2min/frame, only 10/36 done in 36 min). Cancelled 242924, submitted array 242950 (36 tasks = 3 variants x 12 sids, one render_emissive.py --only <sid> call per task, skips frames already on disk). Confirmed fanning out across 3+ nodes immediately. Lesson for remaining stages: render fans out per frame, not per job.
 outcome: Four more epochs of training moved the checkpoint from about 0.15 to about 0.20 mean IoU on shapes it has never seen, closing roughly two thirds of the remaining gap to the zero-shot upper bound. Every one of the twelve measured configurations improved, none got worse. On the 8 familiar training shapes the score nearly doubled. Page is live with the full comparison against epoch 4.
