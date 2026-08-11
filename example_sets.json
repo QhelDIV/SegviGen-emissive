@@ -1,0 +1,62 @@
+{
+  "_readme": "Canonical registry of the three example-shape sets used across segvigen_emissive evaluation galleries. Written by the gallery-runner agent 2026-08-10 while chaining the epoch-8 checkpoint gallery, after 24+ tool calls spent re-deriving these lists with no artifact to check against. v2_split is the split the shape's directory ACTUALLY resolves to in the current dataset_direct build (checked by directory presence, not by any older per-shape 'split_72k' label some source files carry -- those can disagree with the current partition; see fig7_11 notes). provenance is the exact file each list and each caption came from.",
+  "sets": {
+    "fig7_11": {
+      "label": "Dongchen's fig7 picks",
+      "description": "Picked by Dongchen for the paper's figure 7, the paper's figure examples.",
+      "provenance": "/project/3dlg-hcvc/omages/yanxg_scratch/handoff_fig7/manifest.json (sid list + caption + old split_72k label); glbs at handoff_fig7/glb/source/<sid>.glb",
+      "provenance_note": "manifest.json's own 'split_72k' field (from data_splits_74k.json, the pre-repartition split) disagrees with the CURRENT dataset_direct v2 partition for 9/11 of these sids -- see per-shape notes. v2_split below reports the current, operative partition (which directory dataset_direct actually stores the shape under, i.e. what epoch-8 training actually saw), not the stale label.",
+      "shapes": [
+        {"sid": "064e4156b5c345c796cc00d3fa2e2243", "caption": "jack-o'-lantern", "v2_split": "val", "old_split_72k_label": "test_72k", "note": "v2_split disagrees with old label"},
+        {"sid": "4e383188516c46a58e96b1b7fc2f16a7", "caption": "glowing warhammer", "v2_split": "val", "old_split_72k_label": "train_72k", "note": "v2_split disagrees with old label"},
+        {"sid": "ac6c953289bb4f56836c00830a7bb111", "caption": "red glowing sword (lightsaber-like)", "v2_split": "val", "old_split_72k_label": "train_72k", "note": "v2_split disagrees with old label"},
+        {"sid": "a05f414c2ffd4103a964a9be5ef2d157", "caption": "fluorescent floor lamp", "v2_split": "val", "old_split_72k_label": "train_72k", "note": "v2_split disagrees with old label"},
+        {"sid": "f6314284e0e84a14ba466613ae776110", "caption": "world-map table", "v2_split": "val", "old_split_72k_label": "train_72k", "note": "v2_split disagrees with old label"},
+        {"sid": "34170054845344aeb199b842a3bf7e92", "caption": "robot with glowing eyes", "v2_split": "val", "old_split_72k_label": "train_72k", "note": "v2_split disagrees with old label"},
+        {"sid": "92cedcbac4f84083b04e10a6df6ef0f3", "caption": "fairy-tale cottage with lit windows", "v2_split": "val", "old_split_72k_label": "val_72k", "note": "agrees"},
+        {"sid": "1102d5a523c442829a8ce9930e4b692b", "caption": "medieval brazier", "v2_split": "val", "old_split_72k_label": "test_72k", "note": "v2_split disagrees with old label"},
+        {"sid": "75da9a74403946dda954f08a067e8ad5", "caption": "outdoor wall lantern", "v2_split": "val", "old_split_72k_label": "train_72k", "note": "v2_split disagrees with old label"},
+        {"sid": "2b7ace1f2de04e98a5c8874866dc473b", "caption": "minimalist desk lamp", "v2_split": "val", "old_split_72k_label": "val_72k", "note": "agrees"},
+        {"sid": "e1fbc7943362485489dba5a951ebc4b1", "caption": "cyberpunk ATM", "v2_split": "val", "old_split_72k_label": "train_72k", "note": "v2_split disagrees with old label"}
+      ],
+      "v2_split_summary": "all 11 currently resolve under dataset_direct/val_72k (some also under legacy val72k_condok96* variant dirs) -- a clean held-out read against the CURRENT partition, even though the old per-shape split_72k label calls most of them train/test. Confirmed by directory search, not by this label."
+    },
+    "showcase_12": {
+      "label": "our picked showcase assets",
+      "description": "Our picked showcase assets, from paper_v3 manifest12 -- the rendering-methodology page's teaser and family-panel shapes (bloom sweep, strength ladder, box-render comparisons).",
+      "provenance": "/project/3dlg-hcvc/omages/yanxg_scratch/paper_v3/manifest12.json (sid list); captions summarized from the long 'cap' field in paper_v3/manifest.json (26-shape superset)",
+      "provenance_note": "These 12 were NEVER in the 72k train/val/test catalog (data_splits_74k.json) or in dataset_direct before 2026-08-10 -- absent-from-catalog is the correct v2_split value up to that point. They ARE in the TexVerse-1K source parquet and already had Dongchen's ovoxel ground truth, so preprocessing was a normal sidfile build (build_dataset_direct.py + build_cond_thumbnail.py), not a from-scratch pipeline. Built into dataset_direct/ours12 on 2026-08-10 (job 242802, 12/12 ok, 0 failures, cond.pth coverage 12/12) for the epoch-8 gallery. Being genuinely held out (never in ANY train/val split), results on this set are the most trustworthy generalization read of the three.",
+      "shapes": [
+        {"sid": "8f4c281aef1b4563b6103efbcd77fac1", "caption": "headphone stand (glowing logo)", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "b74fc2533d5345629f2c3ce2c8ab340a", "caption": "cartoonish green ghost (glowing eyes)", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "c1e3035d1ccb49df9c09aa86681faf30", "caption": "turquoise sci-fi robot", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "1e9c6545b4da42e0ba4e5dbcd2e0e8ff", "caption": "medieval wooden street lamp", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "48af42db48c44cd9bfab32bbb057a39c", "caption": "pumpkin (jack-o'-lantern)", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "51a60b164e874bf891597d9c6c1941af", "caption": "sci-fi weapon (insect-like, glowing core)", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "e5eecab2bc8649548b48b79e705d768e", "caption": "wall-mounted light fixtures (pair)", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "9418a924a50d44c186dd499006b62424", "caption": "vending machine", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "619f0732286f4a4683412d7f1cae983b", "caption": "handheld game console (neon controllers)", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "4e105e043a6447439e98e9831aed122e", "caption": "crystal war hammer", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "b7709a651d144134a5babce33223380a", "caption": "Halloween animatronic (holding a glowing pumpkin)", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"},
+        {"sid": "658ecf9f837246509b0b1c4aa81e9e5b", "caption": "three lit candles", "v2_split": "absent-from-catalog (built 2026-08-10 into dataset_direct/ours12)"}
+      ]
+    },
+    "fbv1_8": {
+      "label": "familiar fbv1 showcase set",
+      "description": "The familiar old-showcase comparison shapes, used across the first-72k-checkpoint gallery and earlier evaluation pages.",
+      "provenance": "/project/3dlg-hcvc/omages/yanxg_scratch/fbv1_repro/manifest.json and sids.json (sid list, no captions carried); glbs at fbv1_repro/glb/",
+      "provenance_note": "IMPORTANT, previously undocumented: dataset_direct/fbv1_8/<sid> is a SYMLINK to dataset_direct/train_72k/<sid> for all 8 shapes (verified: readlink + content-identical meta.json). This set is NOT held out -- every shape in it was in the model's training split, unlike fig7_11 and showcase_12. No caption source was found for these 8; team should treat that as a gap, not an omission.",
+      "shapes": [
+        {"sid": "0414e54cda324108a7a51615f5cfd376", "caption": null, "v2_split": "train"},
+        {"sid": "10b7ad59f3bc4851a86d7f165ecd4c16", "caption": null, "v2_split": "train"},
+        {"sid": "a82965cbfbe3470eae134efdccf15011", "caption": null, "v2_split": "train"},
+        {"sid": "bbeccdb222e74d99812cd2bd892222a8", "caption": null, "v2_split": "train"},
+        {"sid": "d5fb4f19d4164612b165caac5471555c", "caption": null, "v2_split": "train"},
+        {"sid": "e9e31994a53d4fa68308f745c682a0b9", "caption": null, "v2_split": "train"},
+        {"sid": "f52e9b616c0a4075a70e5eb844f07bb3", "caption": null, "v2_split": "train"},
+        {"sid": "f65a020ba69c47e2a66f635ee0e6f8c2", "caption": null, "v2_split": "train"}
+      ],
+      "v2_split_summary": "all 8 resolve under dataset_direct/train_72k -- this set is IN the training split, not held out. Flagged separately to team-lead; affects how any generalization claim from this gallery should be worded."
+    }
+  }
+}
