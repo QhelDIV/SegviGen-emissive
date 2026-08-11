@@ -1,12 +1,13 @@
 title: Epoch 8 checkpoint: averaged eval and rendered examples
 executor: overfit-test
 track: research
-status: ongoing
+status: done
 started: 2026-08-10 16:38
-updated: 2026-08-10 18:14
+updated: 2026-08-10 19:02
 slurm: 
 link: 
-page: none (page pending; will mirror the epoch 4 eval page)
+page: ckpt8_eval
+needs: evaluation: The trajectory page: held-out 0.20 at epoch 8 (from 0.17), all twelve configurations improved, two thirds of the gap to the 0.22 zero-shot bound closed, while memorization on training shapes doubled and the hot dog's false glow got STRONGER. Decision: continue training from the epoch 7 seed, or hold until the training-target decode check answers whether the false glow is a data bug?
 motivation: The run's final checkpoint improved sixfold on the trainer's tiny probe; the project needs the same averaged held-out evaluation as epoch 4 to know whether the jump is real and whether continuing training is worth the compute.
 log:
 - 2026-08-10 16:38 [overfit-test] Job started.
@@ -17,4 +18,9 @@ log:
 - 2026-08-10 17:54 [overfit-test] gallery-runner: set b (paper_v3 12 sids: pumpkin, sci-fi weapon, vending machine, candles x3, headphone stand, plus 6 others) confirmed present in the TexVerse catalog and in Dongchen's ovoxel data -- not a from-scratch build. Preprocessing job 242802 submitted (build_dataset_direct + build_cond_thumbnail chained, GPU a40).
 - 2026-08-10 18:04 [overfit-test] gallery-runner: IMPORTANT finding while writing example_sets.json -- the familiar fbv1_8 showcase set is NOT held out. dataset_direct/fbv1_8/<sid> is a symlink to dataset_direct/train_72k/<sid> for all 8 shapes (verified via readlink + content-identical meta.json). Every prior gallery using this set (including the first-72k-checkpoint page) reported train-split numbers under a held-out framing. fig7_11 and the new showcase_12 are genuinely held out (val / never-in-catalog respectively); fbv1_8 is not. Canonical sid/caption/split registry for all three sets now at lightgen/example_sets.json.
 - 2026-08-10 18:14 [overfit-test] gallery-runner: fig7 mask transfer (242806) COMPLETED clean, 33/33. render job 242877 submitted (64 cores, gres=gpu:0, GT/raw_real/ema_real box variants). showcase_12 mask transfer (242807) FAILED all 36 tasks -- my error: I submitted mask-transfer for showcase_12 before ever submitting its inference dump, so pred_voxels was empty. Fixed: dump job 242878 submitted now, mask-transfer will be resubmitted once it lands.
-outcome: 
+- 2026-08-10 18:35 [overfit-test] gallery-runner: showcase_12 dump job 242878 COMPLETED, 12/12 shapes, raw_real+ema_real+raw_zero. Mask-transfer resubmitted as job 242885 (36 tasks, 3 variants x 12 sids). fig7 render (242877) still running.
+- 2026-08-10 18:44 [overfit-test] gallery-runner: showcase_12 mask transfer (242885) COMPLETED clean, 36/36, verified 12/12/12 across raw_real/ema_real/gt. Render job 242924 submitted (64 cores, gres=gpu:0, GT/raw_real/ema_real box variants). fig7 render (242877) still running.
+- 2026-08-10 18:59 [overfit-test] All twelve averaged runs and the render figure finished cleanly this time, no node problems. On the true held-out set, the best epoch-8 configuration reaches about 0.20 mean IoU, up from about 0.17 at epoch 4, and now close to the roughly 0.22 zero-shot upper bound. On the 8 familiar shapes the best score nearly doubled, from about 0.23 to about 0.43. Building the comparison page next.
+- 2026-08-10 19:01 [overfit-test] Four more epochs of training moved the checkpoint from about 0.15 to about 0.20 mean IoU on shapes it has never seen, closing roughly two thirds of the remaining gap to the zero-shot upper bound. Every one of the twelve measured configurations improved, none got worse. On the 8 familiar training shapes the score nearly doubled. Page is live with the full comparison against epoch 4.
+- 2026-08-10 19:02 [master] For your review: The trajectory page: held-out 0.20 at epoch 8 (from 0.17), all twelve configurations improved, two thirds of the gap to the 0.22 zero-shot bound closed, while memorization on training shapes doubled and the hot dog's false glow got STRONGER. Decision: continue training from the epoch 7 seed, or hold until the training-target decode check answers whether the false glow is a data bug?
+outcome: Four more epochs of training moved the checkpoint from about 0.15 to about 0.20 mean IoU on shapes it has never seen, closing roughly two thirds of the remaining gap to the zero-shot upper bound. Every one of the twelve measured configurations improved, none got worse. On the 8 familiar training shapes the score nearly doubled. Page is live with the full comparison against epoch 4.

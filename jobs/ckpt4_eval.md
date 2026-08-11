@@ -3,11 +3,10 @@ executor: overfit-test
 track: research
 status: done
 started: 2026-08-10 01:38
-updated: 2026-08-10 06:54
+updated: 2026-08-10 19:02
 slurm: 
 link: 
 page: ckpt4_eval
-needs: evaluation: The first honest 72k number: held-out 0.17 at epoch 4 (averaged, 5 draws), already past the old pipeline's 0.15 but under the 0.22 zero-shot bound. Read the verdict table and the box-render gallery (seen/held-out labels on every panel): is this trajectory worth letting the run continue past epoch 8, and do you want the epoch-8 checkpoint evaluated the same way when it lands?
 motivation: The capped 72k run finally produced a checkpoint; the project needs to know whether conditioned training on the full dataset beats the zero-shot oracle and the old runs, measured with the averaged protocol so single-draw luck cannot mislead again.
 log:
 - 2026-08-10 01:38 [overfit-test] Job started.
@@ -21,4 +20,6 @@ log:
 - 2026-08-10 06:53 [overfit-test] The first checkpoint from the full training run, only four epochs in, already beats the old honest number on shapes it has never seen, but is still far below what a perfect model could reach. The gap closes somewhat on shapes it has trained on, which is expected this early. Page is live with the full numbers and example renders.
 - 2026-08-10 06:54 [overfit-test] Record update: the original stale-cache read is confirmed correct, the placeholder-file theory raised partway through is retracted. Nothing else changes; the numbers and page already stand.
 - 2026-08-10 06:54 [master] For your review: The first honest 72k number: held-out 0.17 at epoch 4 (averaged, 5 draws), already past the old pipeline's 0.15 but under the 0.22 zero-shot bound. Read the verdict table and the box-render gallery (seen/held-out labels on every panel): is this trajectory worth letting the run continue past epoch 8, and do you want the epoch-8 checkpoint evaluated the same way when it lands?
+- 2026-08-10 19:02 [master] The continue-or-stop question this entry's flag asked is now answered with data on the epoch 8 entry, whose page carries the full epoch comparison. Flag cleared; the decision moves there.
+- 2026-08-10 19:02 [master] Review complete; flag cleared.
 outcome: The first checkpoint from the full training run, only four epochs in, already beats the old honest number on shapes it has never seen, but is still far below what a perfect model could reach. The gap closes somewhat on shapes it has trained on, which is expected this early. Page is live with the full numbers and example renders.
