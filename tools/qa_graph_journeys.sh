@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # qa_graph_journeys.sh -- self-locating wrapper for tools/qa_graph_journeys.js.
 #
+# This is lightgen's copy of xgpage's qa/journey_harness.sh TEMPLATE
+# (extracted 2026-08-10 -- see that file's own header): the Node/Playwright
+# self-location logic below is workstation-specific plumbing, deliberately
+# COPIED per project rather than imported, same as the template says. The
+# generic runner LOOP (browser lifecycle, PASS/FAIL reporting) moved into
+# the package as qa/journey_harness.js and IS imported, by
+# tools/qa_graph_journeys.js -- see that file's own header for the split.
+#
 # WHY THIS EXISTS: the plain `node tools/qa_graph_journeys.js` fails on this
 # workstation with MODULE_NOT_FOUND for "playwright" -- the default `node`
 # on PATH is v12.22.9 (/usr/bin/node), Playwright needs Node >=20 and isn't

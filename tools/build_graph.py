@@ -29,7 +29,8 @@ column — bare for root/preview tiers, "updates/<date>" / "workspace/<slug>"
 for the two nested tiers). "type" is "link" for a crawled content link, or
 one of "supersedes"/"evidence-for"/"part-of" for a curated edge from
 web/graph_edges.yaml (round-2 addition, 2026-08-10) -- hand-verified against
-the actual page content, never crawled or invented; see load_typed_edges().
+the actual page content, never crawled or invented; see
+xgpage.graph.load_typed_edges().
 x/y are a stable 2D layout in an abstract ~1200x800 coordinate space (not pixels —
 the renderer fits it to whatever canvas it has).
 
@@ -55,62 +56,31 @@ theme3.css already ships a `.tier-workspace` badge (xgpage skill rule 0(e),
 added for cobalt3d's identical gap), so no CSS was needed for the fix to
 show up correctly in the Pages tab too.
 
-EDGES are found by reading each node's own PUBLISH_DEST HTML and walking it
-with a small stdlib html.parser.HTMLParser subclass (ContentAnchorParser)
-that tracks an open-tag stack and marks a subtree as CHROME the moment it
-enters one of: <nav class="v3-tree">, <nav class="outline"|"nav-tabs"|
-"nav-subtabs"|...toc...>, <aside class="...outline...">, <div class=
-"v3-topbar"|"v3-scrim">, or a theme-toggle button. The hero <header> itself
-(eyebrow/h1/dek/toc-pills) is deliberately NOT excluded — a first cut
-stripped it wholesale and silently dropped a real citation living in a
-page's dek/sub paragraph ("Companion to <a href=...>the dataset gallery</a>"
-on pbr_filter_v1); the only thing in a header worth excluding is the
-toc-pills' own "#section-id" links, and resolve_href() already drops every
-fragment-only href on its own, so no header rule is needed at all (see
-_is_chrome_start's docstring for the live repro). Anchors found OUTSIDE any
-chrome subtree are content links. This covers v1 (floating .outline
-sidebar), v2 (hero header, optional .v2-outline-rail), and v3 (.v3-tree/
-.v3-outline/.v3-topbar) pages uniformly, without needing a DOM library —
-verified against a real page (workspace/rendering/index.html) that has the
-SAME href duplicated once in chrome (the tree link) and once in content
-(the "the render sweep page" citation inside a .chartnote) to make sure
-only the content one counts.
+EXTRACTED 2026-08-10 into xgpage.graph (mirrors the console and jobs-board
+extractions): the crawler (chrome exclusion, href resolution), layout
+persistence, and the typed-edge loader now live in the package as pure,
+GraphConfig-driven functions -- see xgpage.graph's module docstring for the
+full account of each (chrome-exclusion class names, the header/citation
+false-negative that shaped it, href resolution rules, and the layout
+algorithm). This file keeps only what stays PROJECT-OWNED: node discovery
+(scan_nodes(), reading inventory_pages.py's own page-inventory scan --
+another project's page model may look nothing like this one), reading each
+node's HTML off PUBLISH_DEST (the callable handed to xgpage.graph.scan_edges
+as html_reader), graph_edges.yaml itself (the curated DATA, never the
+loading mechanism), and the graph PAGE (console-shell assembly via
+build_console.py, exactly like build_jobs_tab() -- project-owned, not part
+of the package).
 
-A resolved href becomes an edge only if it points at another known node's
-directory (asset paths, external hosts, mailto:/javascript:, and same-page
-"#fragment" links all resolve to nothing and are dropped); self-loops are
-dropped; an edge exists once per ordered (source, target) pair regardless of
-how many times a page links another.
-
-LAYOUT PERSISTENCE lives in this builder, in .console_build/graph_positions.json
-(gitignored build-scratch dir — see the .gitignore entry added alongside this
-file), NOT in the client: static hosting cannot write back a client-side
-drag. A node already present with an UNCHANGED incident-edge set keeps its
-exact stored (x, y), rounded to 2 decimals, forever — the owner's spatial
-memory of the map is a feature, not a bug to relax away. A brand-new node,
-or one whose own edge set changed since the last build, is "movable": it
-seeds at the centroid of its current neighbors' positions (or a deterministic
-golden-angle ring position around the whole graph's bounding box if it has
-no neighbors at all), then a small hand-rolled Fruchterman-Reingold-style
-force pass runs a fixed iteration count with EVERY node (movable and frozen
-alike) contributing repulsion/attraction forces, but only movable nodes'
-positions are ever updated — "light global settling" without ever reshuffling
-an untouched node. No randomness anywhere (ring angles and tie-break jitter
-come from an md5 of the node id, not random.random()), so a rebuild with no
-content change reproduces byte-identical (x, y) for every node.
-
-Renderer stack (per the architecture brief): vendored d3-force (physics
-ONLY: d3-force + its d3-quadtree/d3-dispatch/d3-timer dependencies, four
-small UMD files fetched once from unpkg and checked in at
-web/assets/vendor/d3-*.v3.*.min.js, verified to actually wire up under a
-plain <script> tag — no CDN at runtime, no bundler) driving a SESSION-LOCAL
-node-drag re-settle client-side only; the SVG rendering itself
-(pan/zoom/hover/search/edges/labels) is hand-written vanilla JS,
-web/assets/graph_view.js + graph_view.css. Both are LIGHTGEN-LOCAL siblings
-under web/assets/ (same precedent as the hand-vendored model-viewer.min.js —
-see sync_xgpage_assets.py's module docstring), not part of the xgpage
-package: this is a project-specific console tab, not a reusable report
-component.
+web/assets/graph_view.js + graph_view.css (the SVG rendering: pan/zoom/
+hover/search/timeline mode) and the vendored d3-force UMD files
+(web/assets/vendor/d3-*.v3.*.min.js -- physics only, four small files
+fetched once from unpkg and checked in, verified to wire up under a plain
+<script> tag, no CDN at runtime) also moved into the package's shared
+assets this round (previously LIGHTGEN-LOCAL siblings sync_xgpage_assets.py
+preserved untouched; now synced FROM the package like theme3.css/xg3.js
+already were -- see that script's updated docstring). The interaction
+model, timeline mode, and typed-edge rendering documented below are
+unchanged; only WHERE the files' canonical copy lives changed.
 
 ROUND 2 (2026-08-10, owner-directed, three additions on top of the above):
 1. Interaction state machine: click/hover/search/select were rebuilt around
@@ -136,12 +106,11 @@ import datetime
 import hashlib
 import html
 import json
-import math
 import pathlib
-import posixpath
 import sys
-from html.parser import HTMLParser
 from urllib.parse import urlsplit
+
+from xgpage import graph as xg
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
@@ -153,88 +122,14 @@ BASE_URL = bc.BASE_URL
 SITE_ROOT = bc.SITE_ROOT
 SITE_HOST = urlsplit(BASE_URL).netloc
 
-POSITIONS_FILE = REPO / ".console_build" / "graph_positions.json"
+GRAPH_EDGES_YAML = REPO / "web" / "graph_edges.yaml"
 
-CANVAS_W, CANVAS_H = 1200.0, 800.0
-
-
-# ------------------------------------------------------------- chrome scan --
-VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input",
-             "link", "meta", "param", "source", "track", "wbr"}
-_NAV_CHROME_HINTS = ("v3-tree", "outline", "nav-tabs", "nav-subtabs", "toc")
-
-
-def _is_chrome_start(tag, attrs):
-    """True if THIS start tag (not counting ancestors) opens a chrome
-    subtree: the page tree, the outline/toc rails (v1 floating sidebar, v2
-    outline rail, v3 outline aside), the v3 mobile topbar/scrim, or the theme
-    toggle button.
-
-    Deliberately NOT excluded: the hero <header> itself. First cut of this
-    parser stripped every <header> wholesale (eyebrow/h1/dek/toc-pills all
-    live there) on the theory that it's pure chrome — wrong, found live on
-    pbr_filter_v1: its dek paragraph carries a real citation ("Companion to
-    <a href='../dataset_gallery_v1/index.html'>the dataset gallery</a>"),
-    which the blanket rule silently dropped as an edge. The only thing in a
-    header actually worth excluding is the toc-pills nav's own "#section-id"
-    links, and resolve_href() already drops every fragment-only href on its
-    own (empty path after the "#"), so no special-casing was needed at all —
-    removing the header rule fixed the false negative with no new false
-    positive (verified: toc pills never carry a non-fragment href anywhere
-    in the engine)."""
-    cls = attrs.get("class", "").split()
-    if tag == "nav" and any(any(h in c for h in _NAV_CHROME_HINTS) for c in cls):
-        return True
-    if tag == "aside" and any("outline" in c for c in cls):
-        return True
-    if tag == "div" and any(c in ("v3-topbar", "v3-scrim") for c in cls):
-        return True
-    if tag == "button" and attrs.get("id") == "xg-theme-btn":
-        return True
-    return False
-
-
-class ContentAnchorParser(HTMLParser):
-    """Collects every <a href> OUTSIDE a chrome subtree (see
-    _is_chrome_start). Tolerant of any real-world tag nesting: an unmatched
-    end tag just pops whatever's on top, never raises."""
-
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.stack = []  # bool per open non-void element: is this subtree chrome?
-        self.hrefs = []
-
-    def _handle(self, tag, attrs_list, void):
-        attrs = dict(attrs_list)
-        parent_chrome = self.stack[-1] if self.stack else False
-        is_chrome = parent_chrome or _is_chrome_start(tag, attrs)
-        if tag == "a" and not is_chrome and attrs.get("href"):
-            self.hrefs.append(attrs["href"])
-        if not void and tag not in VOID_TAGS:
-            self.stack.append(is_chrome)
-
-    def handle_starttag(self, tag, attrs_list):
-        self._handle(tag, attrs_list, void=False)
-
-    def handle_startendtag(self, tag, attrs_list):
-        self._handle(tag, attrs_list, void=True)
-
-    def handle_endtag(self, tag):
-        if tag in VOID_TAGS:
-            return
-        if self.stack:
-            self.stack.pop()
-
-
-def extract_content_hrefs(html_text):
-    p = ContentAnchorParser()
-    try:
-        p.feed(html_text)
-    except Exception:
-        pass
-    return p.hrefs
-
-
+GRAPH_CONFIG = xg.GraphConfig(
+    site_root=SITE_ROOT,
+    site_host=SITE_HOST,
+    positions_file=REPO / ".console_build" / "graph_positions.json",
+    typed_edges_path=GRAPH_EDGES_YAML,
+)
 # --------------------------------------------------------------- node scan --
 def node_dir(url):
     """URL -> the page's directory path relative to PUBLISH_DEST, e.g.
@@ -255,254 +150,21 @@ def scan_nodes():
 
 
 # --------------------------------------------------------------- edge scan --
-def resolve_href(href, from_dir, url_to_id):
-    try:
-        parts = urlsplit(href)
-    except ValueError:
-        return None
-    if parts.scheme and parts.scheme not in ("http", "https"):
-        return None  # mailto:, javascript:, tel:, data:, ...
-    if parts.netloc and parts.netloc != SITE_HOST:
-        return None  # external host
-    path = parts.path
-    if not path:
-        return None  # "#fragment"-only same-page link, or empty
-    if path.startswith(SITE_ROOT + "/"):
-        rel = path[len(SITE_ROOT) + 1:]
-    elif path.startswith("/"):
-        return None  # absolute path outside this site's root
-    else:
-        rel = posixpath.normpath(posixpath.join(from_dir, path))
-    rel = rel.strip("/")
-    if rel.endswith("/index.html"):
-        rel = rel[: -len("/index.html")]
-    elif rel == "index.html":
-        rel = ""
-    return url_to_id.get(rel)
-
-
-def scan_edges(nodes):
-    url_to_id = {n["_dir"]: n["id"] for n in nodes}
-    edges = set()
-    for n in nodes:
-        idx = PUBLISH_DEST / n["_dir"] / "index.html"
-        if not idx.exists():
-            continue
-        text = idx.read_text(errors="ignore")
-        for href in extract_content_hrefs(text):
-            target = resolve_href(href, n["_dir"], url_to_id)
-            if target and target != n["id"]:
-                edges.add((n["id"], target))
-    return sorted(edges)
-
-
-# ---------------------------------------------------------- typed edges ----
-GRAPH_EDGES_YAML = REPO / "web" / "graph_edges.yaml"
-TYPED_EDGE_TYPES = {"supersedes", "evidence-for", "part-of"}
-
-
-def load_typed_edges(node_ids):
-    """web/graph_edges.yaml: curated {from, to, type} entries, hand-verified
-    against the actual page content (see the file's own header comment for
-    the verification record) -- NOT crawled, the opposite of scan_edges().
-    Silently usable-but-loud about problems: an entry naming an unknown node
-    id, or an unrecognized type, is DROPPED with a stderr warning rather
-    than crashing the build (a typo here should degrade to "one less edge
-    shown", never take down the whole graph page)."""
-    if not GRAPH_EDGES_YAML.exists():
-        return []
-    import yaml
-    try:
-        data = yaml.safe_load(GRAPH_EDGES_YAML.read_text()) or []
-    except (OSError, ValueError) as e:
-        print(f"[graph_edges.yaml] failed to parse, skipping: {e}", file=sys.stderr)
-        return []
-    ids = set(node_ids)
-    out = []
-    seen = set()
-    for entry in data or []:
-        a, b, t = entry.get("from"), entry.get("to"), entry.get("type")
-        if a not in ids or b not in ids:
-            print(f"[graph_edges.yaml] dropping {a!r} {t!r} {b!r}: unknown node id", file=sys.stderr)
-            continue
-        if t not in TYPED_EDGE_TYPES:
-            print(f"[graph_edges.yaml] dropping {a!r} {t!r} {b!r}: unrecognized type", file=sys.stderr)
-            continue
-        key = (a, b, t)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({"source": a, "target": b, "type": t})
-    return out
-
-
-# ---------------------------------------------------------------- layout ---
-def _load_positions():
-    try:
-        data = json.loads(POSITIONS_FILE.read_text())
-        return data.get("positions", {}), [tuple(e) for e in data.get("edges", [])]
-    except (OSError, ValueError):
-        return {}, []
-
-
-def _save_positions(positions, edges):
-    POSITIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"positions": {k: list(positions[k]) for k in sorted(positions)},
-               "edges": [list(e) for e in edges]}
-    POSITIONS_FILE.write_text(json.dumps(payload, indent=1, sort_keys=True) + "\n")
-
-
-def _neighbor_sets(edges):
-    out = {}
-    for a, b in edges:
-        out.setdefault(a, set()).add(b)
-        out.setdefault(b, set()).add(a)
-    return out
-
-
-def _det01(node_id):
-    """Deterministic pseudo-random value in [0, 1) from an md5 of the id —
-    NEVER random.random(): a rebuild with no content change must reproduce
-    byte-identical positions, so nothing here may depend on process state."""
-    h = hashlib.md5(node_id.encode()).hexdigest()[:8]
-    return int(h, 16) / 0xFFFFFFFF
-
-
-def compute_layout(node_ids, edges):
-    """Returns {id: (x, y)}. See the module docstring's LAYOUT PERSISTENCE
-    section for the algorithm; this is the whole thing, one function.
-
-    A node is MOVABLE iff it is brand new (no stored position at all), or it
-    was an ORPHAN last build (zero incident edges in the stored edge list)
-    and has gained its first edge this build — its old position was an
-    arbitrary ring placement, not a real one, so this is the one case where
-    "moved topology" earns a reposition. Every other already-positioned node
-    is FIXED, unconditionally, even if its neighbor set changed (gained or
-    lost an edge to/from some OTHER node): only the node whose OWN links
-    changed should ever move, and even then only out of the orphan ring.
-    Tested directly (see the graph_page job log): a fixture page linking to
-    an already-connected existing node must NOT nudge that node — first
-    draft of this rule also repositioned any node whose neighbor set changed
-    at all, which moved training_curves_v1 by a few pixels for gaining one
-    new inbound link, failing exactly that check."""
-    stored_pos, stored_edges = _load_positions()
-    stored_neigh = _neighbor_sets(stored_edges)
-    cur_neigh = _neighbor_sets(edges)
-
-    fixed = {}
-    movable = []
-    for nid in sorted(node_ids):
-        was_orphan = not stored_neigh.get(nid)
-        newly_connected = was_orphan and bool(cur_neigh.get(nid))
-        if nid in stored_pos and not newly_connected:
-            fixed[nid] = tuple(stored_pos[nid])
-        else:
-            movable.append(nid)
-
-    pos = dict(fixed)
-    if fixed:
-        xs = [p[0] for p in fixed.values()]
-        ys = [p[1] for p in fixed.values()]
-        cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
-        max_r = max(math.hypot(x - cx, y - cy) for x, y in fixed.values())
-    else:
-        cx, cy, max_r = CANVAS_W / 2, CANVAS_H / 2, 0.0
-
-    orphan_movables = []
-    for nid in movable:
-        neigh_pos = [pos[m] for m in cur_neigh.get(nid, set()) if m in pos]
-        if neigh_pos:
-            pos[nid] = (sum(p[0] for p in neigh_pos) / len(neigh_pos),
-                        sum(p[1] for p in neigh_pos) / len(neigh_pos))
-        else:
-            orphan_movables.append(nid)
-
-    golden_angle = math.pi * (3 - math.sqrt(5))
-    ring_r = max_r + 220.0
-    for i, nid in enumerate(sorted(orphan_movables)):
-        angle = i * golden_angle
-        pos[nid] = (cx + ring_r * math.cos(angle), cy + ring_r * math.sin(angle))
-
-    # deterministic tiny nudge so two movable nodes seeded at the same
-    # centroid don't sit exactly on top of each other (0-distance forces)
-    for nid in movable:
-        x, y = pos[nid]
-        a = _det01(nid) * 2 * math.pi
-        pos[nid] = (x + math.cos(a) * 0.5, y + math.sin(a) * 0.5)
-
-    if movable:
-        movable_set = set(movable)
-        # k (the FR spring constant) sets the equilibrium spacing between
-        # any two nodes connected by an edge (attraction f(dist)=dist^2/k
-        # balances repulsion f(dist)=k^2/dist at dist=k) -- the plain
-        # sqrt(area/n) formula gave k=153, which under GRAVITY's pull packed
-        # the actually-connected cluster tight enough that constant-screen-
-        # size labels collided (found by looking at a screenshot, not by any
-        # metric: DOM overlap isn't checked here, only eyeballed). The x2.4
-        # factor is tuned empirically for THIS label length/font size, not
-        # derived; re-tune by eye if node count or label length changes a lot.
-        k = math.sqrt((CANVAS_W * CANVAS_H) / max(len(node_ids), 1)) * 2.4
-        iters = 150
-        temp0 = 90.0
-        GRAVITY = 0.4
-        for it in range(iters):
-            disp = {nid: [0.0, 0.0] for nid in movable}
-            for i, a in enumerate(node_ids):
-                ax, ay = pos[a]
-                for b in node_ids[i + 1:]:
-                    if a not in movable_set and b not in movable_set:
-                        continue
-                    bx, by = pos[b]
-                    dx, dy = ax - bx, ay - by
-                    dist = math.hypot(dx, dy) or 0.01
-                    force = (k * k) / dist
-                    fx, fy = dx / dist * force, dy / dist * force
-                    if a in movable_set:
-                        disp[a][0] += fx; disp[a][1] += fy
-                    if b in movable_set:
-                        disp[b][0] -= fx; disp[b][1] -= fy
-            for a, b in edges:
-                if a not in movable_set and b not in movable_set:
-                    continue
-                ax, ay = pos[a]; bx, by = pos[b]
-                dx, dy = ax - bx, ay - by
-                dist = math.hypot(dx, dy) or 0.01
-                force = (dist * dist) / k
-                fx, fy = dx / dist * force, dy / dist * force
-                if a in movable_set:
-                    disp[a][0] -= fx; disp[a][1] -= fy
-                if b in movable_set:
-                    disp[b][0] += fx; disp[b][1] += fy
-            # gravity: a weak pull toward the graph's centroid, standard for
-            # Fruchterman-Reingold on a SPARSE real-world graph (most nodes
-            # have zero or one edge) — without it, poorly-connected nodes
-            # have nothing but unopposed repulsion pushing them outward and
-            # never stop drifting. Found live: the first full bootstrap
-            # build (every node movable at once, no fixed anchors yet)
-            # produced a ~13800-unit-wide layout on a nominal 1200x800
-            # canvas with this term absent; adding it brought a from-scratch
-            # rebuild back to a sane multiple of the canvas size.
-            for nid in movable:
-                x, y = pos[nid]
-                disp[nid][0] += (cx - x) * GRAVITY
-                disp[nid][1] += (cy - y) * GRAVITY
-            cool = temp0 * (1 - it / iters)
-            for nid in movable:
-                dx, dy = disp[nid]
-                dl = math.hypot(dx, dy) or 0.01
-                step = min(dl, max(cool, 0.5))
-                x, y = pos[nid]
-                pos[nid] = (x + dx / dl * step, y + dy / dl * step)
-
-    return {nid: (round(pos[nid][0], 2), round(pos[nid][1], 2)) for nid in node_ids}
+def _read_node_html(node):
+    """The html_reader callable xgpage.graph.scan_edges() needs: how to get
+    a node's rendered HTML off disk is this project's own I/O concern (here,
+    PUBLISH_DEST/<node's dir>/index.html); the crawler itself only walks the
+    text it's handed."""
+    idx = PUBLISH_DEST / node["_dir"] / "index.html"
+    return idx.read_text(errors="ignore") if idx.exists() else None
 
 
 # ------------------------------------------------------------------ build --
 def build_graph_data():
     nodes = scan_nodes()
-    edges = scan_edges(nodes)  # content-link edges, crawled; plain (a, b) tuples
+    edges = xg.scan_edges(nodes, _read_node_html, GRAPH_CONFIG)  # crawled; plain (a, b) tuples
     node_ids = sorted(n["id"] for n in nodes)
-    typed_edges = load_typed_edges(node_ids)  # curated; [{"source","target","type"}, ...]
+    typed_edges = xg.load_typed_edges(node_ids, GRAPH_CONFIG)  # curated; [{"source","target","type"}, ...]
 
     # LAYOUT and degree counting treat a typed edge as a real connection too
     # (a "supersedes"/"evidence-for" relationship pulls nodes together and
@@ -511,8 +173,8 @@ def build_graph_data():
     # the position-persistence neighbor-set diff.
     typed_pairs = [(e["source"], e["target"]) for e in typed_edges]
     all_pairs = sorted(set(edges) | set(typed_pairs))
-    positions = compute_layout(node_ids, all_pairs)
-    _save_positions(positions, all_pairs)
+    positions = xg.compute_layout(node_ids, all_pairs, GRAPH_CONFIG)
+    xg.save_positions(GRAPH_CONFIG, positions, all_pairs)
 
     in_deg = {nid: 0 for nid in node_ids}
     out_deg = {nid: 0 for nid in node_ids}

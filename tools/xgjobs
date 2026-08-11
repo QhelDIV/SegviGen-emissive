@@ -1,91 +1,23 @@
-#!/usr/bin/env python3
-"""xgjobs -- the jobs board's command-line interface: agents express intent
-(start a job, log an update, mark it done), this tool owns every mechanical
-detail (timestamps, locking, format, rebuilding). Hand-editing jobs/*.md
-directly is DEPRECATED for agents as of 2026-08-09 -- it stays as a
+#!/local-scratch2/xya120/studio/misc/lightgen/.venv_console/bin/python
+"""xgjobs -- lightgen's thin driver over xgpage.jobs's CLI (extracted
+2026-08-10, mirroring the console precedent). Agents express intent (start a
+job, log an update, mark it done); the package owns every mechanical detail
+(timestamps, per-slug locking, format, the writing-standard lint, atomic
+validated writes) -- see xgpage.jobs's module docstring for the full
+mechanism. This file supplies only lightgen's own paths/vocabulary and the
+rebuild step (subprocessing build_jobs.py, which composes the full console
+page -- console shell, tree, etc. -- and stays project-owned).
+
+Hand-editing jobs/*.md directly is DEPRECATED for agents; it stays a
 documented emergency path (recovering a file this tool refuses to touch,
-say), not the normal way to update the board. See tools/build_jobs.py's
-docstring for the underlying jobs/*.md field contract if you ever do need
-to hand-edit.
+say). See tools/build_jobs.py's docstring for the field contract if you
+ever do need to hand-edit.
 
-Why this exists: hand-typed timestamps drifted against the NFS mount's
-clock skew, and a board-registration edit once put a `needs:` line in the
-middle of an append-only `log:` block, silently truncating the log on every
-render. This tool removes both failure classes structurally: one time
-source (this workstation's local clock, never a file mtime or a hand-typed
-guess), and a fixed field layout that only this tool writes.
+Verbs: start, set-track, log, done, frozen, reopen, flag, unflag -- run
+`tools/xgjobs --help` or `tools/xgjobs <verb> --help` for the full
+description of each (generated from xgpage.jobs, so it always matches the
+code). One example per verb:
 
-Verbs:
-    xgjobs start <slug> --title T --motivation M --executor E --track TRACK
-        (--page NAME | --no-page REASON) [--log SENTENCE]
-        Create jobs/<slug>.md. Refuses if the file already exists -- use
-        log/done/frozen/reopen to update an existing job. --track is
-        REQUIRED (research | tooling | paper -- see TRACK below).
-    xgjobs set-track <slug> TRACK
-        Set or correct an existing job's track (research | tooling | paper).
-        A pure metadata correction, not a narrated event: no log line, no
-        `updated:` bump.
-    xgjobs log <slug> "sentence"
-        Append one dated log line to an existing job.
-    xgjobs done <slug> --outcome "sentence"
-        Set status=done; the outcome is also appended as the log's final
-        line (it renders distinctly there, tagged "outcome").
-    xgjobs frozen <slug> [--reason "sentence"]
-        Set status=frozen, with a log line (a bare "Frozen." if no reason
-        given).
-    xgjobs reopen <slug> "why"
-        Set status=ongoing again, with a log line explaining why.
-    xgjobs flag <slug> --ask "what to open and judge"
-        Set needs: evaluation -- MASTER-ONLY BY CONVENTION (not enforced by
-        this tool, there is no identity system to enforce it against): an
-        executing agent reports done with an outcome, it does not flag its
-        own work for the owner's review. Pins the row to the top of the
-        board with a violet "for your review" chip until unflagged. --ask
-        is REQUIRED: a bare flag pins the row but gives the owner no hint
-        what to open or judge, which is exactly the failure this verb
-        exists to prevent -- omitting it is an error, not a shortcut.
-    xgjobs unflag <slug>
-        Clear needs: evaluation (the master, after the owner's verdict).
-
-TRACK (2026-08-10, owner-directed: "many of the jobs are tool develops
-(xgpage, xgtop, ...), we mingle them with the lightgen jobs" -- separate the
-genres): every job carries a `track:` -- research, tooling, or paper. --track
-is REQUIRED on `start`; `set-track` corrects it on an existing job. Any other
-value is refused (argparse choices enforce the three; there is no free-text
-track). The board renders it as a small muted chip next to the status badge
-and offers an All/Research/Tooling/Paper filter.
-
-Every verb: reads the current file (if any) under an flock'd per-slug lock
-so two concurrent calls on the same slug never interleave (see locked());
-validates every user-supplied sentence against the writing standard BEFORE
-touching anything (see lint() -- hard rules only: no em dash, none of the
-banned words, no #<digits> task-id reference; it does not judge prose
-quality); writes the result to a temp file, re-parses THAT with
-inventory_jobs.parse() (the exact function the board renders with) to
-confirm it round-trips intact, and only then atomically renames it into
-place (see safe_write()) -- a validation failure leaves the real file
-completely untouched. Rebuilds the live board's jobs tab as its last step
-(tools/build_jobs.py under .venv_console, the same thin driver a human
-would run by hand), so publishing is never a separate step.
-
-AUTHORSHIP (2026-08-09, owner-directed: a first-person log line once read as
-if it might be the owner's own words, when it was the executing agent's
-self-assessment -- see inventory_jobs.py's LOG-LINE AUTHORSHIP section for
-the render side). Every verb that appends a log line stamps WHO is speaking,
-not just when: `--as NAME` if given, else the XGJOBS_ACTOR environment
-variable if set, else a per-verb default -- "executor" for
-start/log/done/frozen/reopen (the normal progress-report verbs, run by the
-agent doing the work), "master" for flag/unflag (verbs that by convention
-only the master runs, since they touch the master-owned needs: field). The
-board renders the stamp as a small quiet label before the sentence; [owner]
-alone reads with a touch more weight since owner words are the record of
-verdicts, not progress notes. Every log line you write through this tool
-states a fact in the SPEAKER's own voice ("self-check found: two things
-that bother me about the layout"), never in a voice that could be misread
-as someone else's, especially not the owner's -- that confusion is exactly
-what this feature exists to prevent.
-
-Examples (one per verb):
     tools/xgjobs start render_doc --executor render-doc --track research \\
         --title "Name and document the project's rendering setups" \\
         --motivation "Figures use several lighting setups and nobody can tell which one a figure used." \\
@@ -98,156 +30,36 @@ Examples (one per verb):
     tools/xgjobs flag render_doc --ask "Open the page and check the comparison figure reads correctly."
     tools/xgjobs unflag render_doc
     tools/xgjobs log render_doc "Self-check found: the comparison figure's caption is missing units." --as jobs-redesign
+
+AUTHORSHIP: every verb that appends a log line stamps WHO is speaking
+(`--as NAME`, else the XGJOBS_ACTOR environment variable, else a per-verb
+default -- the job's own executor for the normal progress verbs, "master"
+for flag/unflag). [owner] alone reads with a touch more visual weight on
+the board since owner words are the record of verdicts, not progress notes.
+
+TRACK: every job carries a track of research, tooling, or paper (--track is
+required on start; set-track corrects an existing job); the board shows a
+muted chip per job and an All/Research/Tooling/Paper filter.
 """
-import argparse
-import contextlib
-import datetime
-import fcntl
-import os
 import pathlib
-import re
 import subprocess
 import sys
 
+from xgpage import jobs as xj
+
 REPO = pathlib.Path(__file__).resolve().parent.parent
-JOBS = REPO / "jobs"
-LOCK_DIR = JOBS / ".locks"
 CONSOLE_PYTHON = REPO / ".venv_console" / "bin" / "python"
 BUILD_JOBS = REPO / "tools" / "build_jobs.py"
 
-sys.path.insert(0, str(REPO / "tools"))
-import inventory_jobs as ij  # noqa: E402  -- reuse the SAME parser the board renders with
-
-TIME_FMT = "%Y-%m-%d %H:%M"
-# canonical field order; "needs" (optional, omitted when unset) and
-# "motivation" are appended after this run, then log:/outcome -- see
-# serialize(). Matches every hand-migrated jobs/*.md file already on disk.
-FIELD_ORDER = ["title", "executor", "track", "status", "started", "updated", "slurm", "link", "page"]
-# the only three genres the board separates (2026-08-10) -- no free-text
-# track, so there is nothing for lint() to judge here: argparse `choices`
-# on both start's --track and set-track's positional IS the validation.
-TRACK_CHOICES = ["research", "tooling", "paper"]
-
-BANNED_WORDS = ["corpus", "audit", "contact sheet"]
-TASK_ID_RE = re.compile(r"#\d+")
-EM_DASH = "—"
-SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+CONFIG = xj.JobsConfig(
+    jobs_dir=REPO / "jobs",
+    publish_dest=pathlib.Path("/project/3dlg-hcvc/omages/www/yanxg/lightgen"),
+    site_root="/projects/omages/yanxg/lightgen",
+    track_values=("research", "tooling", "paper"),
+)
 
 
-class LintError(Exception):
-    pass
-
-
-def lint(text, field):
-    """Hard rules only, per the brief -- no prose-quality judgment, just
-    the three things that have actually broken the board's writing
-    standard: an em dash, a banned word, or a bare task-id reference that
-    means nothing to the owner reading the board."""
-    errors = []
-    if EM_DASH in text:
-        errors.append(f'{field}: contains an em dash. Rewrite with a comma, '
-                      f'period, or parentheses instead.')
-    lowered = text.lower()
-    for w in BANNED_WORDS:
-        if w in lowered:
-            errors.append(f'{field}: contains the banned word "{w}". Use plain language instead.')
-    m = TASK_ID_RE.search(text)
-    if m:
-        errors.append(f'{field}: contains a task-id reference ("{m.group(0)}"). '
-                      f'Describe what happened in plain words, not an internal tracking id.')
-    if errors:
-        raise LintError("\n".join(errors))
-
-
-def now():
-    return datetime.datetime.now().strftime(TIME_FMT)
-
-
-def resolve_actor(args, default):
-    """Every log-appending verb stamps WHO said a line, not just when (see
-    inventory_jobs.py's LOG-LINE AUTHORSHIP): --as NAME wins if given, else
-    the XGJOBS_ACTOR environment variable, else `default`. Owner refinement
-    2026-08-09: the default should be the ACTUAL agent name, not a generic
-    "executor" label -- [master] and [owner] stay role tokens, everything
-    else is a real name. Callers pass the job's own `executor:` field value
-    for log/done/frozen/reopen (the verbs an agent runs on its own job;
-    cmd_start passes args.executor since the file doesn't exist yet to read
-    one back from), and the literal string "master" for flag/unflag (verbs
-    that by convention only the master runs, regardless of whose job it is)."""
-    return getattr(args, "as_", None) or os.environ.get("XGJOBS_ACTOR") or default
-
-
-@contextlib.contextmanager
-def locked(slug):
-    """One flock'd lockfile per slug (not the job file itself, so `start`
-    can lock a slug before its .md exists). Held across the whole
-    read-modify-write cycle of every verb, so two concurrent calls on the
-    SAME slug serialize instead of interleaving; different slugs never
-    contend."""
-    LOCK_DIR.mkdir(exist_ok=True)
-    f = open(LOCK_DIR / f"{slug}.lock", "a+")
-    try:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        yield
-    finally:
-        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        f.close()
-
-
-def job_path(slug):
-    if not SLUG_RE.match(slug):
-        sys.exit(f'error: "{slug}" is not a valid slug (lowercase letters, digits, '
-                 f'_ and - only, must start with a letter or digit)')
-    return JOBS / f"{slug}.md"
-
-
-def require_exists(slug):
-    path = job_path(slug)
-    if not path.exists():
-        sys.exit(f'error: jobs/{slug}.md does not exist. Use "xgjobs start {slug} ..." first.')
-    return path
-
-
-def serialize(e):
-    lines = [f"{key}: {e.get(key) or ''}" for key in FIELD_ORDER]
-    if e.get("needs"):
-        lines.append(f"needs: {e['needs']}")
-    lines.append(f"motivation: {e.get('motivation') or ''}")
-    lines.append("log:")
-    for ts, author, text in e["log"]:
-        # author is None for a legacy line read back unchanged (never add a
-        # label to a line that didn't have one); a real author renders as
-        # the "[name]" token inventory_jobs.py's LOG_LINE_RE expects.
-        lines.append(f"- {ts} [{author}] {text}" if author else f"- {ts} {text}")
-    lines.append(f"outcome: {e.get('outcome') or ''}")
-    return "\n".join(lines) + "\n"
-
-
-def safe_write(path, e, expected_log_len):
-    """Write to a temp file, re-parse it with inventory_jobs.parse() (the
-    exact function the board renders with, not a reimplementation), and
-    confirm the round trip is intact (right number of log lines, title and
-    status survived) before atomically replacing the real file. A
-    validation failure leaves the real file, if any, completely untouched
-    -- this tool never writes a file the board can't read correctly."""
-    text = serialize(e)
-    tmp = path.with_suffix(".md.tmp")
-    tmp.write_text(text)
-    reparsed = ij.parse(tmp)
-    ok = (len(reparsed["log"]) == expected_log_len
-          and reparsed.get("title") == (e.get("title") or "")
-          and reparsed.get("status") == (e.get("status") or "")
-          and reparsed.get("needs", "") == (e.get("needs") or "")
-          and reparsed.get("track", "") == (e.get("track") or ""))
-    if not ok:
-        tmp.unlink(missing_ok=True)
-        sys.exit("error: the file this command produced did not round-trip through the "
-                 "board's own parser -- refusing to write it. This is a bug in xgjobs, "
-                 "not your input; the real file was not touched.")
-    tmp.replace(path)
-
-
-def rebuild_board():
+def rebuild():
     result = subprocess.run([str(CONSOLE_PYTHON), str(BUILD_JOBS)],
                             capture_output=True, text=True)
     if result.returncode != 0:
@@ -257,227 +69,5 @@ def rebuild_board():
         print(result.stdout.strip() or "board rebuilt", file=sys.stderr)
 
 
-# ---------------------------------------------------------------- verbs ----
-def cmd_start(args):
-    path = job_path(args.slug)
-    if bool(args.page) == bool(args.no_page):
-        sys.exit('error: pass exactly one of --page NAME or --no-page REASON.')
-    lint(args.title, "title")
-    lint(args.motivation, "motivation")
-    first_log = args.log or "Job started."
-    lint(first_log, "log")
-    page_value = args.page
-    if args.no_page:
-        lint(args.no_page, "--no-page reason")
-        page_value = f"none ({args.no_page})"
-    with locked(args.slug):
-        if path.exists():
-            sys.exit(f'error: jobs/{args.slug}.md already exists. "start" never overwrites; '
-                     f'use log/done/frozen/reopen to update it.')
-        ts = now()
-        author = resolve_actor(args, args.executor)
-        e = {"title": args.title, "executor": args.executor, "track": args.track,
-             "status": "ongoing", "started": ts, "updated": ts, "slurm": "", "link": "",
-             "page": page_value, "motivation": args.motivation,
-             "log": [(ts, author, first_log)], "outcome": ""}
-        safe_write(path, e, expected_log_len=1)
-    print(f"jobs/{args.slug}.md created", file=sys.stderr)
-    rebuild_board()
-
-
-def cmd_set_track(args):
-    """Corrects/sets an existing job's track. A pure metadata fix, not a
-    narrated event (unlike every other verb here): no log line, no
-    `updated:` bump -- this is the tool equivalent of fixing a typo in a
-    field, not something that happened at a point in time."""
-    path = require_exists(args.slug)
-    with locked(args.slug):
-        e = ij.parse(path)
-        e["track"] = args.track
-        safe_write(path, e, expected_log_len=len(e["log"]))
-    print(f"jobs/{args.slug}.md: track set to {args.track}", file=sys.stderr)
-    rebuild_board()
-
-
-def cmd_log(args):
-    lint(args.sentence, "log")
-    path = require_exists(args.slug)
-    with locked(args.slug):
-        e = ij.parse(path)
-        ts = now()
-        e["log"].append((ts, resolve_actor(args, e.get("executor") or "executor"), args.sentence))
-        e["updated"] = ts
-        safe_write(path, e, expected_log_len=len(e["log"]))
-    print(f"jobs/{args.slug}.md: logged", file=sys.stderr)
-    rebuild_board()
-
-
-def cmd_done(args):
-    lint(args.outcome, "outcome")
-    path = require_exists(args.slug)
-    with locked(args.slug):
-        e = ij.parse(path)
-        ts = now()
-        e["status"] = "done"
-        e["outcome"] = args.outcome
-        e["updated"] = ts
-        e["log"].append((ts, resolve_actor(args, e.get("executor") or "executor"), args.outcome))
-        safe_write(path, e, expected_log_len=len(e["log"]))
-    print(f"jobs/{args.slug}.md: done", file=sys.stderr)
-    rebuild_board()
-
-
-def cmd_frozen(args):
-    line = f"Frozen: {args.reason}" if args.reason else "Frozen."
-    lint(line, "log")
-    path = require_exists(args.slug)
-    with locked(args.slug):
-        e = ij.parse(path)
-        ts = now()
-        e["status"] = "frozen"
-        e["updated"] = ts
-        e["log"].append((ts, resolve_actor(args, e.get("executor") or "executor"), line))
-        safe_write(path, e, expected_log_len=len(e["log"]))
-    print(f"jobs/{args.slug}.md: frozen", file=sys.stderr)
-    rebuild_board()
-
-
-def cmd_reopen(args):
-    lint(args.why, "log")
-    path = require_exists(args.slug)
-    with locked(args.slug):
-        e = ij.parse(path)
-        ts = now()
-        e["status"] = "ongoing"
-        e["updated"] = ts
-        e["log"].append((ts, resolve_actor(args, e.get("executor") or "executor"), args.why))
-        safe_write(path, e, expected_log_len=len(e["log"]))
-    print(f"jobs/{args.slug}.md: reopened", file=sys.stderr)
-    rebuild_board()
-
-
-def cmd_flag(args):
-    # --ask is REQUIRED (owner feedback 2026-08-09): a bare flag pins the
-    # row but gives the owner no hint what to open or judge, which is
-    # exactly the failure this verb exists to prevent. Checked here (not
-    # via argparse required=True) so the error explains WHY, not just that
-    # an argument is missing.
-    if not args.ask:
-        sys.exit('error: --ask is required. A bare review flag pins the row but gives the '
-                 'owner no hint what to open or judge; say what to check in one sentence, '
-                 'e.g. --ask "Open the new page and check figure 3 reads correctly."')
-    lint(args.ask, "--ask")
-    path = require_exists(args.slug)
-    with locked(args.slug):
-        e = ij.parse(path)
-        ts = now()
-        author = resolve_actor(args, "master")
-        e["needs"] = f"evaluation: {args.ask}"
-        e["updated"] = ts
-        # The ask goes INTO the log (owner-ratified): the needs: banner is
-        # current state and vanishes when cleared; this line is the permanent
-        # record. The renderer styles master lines with this prefix violet.
-        e["log"].append((ts, author, f"For your review: {args.ask}"))
-        safe_write(path, e, expected_log_len=len(e["log"]))
-    print(f"jobs/{args.slug}.md: flagged for review", file=sys.stderr)
-    rebuild_board()
-
-
-def cmd_unflag(args):
-    path = require_exists(args.slug)
-    with locked(args.slug):
-        e = ij.parse(path)
-        ts = now()
-        author = resolve_actor(args, "master")
-        e["needs"] = ""
-        e["updated"] = ts
-        e["log"].append((ts, author, "Review complete; flag cleared."))
-        safe_write(path, e, expected_log_len=len(e["log"]))
-    print(f"jobs/{args.slug}.md: unflagged", file=sys.stderr)
-    rebuild_board()
-
-
-def add_as_arg(p, default_hint):
-    """--as is on every verb that appends a log line: explicit attribution
-    beats the XGJOBS_ACTOR env var beats this verb's own default (see
-    resolve_actor()). Shared here so the seven subparsers describe it
-    identically instead of drifting."""
-    p.add_argument("--as", dest="as_", metavar="NAME",
-                   help=f'who is speaking in this line (default: {default_hint}, or the '
-                        f'XGJOBS_ACTOR environment variable if set) -- "executor", "master", '
-                        f'"owner", or an agent\'s actual name all work, rendered exactly as given')
-
-
-def main():
-    ap = argparse.ArgumentParser(prog="xgjobs", description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = ap.add_subparsers(dest="verb", required=True)
-
-    p = sub.add_parser("start", help="create a new job entry")
-    p.add_argument("slug")
-    p.add_argument("--title", required=True)
-    p.add_argument("--motivation", required=True)
-    p.add_argument("--executor", required=True)
-    p.add_argument("--track", required=True, choices=TRACK_CHOICES,
-                    help="which genre this job belongs to (owner-directed 2026-08-10: "
-                         "separate tool-development work from research work)")
-    p.add_argument("--page", help="the canonical pages.json name this job's results page will use")
-    p.add_argument("--no-page", metavar="REASON", help="this job legitimately produces no page")
-    p.add_argument("--log", help='first log line (default: "Job started.")')
-    add_as_arg(p, '"executor"')
-    p.set_defaults(func=cmd_start)
-
-    p = sub.add_parser("set-track", help="set/correct an existing job's track")
-    p.add_argument("slug")
-    p.add_argument("track", choices=TRACK_CHOICES)
-    p.set_defaults(func=cmd_set_track)
-
-    p = sub.add_parser("log", help="append one dated update line")
-    p.add_argument("slug")
-    p.add_argument("sentence")
-    add_as_arg(p, '"executor"')
-    p.set_defaults(func=cmd_log)
-
-    p = sub.add_parser("done", help="mark the job done with an outcome")
-    p.add_argument("slug")
-    p.add_argument("--outcome", required=True)
-    add_as_arg(p, '"executor"')
-    p.set_defaults(func=cmd_done)
-
-    p = sub.add_parser("frozen", help="mark the job frozen")
-    p.add_argument("slug")
-    p.add_argument("--reason")
-    add_as_arg(p, '"executor"')
-    p.set_defaults(func=cmd_frozen)
-
-    p = sub.add_parser("reopen", help="set an already done/frozen job back to ongoing")
-    p.add_argument("slug")
-    p.add_argument("why")
-    add_as_arg(p, '"executor"')
-    p.set_defaults(func=cmd_reopen)
-
-    p = sub.add_parser("flag", help="set needs: evaluation (MASTER-ONLY by convention)")
-    p.add_argument("slug")
-    # NOT argparse required=True on purpose: cmd_flag() checks this itself
-    # so the error explains WHY --ask is required, not just that it's
-    # missing (argparse's own "required" error can't carry that context).
-    p.add_argument("--ask", help='REQUIRED: what the owner should open and '
-                   'judge, one sentence, e.g. "Open the new page and check figure 3 reads '
-                   'correctly." A bare flag with no ask gives the owner nothing to act on.')
-    add_as_arg(p, '"master"')
-    p.set_defaults(func=cmd_flag)
-
-    p = sub.add_parser("unflag", help="clear needs: evaluation (MASTER-ONLY by convention)")
-    p.add_argument("slug")
-    add_as_arg(p, '"master"')
-    p.set_defaults(func=cmd_unflag)
-
-    args = ap.parse_args()
-    try:
-        args.func(args)
-    except LintError as exc:
-        sys.exit(f"error: writing standard violation(s):\n{exc}")
-
-
 if __name__ == "__main__":
-    main()
+    xj.cli_main(CONFIG, rebuild_fn=rebuild)

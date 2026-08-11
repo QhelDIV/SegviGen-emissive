@@ -6,6 +6,12 @@ the standalone `xgpage` package's bundled assets (theme.css, ui.js, theme2.css,
 xg2.js, theme3.css, xg3.js, katex/) — never hand-edit these files directly,
 edit the package (~/studio/xgpage) and rerun this script.
 
+Graph assets joined the synced set 2026-08-10 (xgpage.graph's extraction):
+graph_view.js/graph_view.css (the SVG rendering: pan/zoom/hover/search/
+timeline mode) and web/assets/vendor/d3-*.v3.*.min.js (physics-only vendored
+d3-force + dependencies) are no longer lightgen-local siblings — edit the
+package and rerun this script, same as every other shared asset.
+
 LIGHTGEN-LOCAL PATCH (recovered after a real regression, 2026-07-22): the
 model-viewer 3D lightbox needs THREE pieces (see tools/xgpage_ext.py's module
 docstring for the Python side) — a separate FILE (model-viewer.min.js, not
@@ -71,7 +77,8 @@ def main():
     print(f"model-viewer JS patch {'applied' if js_patched else 'already present'}")
     survivors = [p.name for p in ASSETS_DIR.iterdir()
                  if p.name not in {"theme.css", "ui.js", "theme2.css", "xg2.js",
-                                    "theme3.css", "xg3.js", "katex"}]
+                                    "theme3.css", "xg3.js", "katex",
+                                    "graph_view.js", "graph_view.css", "vendor"}]
     if survivors:
         print(f"lightgen-only sibling files preserved: {survivors}")
 

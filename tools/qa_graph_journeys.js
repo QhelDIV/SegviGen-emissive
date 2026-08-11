@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* qa_graph_journeys.js — the page-relationship graph's simulated-user QA
- * harness (permanent deliverable, 2026-08-10, owner-directed round 2).
+ * journeys (permanent deliverable, 2026-08-10, owner-directed round 2).
  *
  * WHY THIS EXISTS: the owner's round-1 complaint ("if I click one node,
  * things get cluttered, and I have to refresh the page to reset") was a
@@ -14,6 +14,16 @@
  * it is the gate for any future change to web/assets/graph_view.js's
  * interaction code, not a one-off test run. Re-run it after any edit to
  * the click/hover/search/select state machine, before publishing.
+ *
+ * EXTRACTED 2026-08-10 (xgpage.graph's package extraction, journey-harness
+ * round): the generic runner loop (browser lifecycle, per-journey error
+ * handling, PASS/FAIL reporting, exit code) now lives in the package as
+ * xgpage's bundled qa/journey_harness.js, alongside qa_widths.js and
+ * qa_v3_interact.js (see xgpage.publish.qa_path()). This file keeps only
+ * what is genuinely specific to the graph page: the DOM helpers that know
+ * ".gn-node"/"#graph-svg"/"#graph-search" (nodeBox, bgPoint, snapshot,
+ * isBaseline) and the seven JOURNEYS themselves. A project with a
+ * DIFFERENT interactive page copies this file's shape, not its content.
  *
  * USAGE, the way anyone on this workstation should actually run it:
  *   tools/qa_graph_journeys.sh [url]
@@ -45,7 +55,12 @@
  * itself change ui state beyond defensively clearing hover.
  */
 "use strict";
-const { chromium } = require("playwright");
+// The package's installed location on this workstation (canonical xgpage
+// checkout, see the xgpage skill) -- XGPAGE_QA_DIR overrides for a
+// different machine/checkout, same override pattern as QA_CHROME_PATH
+// below.
+const QA_DIR = process.env.XGPAGE_QA_DIR || (process.env.HOME + "/studio/xgpage/src/xgpage/qa");
+const { runJourneys } = require(QA_DIR + "/journey_harness.js");
 
 const DEFAULT_URL = "https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/graph.html";
 const CHROME_PATH = process.env.QA_CHROME_PATH ||
@@ -219,33 +234,7 @@ const JOURNEYS = [
 
 async function main() {
   const url = process.argv[2] || DEFAULT_URL;
-  const browser = await chromium.launch({ executablePath: CHROME_PATH });
-  const results = [];
-  for (const j of JOURNEYS) {
-    const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-    const page = await ctx.newPage();
-    try {
-      await page.goto(url, { waitUntil: "networkidle" });
-      await page.waitForTimeout(500);
-      const r = await j.run(page, ctx);
-      results.push({ name: j.name, pass: r.pass, detail: r.detail });
-    } catch (e) {
-      results.push({ name: j.name, pass: false, detail: { error: e.message } });
-    }
-    await ctx.close();
-  }
-  await browser.close();
-
-  console.log("\n=== graph interaction journeys: " + url + " ===\n");
-  let allPass = true;
-  results.forEach((r) => {
-    console.log((r.pass ? "PASS" : "FAIL") + "  " + r.name);
-    if (!r.pass) {
-      console.log("      " + JSON.stringify(r.detail));
-      allPass = false;
-    }
-  });
-  console.log("\n" + results.filter((r) => r.pass).length + "/" + results.length + " journeys passed.");
+  const allPass = await runJourneys(url, JOURNEYS, { chromePath: CHROME_PATH, label: "graph interaction" });
   process.exit(allPass ? 0 : 1);
 }
 
