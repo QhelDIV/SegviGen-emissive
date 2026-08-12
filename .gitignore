@@ -68,3 +68,4 @@
 *secret*
 *.credentials.json
 jobs/.locks/
+captures/
