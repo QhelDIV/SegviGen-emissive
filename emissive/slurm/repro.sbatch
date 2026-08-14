@@ -9,7 +9,8 @@
 source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh; conda activate trellis2
 export HF_HOME=/3dlg-jupiter-project/lightgen/hf_cache
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-cd /3dlg-jupiter-project/lightgen/segvigen_emissive/code/SegviGen
+# the deployed tree IS the SegviGen fork: inference_full.py and data_toolkit/ live at its root
+cd /3dlg-jupiter-project/lightgen/segvigen_emissive
 # satisfy the literal relative open("microsoft/TRELLIS.2-4B/pipeline.json")
 SNAP=$(ls -d /3dlg-jupiter-project/lightgen/hf_cache/hub/models--microsoft--TRELLIS.2-4B/snapshots/*/ | head -1)
 mkdir -p microsoft/TRELLIS.2-4B

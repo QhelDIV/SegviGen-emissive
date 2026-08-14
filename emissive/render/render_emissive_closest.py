@@ -274,8 +274,10 @@ def load_pred(pred_dir, sid, n_slots):
     import glob as _glob
     masks, uniform = {}, {}
     stats_path = os.path.join(pred_dir, f"{sid}__stats.json")
+    continuous = False
     if os.path.exists(stats_path):
         st = json.load(open(stats_path))
+        continuous = bool(st.get("continuous"))
         for k, v in (st.get("uniform") or {}).items():
             # FLAT-MATERIAL BRANCH (team-lead request, 2026-08-11): a scalar
             # keeps the old on/off-at-full-strength convention (pred_mask_to_
@@ -289,7 +291,22 @@ def load_pred(pred_dir, sid, n_slots):
         n = int(os.path.basename(p).split("__mat")[1].split("__")[0])
         import matplotlib.image as mpimg
         a = mpimg.imread(p)
-        masks[n] = (a[..., :3].max(axis=-1) > 0.5).astype(np.float32)
+        # BUG FIX (caught live, 2026-08-13): every mask used to be binarized
+        # at >0.5 here regardless of how it was produced, which silently
+        # re-thresholded bpy_rebake.py's --continuous output (a genuine
+        # per-texel confidence value written into the same PNG format) back
+        # into a binary gate before it ever reached rebuild_emission_
+        # predicted's `alb * mask` multiply -- so a "continuous" render was
+        # actually just another binary mask (nearest-single-voxel's own
+        # value >0.5, no tol rescue), not brightness tracking confidence.
+        # stats.json's "continuous" flag (set by bpy_rebake.py) now selects
+        # which behavior this mask gets; default (flag absent or false)
+        # preserves the exact prior binarized behavior for every existing
+        # caller.
+        if continuous:
+            masks[n] = a[..., :3].max(axis=-1).astype(np.float32).clip(0, 1)
+        else:
+            masks[n] = (a[..., :3].max(axis=-1) > 0.5).astype(np.float32)
     unknown = [n for n in list(masks) + list(uniform) if n >= n_slots]
     assert not unknown, (f"{sid}: prediction names material slots {unknown} but "
                          f"the asset has {n_slots}; slot indices must be the "

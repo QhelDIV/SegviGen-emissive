@@ -165,6 +165,12 @@ def main():
     ap.add_argument("--tex", type=int, default=1024)
     ap.add_argument("--tol", type=float, default=2.0)
     ap.add_argument("--flat_thr", type=float, default=0.5)
+    ap.add_argument("--continuous", action="store_true",
+                     help="skip binarization: write the raw pred_bc confidence "
+                          "value of the nearest voxel into each texel instead "
+                          "of a 0/1 hit, so emission strength is proportional "
+                          "to confidence. --thr is ignored in this mode "
+                          "(kept in stats.json for provenance only).")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -174,9 +180,15 @@ def main():
 
     z = np.load(args.npz)
     coords_vox = z["coords"].astype(np.float64)
+    pred_vals = z["pred_bc"].astype(np.float64)
     lit = (z["pred_bc"] > args.thr) if args.value == "pred" else z["gt_e"].astype(bool)
     print(f"LIT_VOXEL_FRAC {lit.mean():.6f} ({int(lit.sum())}/{len(lit)})", flush=True)
-    tree_lit = cKDTree(coords_vox[lit]) if lit.sum() else None
+    if args.continuous:
+        # continuous mode queries ALL voxels (not pre-thresholded) so the
+        # nearest-voxel lookup below can return its raw confidence value.
+        tree_lit = cKDTree(coords_vox) if len(coords_vox) else None
+    else:
+        tree_lit = cKDTree(coords_vox[lit]) if lit.sum() else None
 
     bpyutil.load_blend(bpyutil.preset_glb)
     bpyutil.clear_collection("workbench")
@@ -282,6 +294,7 @@ def main():
         rasterise_into(blend_uv3, np.array([[0, 1, 2]]), pos3, args.tex, pos_buf, valid_buf)
 
     stats = {"sid": args.sid, "npz": args.npz, "glb": args.glb, "thr": args.thr,
+             "continuous": args.continuous,
              "tex": args.tex, "tol_voxels": args.tol, "source": args.value,
              "flat_thr": args.flat_thr, "rebake": "blender_imported_uv",
              "pred_voxel_frac": float(lit.mean()), "materials": [], "uniform": {}}
@@ -307,10 +320,18 @@ def main():
                 # extent-to-2.0 normalization, NOT the raw-frame centre/scale
                 # (see the note above where pos_buf is filled).
                 q = to_voxel(pos_buf[valid_buf], np.zeros(3), 0.5)
-                d_lit, _ = tree_lit.query(q, k=1)
-                hit = d_lit <= args.tol
-                mask[valid_buf] = hit.astype(np.float32)
-                rec["lit_texel_frac_of_covered"] = float(hit.mean())
+                if args.continuous:
+                    d_near, idx_near = tree_lit.query(q, k=1)
+                    within = d_near <= args.tol
+                    vals = np.where(within, pred_vals[idx_near].clip(0, 1), 0.0)
+                    mask[valid_buf] = vals.astype(np.float32)
+                    rec["lit_texel_frac_of_covered"] = float(within.mean())
+                    rec["mean_confidence_of_covered"] = float(vals.mean())
+                else:
+                    d_lit, _ = tree_lit.query(q, k=1)
+                    hit = d_lit <= args.tol
+                    mask[valid_buf] = hit.astype(np.float32)
+                    rec["lit_texel_frac_of_covered"] = float(hit.mean())
             else:
                 rec["lit_texel_frac_of_covered"] = 0.0
             img = np.zeros((args.tex, args.tex, 4), dtype=np.uint8)
@@ -337,8 +358,14 @@ def main():
                 centroids = np.array([prim["positions"][prim["faces"][li]].mean(axis=0)
                                       for prim, li in faces_this_mat])
                 q = to_voxel(centroids, centre, scale)
-                d_lit, _ = tree_lit.query(q, k=1)
-                lit_frac = float((d_lit <= args.tol).mean())
+                if args.continuous:
+                    d_near, idx_near = tree_lit.query(q, k=1)
+                    within = d_near <= args.tol
+                    vals = np.where(within, pred_vals[idx_near].clip(0, 1), 0.0)
+                    lit_frac = float(vals.mean())
+                else:
+                    d_lit, _ = tree_lit.query(q, k=1)
+                    lit_frac = float((d_lit <= args.tol).mean())
             else:
                 lit_frac = 0.0
             rec["lit_face_frac"] = lit_frac
