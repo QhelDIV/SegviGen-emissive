@@ -1,0 +1,112 @@
+[
+  {
+    "name": "ct10_red_car_A",
+    "dir": "/3dlg-jupiter-project/lightgen/segvigen_emissive/dataset_direct/train_72k/001c79293c3e4f938798026a79f2d26a",
+    "note": "ct10 (symlinked into train_72k)",
+    "meta_emissive_frac": 0.0002528377517592162,
+    "raw_output_vxz_rgb_equal_frac": 1.0,
+    "raw_output_vxz_is_binary": true,
+    "raw_output_vxz_white_frac": 0.00025283775815870905,
+    "align_coverage": 0.9470980826138463,
+    "iou_decoded_output_vs_raw_binary_mask": 0.8515625,
+    "corr_decoded_output_vs_raw_albedo_per_channel": [
+      -0.0058499326696508595,
+      0.047218662065101266,
+      0.0594622218604775
+    ],
+    "corr_decoded_output_mean_vs_raw_mask": 0.9396987516885351,
+    "corr_decoded_input_vs_raw_albedo_per_channel (positive control)": [
+      0.9899660489393378,
+      0.9483519944465719,
+      0.9498335961774801
+    ]
+  },
+  {
+    "name": "ct10_red_car_B",
+    "dir": "/3dlg-jupiter-project/lightgen/segvigen_emissive/dataset_direct/train_72k/000b9fd47d6d4f7db7b2f5022d1ae9aa",
+    "note": "ct10 (symlinked into train_72k)",
+    "meta_emissive_frac": 0.017942052334547043,
+    "raw_output_vxz_rgb_equal_frac": 1.0,
+    "raw_output_vxz_is_binary": true,
+    "raw_output_vxz_white_frac": 0.017942052875166422,
+    "align_coverage": 0.920853706129612,
+    "iou_decoded_output_vs_raw_binary_mask": 0.9977298524404086,
+    "corr_decoded_output_vs_raw_albedo_per_channel": [
+      0.471039291259208,
+      0.5083559424255387,
+      0.5145987437997248
+    ],
+    "corr_decoded_output_mean_vs_raw_mask": 0.9991583731709246,
+    "corr_decoded_input_vs_raw_albedo_per_channel (positive control)": [
+      0.9498717841157297,
+      0.9517529458699068,
+      0.9434133246589954
+    ]
+  },
+  {
+    "name": "single_shape_control",
+    "dir": "/3dlg-jupiter-project/lightgen/segvigen_emissive/dataset_direct/overfit_single_91d94c0f/91d94c0f556b4aa69d3ab09919d1d380",
+    "note": "single-shape overfit control",
+    "meta_emissive_frac": 0.088581383228302,
+    "raw_output_vxz_rgb_equal_frac": 1.0,
+    "raw_output_vxz_is_binary": true,
+    "raw_output_vxz_white_frac": 0.08858138453059967,
+    "align_coverage": 0.9889490844017356,
+    "iou_decoded_output_vs_raw_binary_mask": 0.9962117491897352,
+    "corr_decoded_output_vs_raw_albedo_per_channel": [
+      -0.26486881045834365,
+      -0.20460631796911558,
+      -0.1892934907902905
+    ],
+    "corr_decoded_output_mean_vs_raw_mask": 0.9984179386375294,
+    "corr_decoded_input_vs_raw_albedo_per_channel (positive control)": [
+      0.9971280478262754,
+      0.9966871247806417,
+      0.9919951769735457
+    ]
+  },
+  {
+    "name": "72k_A_eccb9b85",
+    "dir": "/3dlg-jupiter-project/lightgen/segvigen_emissive/dataset_direct/train_72k/eccb9b85d4ed44fbb7ea81ba6c6d34b6",
+    "note": "train_72k (moderate emissive_frac)",
+    "meta_emissive_frac": 0.2970364987850189,
+    "raw_output_vxz_rgb_equal_frac": 1.0,
+    "raw_output_vxz_is_binary": true,
+    "raw_output_vxz_white_frac": 0.29703648438742186,
+    "align_coverage": 0.9861036046351853,
+    "iou_decoded_output_vs_raw_binary_mask": 0.9988138101886357,
+    "corr_decoded_output_vs_raw_albedo_per_channel": [
+      0.7157133764274229,
+      0.6757486553237894,
+      0.6675343368269869
+    ],
+    "corr_decoded_output_mean_vs_raw_mask": 0.9993324544610547,
+    "corr_decoded_input_vs_raw_albedo_per_channel (positive control)": [
+      0.998082534738273,
+      0.9980951540144887,
+      0.9980438778131313
+    ]
+  },
+  {
+    "name": "72k_B_089d07d0",
+    "dir": "/3dlg-jupiter-project/lightgen/segvigen_emissive/dataset_direct/train_72k/089d07d06f494a4c9239212987bcab49",
+    "note": "train_72k (moderate emissive_frac)",
+    "meta_emissive_frac": 0.2852761447429657,
+    "raw_output_vxz_rgb_equal_frac": 1.0,
+    "raw_output_vxz_is_binary": true,
+    "raw_output_vxz_white_frac": 0.28527613444822686,
+    "align_coverage": 0.9972593775639114,
+    "iou_decoded_output_vs_raw_binary_mask": 0.9962507611563778,
+    "corr_decoded_output_vs_raw_albedo_per_channel": [
+      0.05972279468807695,
+      0.06336615856980232,
+      0.06948121545064702
+    ],
+    "corr_decoded_output_mean_vs_raw_mask": 0.9980233522171141,
+    "corr_decoded_input_vs_raw_albedo_per_channel (positive control)": [
+      0.986028395939722,
+      0.9815050801987688,
+      0.9813405857970572
+    ]
+  }
+]

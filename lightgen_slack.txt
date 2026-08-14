@@ -1,0 +1,1218 @@
+joined proj-light-gen. Also,  and  joined via invite.Canvas updated  [9:05 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [4:26 PM]
+I have updated the proposal with a timeline.  Feel free to leave any feedback.
+Manolis  [8:11 PM]
+Thanks @Dongchen for getting the channel started.  And welcome @Xingguang (Kevin) Yan -- I heard from @Dongchen that you are very interested in joining and helping execute on this project.
+From a quick look, the timeline seems good.  It is quite ambitious, but I definitely support ambition.  One note: it seems the dates aren't aligned with the days indicated at the top.  Also, it would be good to break down tasks and allocate across people (though of course, these doesn't need to happen in overleaf, it can be kept as a list in a doc somewhere that you can easily edit)Canvas updated  [8:19 PM]
+Dongchen Yang and Xingguang Yan made updates to Project Checklist
+.Xingguang (Kevin) Yan  [12:32 AM]
+Context:
+The code of encoding / decoding .glb shapes into omages seem to be very handy for emission texture extraction as well.
+So it would be great if we can use the existing code to help us understand / process the shapes that have emission in TexVerse (Updated Objaverse)
+Summary:
+Now I have updated the code to support the emission extraction and rendering and have push the change to the github repo of xgutils.
+Things to notice:
+
+I added the 'glowing' effect in the render (post-processing step in compositing), so that any very bright pixels will have a blooming effect, this is very useful to show the pixels that are 'emissive'.
+The rendering setup highly depends on the preset_glb_emission.blend file, have a check at the scene set up if you would like to tune the rendering.
+The figures shows
+
+The default demo scene of the preset_glb_emission.blend file (disabled for final rendering)
+What we get after run the omage_encoderv3 function and omage_decoderv3 will turn textures back
+Three examples of the reconstructed shapes with lighting / blooming effect.
+
+
+Example code to do this can be found in this thread. (edited) 
+5 files Xingguang (Kevin) Yan  [12:56 AM]
+Also, the potential strategy to filter out the shapes that have emission is:
+
+Load the .glb to blender, iterate materials to see if any of the material has 'Emission Strength' property to be non zero. This typically shows this is an emissive object.
+The entire TexVerse has 800k+ shapes, many of which take a lot of time to even load and count materials. A intuitive first step would be starting from already filtered simple shapes. This parquet file  stores info about the filtered simple object that has <= 8 uv patches. It has ~45k objects, all of which have high quality uvs. This could be a good starting point. Maybe we can have 500~1000 shapes with emissive objects.
+I have to focus on the CVPR submission now, and will be back for help after the deadline. (edited) 
+Dongchen  [5:29 PM]
+I finished writing a script for checking if the object is emissive or not. Now, I am iterating through the parquet file from Xingguang. It should be finished within the next 1 or 2 hours. After that, I can render those emissive object to help us better understand the data.
+Dongchen  [9:52 AM]
+Hi @Manolis and @Xingguang (Kevin) Yan, hope you are doing well. With the CVPR deadline past, shall we schedule a time to meet up together? I usually have meeting with @Manolis Tuesday 10 to 10:30 am and Thursday 2 to 2:30 PM. Does that work for you @Xingguang (Kevin) Yan?
+Dongchen  [2:38 PM]
+I tried to render the simple object with <= 8 uv patches in TexVerse.
+Out of the 45k objects, there are around 3800 emissive objects. I rendered 2500 out of the 3800.
+I randomly selected 10 from the 2500 that I rendered. They does not seem to be very good looking emissive objects... (edited) 
+random_10_visualization.png [2:40 PM]I will take a look on the objects with more than 8 uv patches.
+Dongchen  [4:50 PM]
+Rendered 100 images and randomly picked 10 without the "8 UV patch" condition. This time, it seems there are some reasonable emissive objects.
+random_10_visualization_all.png Dongchen  [8:06 PM]
+Xingguang and I discussed a bit and the next step plan for preparing our data is:
+
+go through the entire 800k dataset and render the .glb file as rgb image if it has emissive parameter. (not projecting the material and emission into UV space to save time)
+filter out the non-emissive object by the rendered image and caption
+render the remaining object's material and emission parameter in UV space
+Dongchen  [11:57 PM]
+I started the step 1 for rendering all objects with emissive parameters.
+Manolis  [8:00 AM]
+Thanks for the updates.  Overall, I believe you are proceeding in the direction I would recommend: try to get a more global understanding of how many of the objects contain real light sources, without any significant pre-filtering.  Once we have a better sense of what light emitting objects exist in the whole dataset, what categories they belong to, what their data characteristics are etc. we can better plan for construction of a comprehensive benchmark dataset.  Let’s discuss more when we meet.  I am assuming our current time (Tuesday 10am) works for both of you?
+Xingguang (Kevin) Yan  [9:05 AM]
+Sorry for the late reply, I were in another meeting starting from 8:00.
+The BIOSCAN meeting is on Tuesday 10:00 am and I may need to attend it occasionally. Shall we do 11:00 am instead?[9:05 AM]or 9:00 am ? (starting from next time) (edited) 
+Manolis  [9:06 AM]
+I’m booked until 2pm. I can make 2pm work.
+Xingguang (Kevin) Yan  [9:07 AM]
+My project meeting is from 1:40~2:40 or so, so is it possible to meet at 3:00?
+Manolis  [9:07 AM]
+Possibly, let me see, I’ll try to shift some things
+[9:12 AM]I can make 3pm.  @Dongchen I assume that works for you?
+Dongchen  [9:17 AM]
+Sure. 3 pm works for me.
+Manolis  [9:20 AM]
+Okay, great.  I sent a calendar invite for 3pm to both of you
+Manolis  [3:43 PM]
+Does Thursdays 9am work?  I can make that time Dec 4th onwards.
+Xingguang (Kevin) Yan  [4:48 PM]
+We have updated this time's summary in this doc (Dongchen also put it in the bookmarks in this channel)
+https://docs.google.com/document/d/1gbIq-SxoiR_3e3WxXxptJ8WKoZy3mTew2qPPA-YgQjI/edit?tab=t.0#heading=h.3tgtgdqu1qzj
+Google DocsXingguang (Kevin) Yan  [4:48 PM]
+
+Dongchen (quickly find out emissives): Iterate the 850k .glb from TexVerse, load the glb and check if any of the materials has non-zero emissive strength. Flag those emissive shapes, and grab the thumbnails for manual visual check. May also render it in our way which particularly highlight the emissive region to help us understand.
+Xingguang (heavier processing to get meta data and repacked uvs and textures): In parallel, iterate the 850k .glb from TexVerse, load the glb and do various processing, ending up in a single repacked uv image with texture maps along with various meta data such as 'original number of patch', and 'evaluated number of patch'.
+Dongchen  [9:48 PM]
+I went through the metadata and retrieved all unique tags. There are about 190K different tags. I think something we can do is to do KNN in CLIP embedding space to find the tags related to "light". Do you have any suggestion on this? (edited) 
+Dongchen  [8:54 PM]
+I have not yet finished the checking data with "load and check emission strength".  I noticed a problem that at the beginning, the speed is ok, but later on it is getting stuck. Han-Hung mentioned that it could be because bpy stuck at loading the .glb file. I tried to add a time_limit  exception for processing the data but it seems not quite working. I will double check if the time_limit actually work or not. (edited) 
+Dongchen  [2:29 PM]
+Hi @Manolis @Xingguang (Kevin) Yan not sure if we are meeting today since I didn't see it on the calendar. Probably we can skip today since we are still processing the data. Will keep you updated through Slack.
+Dongchen  [9:45 PM]
+Finally finished checking the emissive objects with "loading and checking emissive strength". There are in total ~80K emissive objects out of the 800K objects. I will render their emissive image in UV space as the next step. I think we can also try to use something like DuoduoClip to help us filter the unreasonable objects.
+Dongchen  [9:08 PM]
+I have started running the rendering process in parallel. Currently we are rendering the albedo, metallic, roughness, emission, position map, occupancy for the object. Hopefully, we can get them tomorrow.
+Manolis  [8:05 AM]
+Thanks for the update Dongchen.  That said, it would be helpful to give a bit more context as it is hard to follow exactly what you are talking about.  Specifically:
+
+We talked about leveraging metadata and tags when we last met.  Some preliminary tests seemed to indicate that 20+% of objects looked like they had lights.  What happened after that with this thread?
+Above you described checking data with “load and check emission strength” and that this resulted in ~80K emissive objects out of 800K objects.  How does this process relate to the above process?
+When we last met we talked about removing pre-filtering based on UV complexity / algorithms that check for number of islands etc.  Is any such filtering being done?
+You mention rendering UV and that you will use DuoDuoCLIP to filter “unreasonable objects”.  I did not follow the relation between the two, and also I am unsure what “unreasonable objects” means in this case and how they would be filtered out using DuoDuoCLIP — would be good to give some context on that
+I’m giving the above as examples to hopefully guide you about how to send more systematic and concrete updates.  It is particularly important as we will be meeting only once a week to give clear updates.  Also, I’d like to hear from both @Dongchen and @Xingguang (Kevin) Yan.  We are team so it helps to coordinate and push the project forward together.
+Xingguang (Kevin) Yan  [9:18 AM]
+Update from my part:
+
+Xingguang (heavier processing to get meta data and repacked uvs and textures): In parallel, iterate the 850k .glb from TexVerse, load the glb and do various processing, ending up in a single repacked uv image with texture maps along with various meta data such as 'original number of patch', and 'evaluated number of patch'.
+I started the parallel processing (on 6 machines, each process 1/6 shapes) yesterday, and I should be able to show some statistics of a subset (1/6) of the 850k shapes.
+
+For your question:
+
+When we last met we talked about removing pre-filtering based on UV complexity / algorithms that check for number of islands etc.  Is any such filtering being done?
+The filtering will be done after the full dataset is processed. We will show some stat for a subset in today's meeting.
+Dongchen  [3:19 PM]
+made a small annotation tool to annotate emissive objects. I will try to annotate some of them and use DuoduoCLIP to find similar objects
+image.png Manolis  [3:00 PM]
+Hi folks, please don’t forget about meeting notes.  Let’s make it a habit to post these after each of our meetings.
+Manolis  [3:00 PM]
+These should include both: 1) main points of discussion during meeting; and 2) next steps
+[3:01 PM]And, let’s keep this channel alive with communication on a frequent basis (especially now that we have only one weekly scheduled meeting)
+Dongchen  [3:41 PM]
+replied to a thread:I updated the google doc with todays meeting notes: https://docs.google.com/document/d/1gbIq-SxoiR_3e3WxXxptJ8WKoZy3mTew2qPPA-YgQjI/edit?tab=t.0
+Google Docs[3:45 PM]A followup for today's discussion: I tried to switch the prompt from "light bulb" to "emissive part" (a more general description). SAM3 cannot segment the part that we want.
+image.png Canvas updated  [12:25 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [1:01 PM]
+Retrieved the top 20 models by only using the text prompt "flashlight" based on the features extracted from the original thumbnail rendering of sketchfab. It seems ok. Will try to retrieve more.
+flashlight_retrieval_grid.png Dongchen  [4:19 PM]
+Added an additional check for if the object_id has emissive strength (which was saved previously).
+[4:20 PM]I found that for object with lower similarity (based on the text "flashlight"), it becomes a bit unreasonable. But most of them still look like emissive objects.
+image.png [4:21 PM]Do you have any suggestion on the size for our initial subset of data?
+Manolis  [4:22 PM]
+Let’s do at least a couple hundred
+[4:23 PM]If you can easily get more with this simple retrieval & verification then more is better
+[4:24 PM]I’d say something like 500 - 1K or so would be a good target for prototyping.
+Dongchen  [5:40 PM]
+I made a very preliminary version of a subset of  ~1000 emissive objects. Here is the steps:
+
+retrieve based on DuoduoCLIP features (I retrieved the top 2000 objects based on the similarity score to the text "flashlight")
+annotate the 2000 objects using the annotation interface (in the attached image, and it took me around 1 hour to go through all 2000 examples)
+image.png [5:43 PM]One problem is that not all of the objects that I labeled as emissive are actually "flashlights", some of them are lamps or other stuff that I think could be reasonable emissive objects. Do you think we should keep those objects that are not actual "flashlights" in this subset?
+image.png [5:44 PM]We could also discuss more tomorrow.
+[5:44 PM]I think the next step is to verify those objects by their baked emissive UVs to make sure they actually have those emissive parameters.
+Manolis  [5:47 PM]
+Thanks for the update.  Great to hear you’ve reach 1K objects verified.  I don’t see any problem with keeping diverse categories.  If anything, it is better to have more categories rather than fewer.  Eventually, you will want any final benchmark dataset to have good diversity.
+Xingguang (Kevin) Yan  [11:08 AM]
+Today's meeting summary from my end.
+
+Suggested procedure: (1) propose -> (2) verify at picked examples -> (3) discuss -> (4) loop to 1 to improve ... -> (5) scale up
+
+Think more and discuss on what settings of images to render.
+
+Continue to verify filtering by visualizing shapes with various (discrepancy between n_patch original / eval) and (f001-score)
+
+To push for SIGGRAPH, we need much more frequent communications and updates here.
+Dongchen  [1:25 PM]
+I updated the meeting notes here https://docs.google.com/document/d/1gbIq-SxoiR_3e3WxXxptJ8WKoZy3mTew2qPPA-YgQjI/edit?tab=t.mgrxmz9vmpbo
+Xingguang (Kevin) Yan  [11:45 PM]
+Previously, we want to obtain the render with emissive region only by substracting two images: rendered image with emission (A) - rendered image without emission (B)
+It turns out we can directly save the 'emission pass' in blender (a render layer), which exactly only preserves regions that are emissive.
+As for the 'glare' postprocessing effect, I think it is mainly useful for the visualization purpose: it makes the scene cooler.
+
+So I would like to render the 80k objects again with the emission_only setting.
+For comparison between the settings, we show a simple example in the figure below.image.png Canvas updated  [9:14 AM]
+Xingguang Yan and Dongchen Yang made updates to Project Checklist
+.Manolis  [10:05 AM]
+Thanks for the update @Xingguang (Kevin) Yan.  The plan overall sounds good.  That said, I’d like to understand a bit better the actual parameters for the three settings.  Can you say:
+
+What is the light setup used (primarily for the “default” render)? I ask because it’s a bit hard to tell from the example above whether it is dark or bright for actual objects.
+Are you doing any emission strength tweaks, or just keeping the loaded value for now? I think keeping the loaded value for now is the way to go.
+Do you plan to render all three versions you show in the example above, for the 80k objects?
+When you render I assume they will be separated out into three images so we can independently pick and choose which ones to use later?
+Dongchen  [10:48 AM]
+Updated the interface with baked emission map. Also added a tagging module.
+image.png [10:49 AM]Will quickly go through the data again.
+Manolis  [10:50 AM]
+Thanks for the update @Dongchen.  For the tagging: is that a freeform text box so you can add new tags if needed?  Also, do you have a set of tags you already know you would like to be checking for and applying?
+Dongchen  [10:54 AM]
+Yes. The tagging is a freeform text box and we can add new tags and reuse them if needed.
+
+For tags, I think something to check is:
+
+if the object is not a flashlight, tag it with non-flashlight
+if it looks like an emissive object but the emissive map is completely dark, tag it with emission=0.  And toggle the button of "Emissive" if it has been previously labeled as "Emissive".
+[10:55 AM]Do you have any other thought that we could potentially tagging?
+Manolis  [10:58 AM]
+I wouldn’t worry too much about tagging non-flashlight since there are likely to be many different actual object categories and the goal isn’t just to have one category, but rather end up with a diverse set of categories at the end.  That said, if you want you can tag with a category label (category:flashlight, category:lamp, category:car, etc.) as that may be useful later.  In our last meeting we discussed also tagging: 1) transparency; 2) too dark emission at default strength.
+Xingguang (Kevin) Yan  [8:39 PM]
+replied to a thread:
+default emissive setup: moon light (sun light in blender, with 0.05 strength) + 0.05 strength environment white light, add glow effect. emit only: only show the emit color (no moon/env light as well). Also see the image to see how this works for a shape in the dataset.
+I just use the default emission strength.
+Yes, already rendered. With our parallel script, we can render 80k objects in 3 hours.
+Yes, the results are separated. We put them together here for comparison.
+image.png Xingguang (Kevin) Yan  [8:51 PM]
+More examples. (every two images: left: default, right: emissive)
+2 files Manolis  [7:37 AM]
+Great, thanks for sending all the details.  Overall sounds good, and it’s great to hear that rendering all 80k doesn’t take long.  My only comment is that from the examples of rendered images you sent above, it looks like in general the default setup for the environment light leads to quite dark rendered images overall which makes it hard to see the objects.  This could lead to problems both for visual inspection and any downstream processing of the images that relies on perception.  Can we increase the environment light strength a bit?  And while we’re at it: black background is also not ideal for the “regular” rendered image (I assume you are rendering with alpha and can pick a background color when compositing? If so, I suggest to use white for the “regular” images.  It is fine to keep it black for things like emission only, UV etc.
+Xingguang (Kevin) Yan  [2:43 PM]
+replied to a thread:Yes, the background of the default render is transparent so we can make the empty regions white. While the emit only render has black background. (first image)
+
+And yes, we need to make the image brighter.
+second image shows before (0.05 env light), and third image shows after (0.3 env light)
+I have started the batch script to re-render.3 files Manolis  [11:28 AM]
+Hi folks, hope all is well.  When we did our yearly GPR, Dongchen suggested that it would help if I check in more frequently on how things are going.  Can you please send an update on what you’re working on / any questions or discussion points etc.?  @Dongchen It might be useful to make this systematic with the standup bot, that way you don’t need me to manually remember to ask.
+Dongchen  [11:32 AM]
+Hi @Manolis Currently, I am trying to incorporate Xingguang's new renderings to our annotation tool (including the renderings of glb with default emissive strength, the renderings that only shows emissive parts, and the renderings with brighter emissiion). In this way, we can better tagging too dark emission at default strength.
+It should be done very shortly.Standup & Prosper  [11:36 AM]
+@Dongchen, :thumbsup: Got it, I'll make those changes, and there's just one more thing to do: Invite @Standup and Prosper to this channel, by using this Slack invite command below!
+
+/invite @Standup and ProsperStandup and Prosper  [11:36 AM]
+was added to proj-light-gen by .Standup and Prosper  [11:36 AM]
+@Dongchen just created a standup for specific members that reports to this channel! The next standup will be reported at 4:00 PM Monday, December 15th, and before that I'll send out a reminder directly to the standup members.The following users have been invited to the standup:
+:small_orange_diamond: @Dongchen
+:small_orange_diamond: @Xingguang (Kevin) YanIf you weren't included in the standup but want to be, click join the standup below.Dongchen  [11:38 AM]
+I also set up a standup bot for Monday, Wednesday and Friday.
+Dongchen  [11:51 AM]
+now it shows the rendered glb, emissive-only, and emissive-brighter images.
+image.png Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Mon, Dec 15. :sparkles:
+*Dongchen*Progress since last update:Incorporate the glb rendering, emit-only, and emit-brighter images in the annotation tool.
+Current on labeling the data on the 2000 subset retrieved by DuoduoCLIPPlan until next update:Finish labeling
+Try find3d*Xingguang (Kevin) Yan*Progress since last update:Clarified render setup and result in three set of renders
+850k object renders with default lighting
+80k object render for emissive object with bloom effect.
+80k object render with only emissive region.Plan until next update:Now with the renders with get general feelings about the type of emissive objects we have.
+Next step is to discuss more on how to utilize these data.Xingguang (Kevin) Yan  [4:01 PM]
+I will also provide the visual check of the geometric filtering that we have discussed tomorrow. (edited) 
+Dongchen  [4:12 PM]
+Finally finished the annotation with the 2000 subset and assigned tagging for the selected emissive objects. It took me around 6 hours to go through all of them. I will share the stats shortly. (edited) 
+Dongchen  [4:57 PM]
+Here is the stats for the categories, there are in total 1077 objects with emission by checking the thumbnail renderings and the rederings from Xinguang.
+
+I created 15 categories (for objects that I am not sure which category they should belong to, I move them to unkown), here are the main ones:
+
+Lamp: 444 files (41.2%)
+• Unknown: 392 files (36.4%)
+• Flashlight: 83 files (7.7%)
+• Sword with lighting: 51 files (4.7%)
+• Gun: 45 files (4.2%)
+• Light bulb: 22 files (2.0%)
+• Car: 12 files (1.1%)Dongchen  [5:02 PM]
+There are also a portion of objects with attributes like "transparent", "too dark (the emit-only rendering or emission map in UV is too dark)". For
+
+For lamp,  the stats are
+ - transparent: 56 (12.6%)
+ - too_dark: 41 (9.2%)
+ - contain_unneeded_geometry: 18 (4.1%)
+ - multiple_objects: 12 (2.7%)
+For unkown, the stats are
+  Attribute tags distribution:
+    - transparent: 19 (4.8%)
+    - multiple_objects: 6 (1.5%)
+    - too_dark: 5 (1.3%)
+    - not a flashlight: 2 (0.5%)
+    - contain_unneeded_geometry: 1 (0.3%)[5:03 PM]I think to start with, we can use the objects without those tags since most of them does not have those tags and those tags could potentially make the problem more complicated (edited) 
+Manolis  [5:25 PM]
+Thanks for the updates.  Is it easy to also create a page where we can see all these annotated objects?  Similar to the annotation UI, but showing all the assigned labels, and allowing us to look through to get some intuition about the different categories, what instances in “Unknown” look like etc.  For now, I suggest to just push through all the objects you annotated in terms of processing, getting things ready for experiments etc.  It is usually a good idea to leave filtering until the last possible moment (sometimes even better to not filter, and do analysis of the evaluation at the end, to understand differences between cases).
+Xingguang (Kevin) Yan  [8:45 PM]
+My update on the visualization of the filtering metric.
+First, let's look at the effect of f001-score filtering.
+The bottom plot shows the CDF: percentage of the object covered (y axis) by <= f001-score (x  axis)
+We divide 0~1 into 5 intervals, for each intervals we sample 3 shapes and visualize.
+As we can clearly see, as the f001 score drops, the reconstructed shape (middle of the subfigure) is far from the gt shape (right).
+Left subimage shows the patch layout.image.png [8:45 PM](Please zoom in to see more details)
+[8:46 PM]Here we show more examples (10 samples per interval)
+image.png [8:49 PM]Next we show the visualization of the filtering rubric of discrepancy:
+(#n_patch_original - #n_patch_eval).abs()
+if this is 0, meaning no patch errorly added/removed after the entire processing.
+This visualization below shows that the larger the discrepancy, larger number of patches the shape typically have, and geometry quality is typically influenced by the processing error.[8:49 PM]image.png Xingguang (Kevin) Yan  [9:02 PM]
+In conclusion, f001_score is clearly indicating the geometry quality.
+But discrepancy of n_patch does not clearly indicate the UV quality or geometry quality.
+To me, it is an overkill (maybe 1 or 2 patches are missing after processing, but the overall geometry is good).
+It serves as a hard rule to make sure strange things not happening.
+
+Below are number of patches histograms showing distribution of #n_patch_original, #n_patch_eval, #n_patch_eval(filtered)
+One thing to notice is that our processing code forces to keep only the largest 512 patches.
+However, #n_patch_eval shows there are many cases that the processed shape still have >512 patches, many of them even > 1000.
+This indicates clearly something is wrong.
+
+After forcing #n_patch_original == #n_patch_eval, we have a much sensible distribution, where almost all shapes have <=512 patches. (edited) 
+3 files Manolis  [9:01 AM]
+Thanks for sending the above visualizations @Xingguang (Kevin) Yan.  Overall, it seems that the patch equality filtering is sensible.  One thing I am curious about: is the overall proportion of assets before and after the patch equality filtering.  Can you give an overall total and percentage relative to input that passes this check?  One comment: I had a hard time following the observations and conclusions about geometric quality.  It’s hard to gauge because from what I understood the visualizations above are showing only renderings of the asset after processing and there is no corresponding “ground truth” against which to compare (i.e. there is no comparison point for what the original looked like).  Maybe some cases can be determined to be problematic even without comparison to ground truth but in general making reliable conclusions about “geometric quality” should be anchored to what the original looks like.  Having said all this, I am not proposing a change on what is being done, just giving a comment about clarity of how to do such qualitative visualizations to build intuition.
+Xingguang (Kevin) Yan  [9:19 AM]
+Oh, sorry for the confusion.
+The visuals do include comparison between 'processed' and 'original'
+I think the source of confusion is the different visualization schemes used for 'processed' and 'original'.
+In this example, left and middle images are from the processed shape.
+The right, colorful image is the rendering of the original .glb file.
+We can see that in this particular case, the character is gone in the processed shape.
+Only the chair is remained.
+I intended to contrast 'processed' and 'original' with middle and right images. But it just happened that the 'processed' shape is rendered with 'segmentation color' mode and 'original' shape is rendered with 'pbr material' mode.image.png Xingguang (Kevin) Yan  [9:21 AM]
+Next time, I will try to make the rendering comparison in a same render setting, and show a figure 'legend' to reduce confusion.
+Dongchen  [11:30 AM]
+trying to make a copy of project to /project so that we can use aspis to show the website, but I got this error. Talked to Yiming and he said it could be because there are too many files under this folder for our group... I am trying to erase some files from Mateval to see if this will help to fix the issue.
+sending incremental file list
+lightgen.tar.gz
+  1,616,971,527 100%    2.00GB/s    0:00:00 (xfr#1, to-chk=0/1)
+rsync: [receiver] close failed on "/project/3dlg-hcvc/lightgen/.lightgen.tar.gz.m6buf0": Disk quota exceeded (122)
+rsync error: error in file IO (code 11) at receiver.c(888) [receiver=3.2.7]Dongchen  [11:31 AM]
+In the mean time, I will try find3d to see how it looks.
+Dongchen  [3:58 PM]
+Somehow, with the error mentioned above, the files are still moved and extracted under /project. Now the website is online at https://aspis.cmpt.sfu.ca/projects/lightgen/annotate.html. There is still some issue with displaying the original thumbnail renderings. I should be able to fix it very quickly. (edited) 
+Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Wed, Dec 17. :sparkles:
+*Dongchen*Progress since last update:Finished annotating with tags
+The website is online at annotate.html. but the original thumbnail rendering is not showing correctly, but should be fixed very soon.Plan until next update:Try find3d baseline*Xingguang (Kevin) Yan*Progress since last update:Visualized and analyzed the filtering.Plan until next update:Check the subset labeled by Dongchen.
+And discuss more on how we can utilize the dataset.Dongchen  [4:01 PM]
+replied to a thread:Just fixed the displaying issue, it should be fully working.
+Dongchen  [10:10 AM]
+added the paper draft link under the drafts tab in our channel https://www.overleaf.com/7479364699zzwkwbfngwyc#247385.
+[10:11 AM]There is only a title here, but will try to populate it with what we have so far.
+Dongchen  [10:53 AM]
+Here is today's meeting notes: https://docs.google.com/document/d/1gbIq-SxoiR_3e3WxXxptJ8WKoZy3mTew2qPPA-YgQjI/edit?tab=t.ss0ou2ud8rf5
+Google DocsManolis  [1:41 PM]
+Hi folks, for our next meeting, how about Fri Jan 2nd 9am (instead of Thu since that is Jan 1st)?
+Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Fri, Dec 19. :sparkles:
+*Dongchen*Progress since last update:Tried clustering the data (will include more detail later today)Plan until next update:Make sure our point cloud matches Find3d’s setting
+Try other models with Find3D
+Think about texture generation baseline*Xingguang (Kevin) Yan*Progress since last update:Add a plan of making a minimal evaluation demo set (2~5 objects)Plan until next update:Collection such a set in coordination with Dongchen.
+Also specify the specs for extra rendering setups and discuss.Dongchen  [8:53 PM]
+Tried to cluster the emissive thumbnail images' embedding by k-means. Here is the projection into 2D by t-SNE. The steps are:
+
+Try different cluster numbers. Here, I tried 10-100 with a step of 10. 
+Calculate the Silhouette Score (suggested by Cursor), measuring how similar a point is to its own cluster vs. others,  and pick the best one (30 clusters for our case)
+Map to t-SNE
+image.png Dongchen  [9:00 PM]
+I will try to put the visualization in aspis with examples from each cluster so that you can take a closer look. (edited) 
+Dongchen  [9:30 PM]
+Here is the link: https://aspis.cmpt.sfu.ca/projects/lightgen/clustering/clustering_visualization_k30_20251219_212005.html. The example for each cluster is randomly selected (probably we can try to see what are the samples around the center). The clusters do not have things like lamp or flashlight (they might be hidden in some other clusters). But it indeed contain some clusters that are easy to tell, for example, cluster 22 are all cars and cluster 3 are guns. (edited) 
+Xingguang (Kevin) Yan  [11:58 PM]
+This category seems not to be emissive.
+Indeed, the clustering is heavily influenced by how we render the objects.image.png Manolis  [8:45 AM]
+Thanks for the updates.  Yes, from a quick look there are a few useful clusters, but overall the majority are very noisy.  If you can find some reliable clusters that is good, but overall I recommend to not spend more time on this type of approach.  In terms of expanding the dataset, it is likely better to rely on a manual expansion strategy, since we probably don’t need much more than an order of magnitude larger compared to the prototype dataset (i.e. we are at 1K right now which is a good starting point and 10K is a good number to aim for optimistically for the more final dataset).
+Manolis  [8:47 AM]
+@Xingguang (Kevin) Yan can you elaborate a bit what you mean by “Add a plan of making a minimal evaluation demo set (2~5 objects)“?  Does this mean just selecting some objects across categories that will be used to show qualitative results?  I would suggest to be very simple when it comes to that.  Pick a couple of lamps, a flashlight, a car, and 2-3 other objects.  I wouldn’t recommend spending any significant amount of time on this.
+Xingguang (Kevin) Yan  [9:18 PM]
+replied to a thread:Yes, I will just simply pick some objects without spending too much time.
+The main purpose of this is to test evaluation metrics along with qualitative evaluation.
+Yes, we would like to pick a lamp:
+c85c7a1dbb724e9ea1d90abd6445fad4
+and a flashlight:
+5fa9a65e7b0141ee877ed18f4f42d953
+
+A simple metric would be the mesh segmentation accuracy for emissive region
+As for baseline, apart from the previous discussed ones that utilize image projection, or point cloud based, we could also try to investigate mesh-native learning method like DiffusionNet.
+
+Apologies for the late response. I was interrupted while replying earlier in the morning, and as I'm feeling a bit under the weather today, I didn't manage to get back to this as quickly as I intended.
+2 files arXiv.orgDiffusionNet: Discretization Agnostic Learning on SurfacesWe introduce a new general-purpose approach to deep learning on 3D surfaces, based on the insight that a simple diffusion layer is highly effective for spatial communication. The resulting networks are automatically robust to changes in resolution and sampling of a surface -- a basic property which is crucial for practical applications. Our networks can be discretized on various geometric representations such as triangle meshes or point clouds, and can even be trained on one representation then applied to another. We optimize the spatial support of diffusion as a continuous network parameter ranging from purely local to totally global, removing the burden of manually choosing neighborhood si… Dongchen  [4:49 PM]
+Sent out an email asking about the setting for Find3D, hope we can get the reply very soon.
+Xingguang (Kevin) Yan  [3:19 PM]
+Some visualization of the multi-view renders.
+(We obtained the 4 view renders for all the three setups for all ~80k emissive objects)3 files Xingguang (Kevin) Yan  [3:41 PM]
+replied to a thread:Update:
+I have put the four images in this layout:
+Top, Isometric
+Front, Right
+
+Top is definitely not really 'top', it is a bit tilted.
+Could be a bug in the code, fixing it now.image.png Dongchen  [3:46 PM]
+I am currently incorporating those into our annotation tool. It should be done shortly.
+Standup and Prosper  [4:00 PM]
+:evergreen_tree: Standup Completed - Mon, Dec 22. :evergreen_tree:
+*Dongchen*Progress since last update:Tried other models with Find3D, but they does not seem to be working well (I can share the results in some followup post here). So it will be either the issue with the model itself or some issue with the data preprocessing (scaling, density for the sampling).
+I have also sent an email asking about the set up.
+Currently on incorporating Xingguang's multiview rendering into the annotation tool (should be done quickly).Plan until next update:Try TEXGen-like baseline*Xingguang (Kevin) Yan*Progress since last update:Rendered 4 sides views with 3 different rendering setup.Plan until next update:Fix the top view, and render the remaining 2 sides (bottom and back views)
+Also implement a function to evaluate segmentation accuracy (could borrow code from existing repos)Dongchen  [5:58 PM]
+replied to a thread:Updated the annotation tool here. We can view the multiview images by clicking. https://aspis.cmpt.sfu.ca/projects/lightgen/annotate.html
+Standup and Prosper  [4:00 PM]
+:evergreen_tree: Standup Completed - Wed, Dec 24. :evergreen_tree:*Dongchen*Progress since last update:Start working on the baseline based on TEXGen. The input is the reference thumbnail image, position map, albedo, metallic, roughness, mask map, and the output is the emission map.
+Finished the dataloader. Currently working on trying to make it overfit on 1 instance of data.Plan until next update:Try to make it able to overfit on 1 instance of data and then expand to more data instnaces.*Xingguang (Kevin) Yan*Progress since last update:Recovered from a fluPlan until next update:Continue to work plan of last time:
+
+Fix the top view, and render the remaining 2 sides (bottom and back views)
+Also implement a function to evaluate segmentation accuracy (could borrow code from existing repos)
+Dongchen  [4:26 PM]
+Seems like the overfitting works ok(this is at 200 iteration, there are still some contour-like artifacts, the left image is the generated emission map, and the right is the GT) (edited) 
+image.png Dongchen  [4:38 PM]
+I think we can probably try to expand our training to the 1000 samples, what do you think? We can split them into train/val/test set by 8:1:1.
+Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Xingguang (Kevin) Yan  [3:59 PM]
+I have fixed the top-view tilted problem (caused by gimbal lock).
+New views will be all rendered before tomorrow morning.
+Will create an segmentation accuracy evaluation function before next standup. (edited) 
+image.png Standup and Prosper  [4:00 PM]
+:evergreen_tree: Standup Completed - Mon, Dec 29. :evergreen_tree:
+*Dongchen*Progress since last update:Currently working on deploying the training script on our cluster. Should be done by tonight.*Xingguang (Kevin) Yan*Progress since last update:Fixed the top view, and started the rendering processes for:
+top view (re-render)
+bottom view
+back viewPlan until next update:Implement a function to evaluate segmentation accuracy (could borrow code from existing repos)Xingguang (Kevin) Yan  [4:13 PM]
+Note that I will merge the 6 views into an animated webp after all views are rendered.
+Here is a demo of what we will get in the end.
+(click the image to see the animation) (edited) 
+[4:13 PM]00001dbc99db48efb16f81945dcc9999_emit_only_6views_labeled_slow.webp Dongchen  [4:30 AM]
+Finally finished setting up the environment for training on our cluster. Seems like there is an issue with logging into huggingface on  cs-venus-17. I was stuck on this a bit, but as soon as I switched to cs-venus-16, this issue is gone. I have sent Yiming a message to help with investigating this issue.
+I will start the training process tomorrow. (edited) 
+Standup and Prosper  [4:00 PM]
+:evergreen_tree: Standup Completed - Wed, Dec 31. :evergreen_tree:
+*Xingguang (Kevin) Yan*Progress since last update:Implemented a function to evaluate segmentation accuracy.
+Definition:
+
+def eval_func(faces, gt_selected, predict_selected):
+     # Compute the F-score of predict_selected vs gt_selected.
+
+I will show some visualization on some examples today.Plan until next update:Explore the mesh-based baselines, like the DiffusionNet.I didn't hear from @Dongchen. | Added by Standup & ProsperDongchen  [9:46 PM]
+Just get started the training process. Let's see how it looks after this first run of training, it should be done by tomorrow morning.
+Manolis  [8:14 AM]
+Hi folks, thanks for the updates and Happy New Year!  A few quick thoughts / questions:
+
+@Xingguang (Kevin) Yan can you describe in more detail the segmentation metric?  There are some important details like: on what entity is this being evaluated (vertices, triangles, something else), and how will averaging across parts and shapes be done.  Also, it is good to give some “sanity check” examples like GT-GT achieving “perfect”, a clearly bad result achieving low value, and a clearly good result achieving high value.
+@Dongchen can you say a bit more about what precisely is being trained? Some details that are good to describe concretely: what is the training set, what do you monitor to see if the training run is proceeding smoothly (loss you have defined, converge trend of that), do you have a val set against which you are evaluating in-the-loop at some interval to check generalization etc.
+Dongchen  [4:42 PM]
+Hi @Manolis Happy new year! Sorry for the confusion.
+A diffusion model based on TEXGen is being trained. The input includes position map, mask map (the regions that could contain valid contents in UV space), normal, albedo, roughness, metallic in UV space, and the image embedding from the thumbnail image from skechfab and a text embedding based on the prompt "emission generation". The output is an emission map in UV. . Currently, it is trained with a batch size of 2 (can fit on one L40S GPU). But I think we can probably increase the batch size a bit by training on multiple GPUs.
+
+The training/val/test set are randomly sampled with a ratio of 8:1:1 based on the ~1000 emissive objects we annotated
+
+I am monitoring the mse and l1 loss during the training process (1st image) and it looks like converging.
+
+Yes, we evaluate on our val set each epoch (2nd image). It computes the mse and psnr against the GT emission map. It looks like a the 3rd epoch, the model performs best on the val set. (edited) 
+2 files Dongchen  [10:41 AM]
+Here is the meeting notes for today: https://docs.google.com/document/d/1gbIq-SxoiR_3e3WxXxptJ8WKoZy3mTew2qPPA-YgQjI/edit?tab=t.fb8eyiyer9u7
+Google DocsXingguang (Kevin) Yan  [3:39 PM]
+Now the bug if fixed. We can clearly see the fscore is making sense for the three trivial test cases.
+image.png Xingguang (Kevin) Yan  [3:42 PM]
+replied to a thread:on what entity is this being evaluated (vertices, triangles, something else)As we discussed in today's meeting, currently we are evaluated on triangles. And later we want to do this on uniformly sampled point cloud.
+
+how will averaging across parts and shapes be doneFor sampled point cloud, we will directly average the fscore for each shape.
+
+give some “sanity check” examples like GT-GT achieving “perfect”, a clearly bad result achieving low value, and a clearly good result achieving high value.In the above image, we show the three cases: GT-GT, worst-GT, mediocre-GT.
+Standup and Prosper  [4:00 PM]
+:evergreen_tree: Standup Completed - Fri, Jan 02. :evergreen_tree:
+*Xingguang (Kevin) Yan*Progress since last update:Fixed the bug in the demo visualization.Plan until next update:Try to add an option of using sampled point cloud for fscore calculation.
+More importantly, make sure the eval function is general to all kinds of methods.  So we only need to modify 'converter' without changing the evaluator logic.I didn't hear from @Dongchen. | Added by Standup & ProsperStandup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Mon, Jan 05. :sparkles:
+*Dongchen*Progress since last update:Update the wandb visualization with input albedo so that we can have a better sense on how the input influence our final prediction
+Added a short abstract for the draft
+Start training the modified texgen with a higher batch size (smaller input resolution from 512-by-512 to 256-by-256)Plan until next update:Test with the 2 demo models
+Fill out the method section of draft with our current modified TEXGen*Xingguang (Kevin) Yan*Progress since last update:Formulated the evaluation scheme that is general and can be adapted to different methods:
+
+def eval_seg( pc_mask_pred, pc_mask_gt): 
+     # they are all of shape (N, 1) of boolean value
+     .... # calculate fscore of the masks
+def eval_seg_func( vert, face, N, gt_mask_generator, pred_mask_generator):
+    eval_pc, tri_ind, bary_coord = farthest_point_sampling( vert, face, N)
+    pc_mask_pred = pred_mask_generator( eval_pc, tri_ind, bary_coord)
+    pc_mask_gt = pred_mask_generator( eval_pc, tri_ind, bary_coord)
+    fscore = eval_seg(pc_mask_pred , pc_mask_gt )
+
+So the gt_mask_generator can be a Texture map querrying function to obtain the emissive mask.
+and pred_mask_generator can be the same, or can be other methods.Plan until next update:Implement this and try diffusionnet.Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Wed, Jan 07. :sparkles:
+*Dongchen*Progress since last update:Modified-TEXGen has been trained with uv size of 256 by 256 with a batch size of 2,4,8.
+Updated the method section for the draft (our emission representation and a little bit about our model).Plan until next update:Compare the influence of batch size
+inference the emission map of our demo models
+Try to predict a emission mask first instead of the entire emission map.*Xingguang (Kevin) Yan*Progress since last update:This is partially implemented.
+
+ Formulated the evaluation scheme that is general and can be adapted to different methods:
+
+def eval_seg( pc_mask_pred, pc_mask_gt): 
+     # they are all of shape (N, 1) of boolean value
+     .... # calculate fscore of the masks
+def eval_seg_func( vert, face, N, gt_mask_generator, pred_mask_generator):
+    eval_pc, tri_ind, bary_coord = farthest_point_sampling( vert, face, N)
+    pc_mask_pred = pred_mask_generator( eval_pc, tri_ind, bary_coord)
+    pc_mask_gt = pred_mask_generator( eval_pc, tri_ind, bary_coord)
+    fscore = eval_seg(pc_mask_pred , pc_mask_gt )
+
+> > So the gt_mask_generator can be a Texture map querrying function to obtain the emissive mask.
+and pred_mask_generator can be the same, or can be other methods.Plan until next update:Finish the implementation.Xingguang (Kevin) Yan  [4:54 PM]
+Now I have the general point-based eval scheme implemented and tested.
+Here is the result:
+Green and gray are true predictions.
+Red and yellow are false predicitons.
+There are 2000 points sampled for evaluation in these examples. (edited) 
+image.png [4:55 PM]Next step would be try DiffusionNet on some toy dataset. (maybe just overfit to this lamp example to see what happens)
+Xingguang (Kevin) Yan  [9:04 AM]
+Sorry, I am heading to the office now
+Dongchen  [2:28 PM]
+https://docs.google.com/document/d/1gbIq-SxoiR_3e3WxXxptJ8WKoZy3mTew2qPPA-YgQjI/edit?tab=t.cb1mpjjgen6t Today's meeting notes
+Google DocsManolis  [3:08 PM]
+A couple of higher-level things we discussed that are good to keep in mind in addition to the above:
+
+Have (near-)daily communication to catch up about the project (definitely over Slack, ideally in-person too as well)
+Aim to put together complete draft by SIG deadline at the latest (results don’t have to be final or good, the complete draft’s existence is the important milestone)
+Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Fri, Jan 09. :sparkles:
+*Dongchen*Progress since last update:Started a batch experiment with an additional supervision on emissive region (simply adding a mse loss only on the masked emissive region)Plan until next update:Analyze the result from this batch of experiment
+Try the multistep pipeline
+Apply the predicted emission map to the 3D model for demo*Xingguang (Kevin) Yan*Progress since last update:Downloaded DiffusionNet.
+Started to get familiar with its process.Plan until next update:Overfit on our lamp exampleStandup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Mon, Jan 12. :sparkles:
+*Dongchen*Progress since last update:Got the results of adding a mse loss for emissive regions: the final results does not seem to be better than the result without the mse loss for emissive region only.Plan until next update:Do an overfitting test with this additional loss
+Adding a loss to have the regions without emissive parameter to be completely dark
+Try to have the model predict an emissive mask firstI didn't hear from @Xingguang (Kevin) Yan. | Added by Standup & ProsperStandup and Prosper  [3:59 PM]
+:sparkles: Standup Completed - Wed, Jan 14. :sparkles:
+*Dongchen*Progress since last update:1. Added additional dark region loss to ensure the dark regions to be 0. The loss is ensuring the non-emissive regions to be exactly black (-1.0) :
+  a. First determine the dark region by thresholding the original emission map
+  b. We create a "forced black" velocity target: -1 - noise so that, when denoising, x0 = v + noise = (-1 - noise) + noise = -1.0.
+  c. apply this loss only to the dark regions.
+
+But this loss does not seem to be working very well. It makes the emissive regions also unreasonable during the overfitting test.
+2.  The emissive overfitting test does not make it visually look better compared with the naive baseline without additional loss.Plan until next update:Try to have the model predict the emissive mask only and then fill the maskXingguang (Kevin) Yan skipped the standup. | Added by Standup & ProsperDongchen  [7:29 PM]
+As for the noise issue, I tried to extend the training epochs from 200 to 5000. It looks much better. (the left is the thumbnail, the middle is the generated emission map, the right is the gt emission map).
+image.png Dongchen  [7:43 PM]
+I think the explanation is: each epoch only samples one random timestep of the denoising process.  After 200 epochs, the model has only seen 200 random timesteps for once. The model probably have not seen enough timesteps for enough times. With much more epochs (let's say 5000), the model will see a much denser coverage of time steps for multiple times. Then, the final generated result will look better. (edited) 
+Xingguang (Kevin) Yan  [8:09 PM]
+replied to a thread:Yes, in general diffusion-based methods need way longer time to overfit a single example compared to other methods.
+Dongchen  [9:20 PM]
+I think next step would be trying to train the model for more epochs. I'll try to set up environments on fir to make this process faster.
+Manolis  [8:15 AM]
+Great to see that this is resolved fairly easily and that the noise was simply due to insufficient training.  A few questions to make sure I understand the situation:
+
+The above “cake” object result is with which loss? Is it the binary emission mask, including the emissive region and “dark region” losses etc?
+Have you also gone back to the sanity check examples you had from before and confirmed that they overfit successfully with the current setup?
+Dongchen  [12:52 PM]
+It is only with the l1 and mse loss masked by the entire uv mask map. There is no additional loss applied.
+Yes, it could also overfit with the current set up.image.png [12:54 PM]Another observation is that, the noise for those dark regions goes away faster i think. At 457 iteration, this case already does not have too much noise for those dark regions.
+image.png Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Fri, Jan 16. :sparkles:
+*Dongchen*Progress since last update:• Extending the training epoch fixed the issue of noise in overfitting
+• Start new experiments on the 1000 samples with a extended training time
+• Start setting up environment on FirPlan until next update:Analyze the new results with the extended training time.Xingguang (Kevin) Yan is away. | Added by Standup & ProsperDongchen  [12:53 PM]
+Here are some temporary results with the extended training time (the left is the thumbnail, the middle is the prediction, and right is the gt). I think some of them look much better now (this is the results at around 2000 epochs).
+3 files [12:54 PM]And it seems the validation performance still has an improving trend (pnsr improving and mse decreasing). (edited) 
+image.png Manolis  [6:31 PM]
+Thanks for the updates.  It’s good to see that results are improving significantly.  Can we produce a set of qualitative val set results using the “demo” objects?  Did we select a good diverse set of “demo” objects?
+Dongchen  [11:14 AM]
+Sure. I will do it later today. I will also select a set of "demo" objects from test set later today as well.
+Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Mon, Jan 19. :sparkles:
+*Dongchen*Progress since last update:Training with extended epochs receives a better resultPlan until next update:Environment on fir
+Collect demo data from test set and test with them.
+Related workXingguang (Kevin) Yan is away. | Added by Standup & ProsperDongchen  [7:10 PM]
+Finally finished setting up environment on fir. Now we can run it with a much faster speed and a larger batch size. (edited) 
+Dongchen  [8:00 PM]
+I also made selection for ~10 demo objects from the test set. There are some flash lights and lamps. There are also some unusual objects.
+8 files Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Wed, Jan 21. :sparkles:
+*Dongchen*Progress since last update:Test on 10 selected  demo data (the objects from demo data are from test set demo data)Plan until next update:Render the object based on the predicted emission
+Related workXingguang (Kevin) Yan is away. | Added by Standup & ProsperDongchen  [4:53 PM]
+Here are the results on the selected demo data. Some of them are reasonable (1st, 7th, and 8th rows). For other cases, the model tend to either predict the emission map as completely dark (3rd and 10th rows) or just put everything from the albedo to the emission map (2nd, 4th, 6th, and 9th rows). I am currently working on some demo for rendering the 3D objects based on these predicted emission map.
+overall_visualization.png Xingguang (Kevin) Yan  [5:29 PM]
+Sorry guys, I may not be able to attend tomorrow's project meeting due to the deadline (tomorrow 2 pm).
+I will quickly catch up after it.Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Dongchen  [11:24 AM]
+I will try to finish the related work section for our draft as a first step for today. The current plan I have is to include:
+
+texture generation work: stating that they did not generate emission parameter and it is an important parameter to generate. 
+inverse rendering
+object level: usually only the passive parameters like albedo, metallic and roughness is being estimated, and the lighting is usually represented as env map, which is not the object's property. 
+scene level: 
+lighting are represented in forms such as per-pixel envmaps and voxel based lighting, which is hard to edit.
+If the lighting is explicitly handled, they are  usually represented with simple assumption of pure white light without any patterns
+
+
+Do you have thought on any additional section to add? (edited) 
+Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Dongchen  [4:00 PM]
+I was mainly working on Austin's project today, will send updates later tonight.
+Dongchen  [2:16 AM]
+I wrote a very early stage for related work, with a lot of citation missed still. I will try to add them next round. You can take a quick look and can provide some feedback on the logic flow. My main points in this section is that our contribution is complementary for the prior work as they did not solve the problem of modelling/ generating the emission property of object. (edited) 
+[2:18 AM]We can probably work on the method section as the next step.
+Manolis  [11:27 AM]
+I took a quick look, this draft is a great start.  Yes, I strongly recommend to continue to flesh out the rest of the paper with the goal to have a complete draft very soon (of course with preliminary qualitative and quantitative results).
+[11:29 AM]By the way, unfortunately our regular meeting time this Thursday won’t work for me.  Wed to Friday all morning through early afternoon I am occupied by the SIGGRAPH committee paper sort.  Plus the ongoing CVPR rebuttals are taking up some time.  I suggest that the two of you catch up, and please keep me in the loop over slack.
+Dongchen  [11:54 AM]
+Sure.
+Dongchen  [12:06 PM]
+I may also spend more time on Austin's project for these two days as the deadline approaching.
+Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Wed, Jan 28. :sparkles:
+*Dongchen*Progress since last update:I am mainly on Austin's project. Should be able to come back after the deadline tomorrow morning.Xingguang (Kevin) Yan is away. | Added by Standup & ProsperStandup and Prosper  [3:59 PM]
+The standup is over. I didn't hear from anyone today.Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Mon, Feb 02. :sparkles:
+*Dongchen*Progress since last update:I will post update tonight.Xingguang (Kevin) Yan is away. | Added by Standup & ProsperXingguang (Kevin) Yan  [7:24 PM]
+Update:
+TLDR: Fixed UV mismatch by tracking repacked coordinates; processing 80k shapes tonight.
+
+Dongchen encountered the shape/uv mismatched problem.
+He loaded the original glb mesh, and the generated texture (following repacked layout).
+But since the uv has been repacked, the texture is mismatched toward the original uv.
+
+This is because our repacking code did not save the uv info (M, 3, 2) for the original glb mesh, we have to use the dense omage geometry.
+
+Now I have modified the processing code to enable tracking of the repacked uv of the original glb mesh.
+This enables us to use the original 'low-poly' mesh, while having the repacked uv layout.
+
+I have started the parallel processing over the 80k shapes and it should finish tonight. (edited) 
+image.png Dongchen  [2:35 AM]
+I finished setting up the experiment with loading the pretrained texgen model. Now running overfitting test so that we can have a quick comparison with training from scratch.
+Dongchen  [2:40 AM]
+I plan to start training over our 1000 dataset with the pre-trained TEXGen tomorrow morning so that we can compare with the model training from scratch. I also plan to start running experiments with the unfiltered entire dataset tomorrow.
+Dongchen  [2:52 AM]
+In the mean time, I will try to flesh out contents for our method section. The current structure I am thinking about for this section is:
+
+Problem formulation
+Emission parameter representation
+Our model detail
+Our dataset
+Training
+Some questions are:
+
+I think there could be an additional section after training, any suggestion? Or I think we can try to figured it out after the other contents are fleshed out.
+For model detail, our model is basically just TEXGen other than changing the input/output dimension, how shall we describe the model detail if this is the case?
+Dongchen  [4:34 PM]
+https://arxiv.org/pdf/2512.14692 I think Trellis2 can also be another good baseline.
+Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Wed, Feb 04. :sparkles:
+*Dongchen*Progress since last update:Training with pretrained-TEXGen is not making the performance better
+Finished writing problem formulation, emitter representation and model for method part. The model part should be expanded once we improve our method.Plan until next update:Finished writing the training, evaluation set up, and dataset
+Think about how to incorporate  Trellis2Xingguang (Kevin) Yan skipped the standup. | Added by Standup & ProsperXingguang (Kevin) Yan  [4:01 PM]
+I will read the draft and give feedback tonight.
+Dongchen  [8:51 PM]
+replied to a thread:I think we can probably just simply move the TEXGen part to experiment where we discuss our baselines.
+Dongchen  [10:18 AM]
+I think the pretrained model does not do a good job probably because of these reasons:
+
+we have additional condition of roughness, metallic
+The distribution of the embedding is also different. We are using a different CLIP encoder as the one used TEXGen is not available now.
+Xingguang (Kevin) Yan  [10:21 AM]
+I have created a 'milestone' tab in the meeting notes document.
+image.png Dongchen  [10:30 AM]
+Today's meeting note: https://docs.google.com/document/d/1gbIq-SxoiR_3e3WxXxptJ8WKoZy3mTew2qPPA-YgQjI/edit?usp=sharing (edited) 
+Google DocsXingguang (Kevin) Yan  [10:39 AM]
+One point I come up when thinking about the intro is that light gen is different from other texturing problem is that it is about the interaction with the environment. (see images in this thread)
+Dongchen  [3:31 PM]
+Xingguang shared this paper with me https://arxiv.org/pdf/2507.04285. It is using video diffusion model to do texture generation. It is done by the same group of people from TEXGen.
+Standup and Prosper  [3:59 PM]
+:sparkles: Standup Completed - Fri, Feb 06. :sparkles:
+*Dongchen*Progress since last update:Add a temporary config figure
+fixed the issue with mismatched lrPlan until next update:Hopefully the training can be finished over the weekend.
+continue adding contents to the draft.
+start incorporating Trellis2 as a baselineI didn't hear from @Xingguang (Kevin) Yan. | Added by Standup & ProsperStandup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Mon, Feb 09. :sparkles:
+*Dongchen*Progress since last update:• Draft
+  :black_small_square: added contents and figures to introduction, related work, and dataset.Plan until next update:Finish a first pass of the draft (probably by the end of today)I didn't hear from @Xingguang (Kevin) Yan. | Added by Standup & ProsperDongchen  [6:16 PM]
+I think an interesting evaluation set up could be having human to manually identify the emissive regions and assign color to them. Then we can compare it with our baselines and our model. I marked it in our draft. (edited) 
+Dongchen  [6:27 PM]
+I have completed a first pass on the draft. I filled out content for each section. The writing is very careless for now with a lot of incomplete sentences and phrases...
+I also added some tables and figures (but most of them are placeholders). (edited) 
+Xingguang (Kevin) Yan  [11:39 PM]
+replied to a thread:I think we need to first discuss/debate on the teaser.
+Teaser really tells people what the proposed method enables.
+
+We know lightgen will turn on 'lights' to provide illumination.
+But we really need to understand what does this mean actually.
+This is why a hand drawn teaser may not be sufficient to help us understand what are the things / effect we want to achieve in the end.
+
+For example, I found that to make the emission provide enough illumination to the environment, it should be very bright (say, emission strength = 100). In this case, the textures/color of the emission on the objects just seems pure white. This is something we can't know by drawing by our hands.
+
+Here are two images of turning a fan's blade into emissive objects.
+Left has a emission map of white color.
+Right has a green to red gradient color.
+But the object themselves looks similar - equally white. You can only tell the difference by looking at the environment. (edited) 
+2 files Xingguang (Kevin) Yan  [11:53 PM]
+Given this observation, we may want to ask:
+
+To make a shape part a proper light, shall we care more about segmentation, rather than textures?
+
+We also want to ask:
+For the emissive map generation itself:
+Does it really make sense to turn a fan's blade emissive, if our goal is to make part of the surface region emissive for an arbitrary 3d shape.
+
+If not for arbitrary shapes, is our goal just segmenting out the light bulb in some lamps / flashlights?
+
+Further, even if we are indeed focusing on these specific 'lighting' objects, what makes it so hard for us to add emission to it manually, as emissive parts are easy to select?
+
+From a different perspective, we also want to ask:
+If simply deal with LDR light emission map enough?
+
+Light strength is not just a finite number between [0,1], it also in many cases not just a 'diffuse emission' that we assume.
+
+Lighting is also about the way we are 'seeing' it. What makes the 'RawNeRF' results so cool is not only about the emission, but also how we are perceiving it - the camera exposure, the dynamic range, ... Without taking the perceiver into account, we won't produce images that feel right.(edited)
+candle_focus_crop.mp4 1xXingguang (Kevin) Yan  [12:03 AM]
+In conclusion, my point is that it seems we haven't give 'generating emissive maps' enough meanings.
+Are we generating the emissive maps only because others haven't?
+Or do we want to generate emissive maps of an object to lit the scene in a certain manner, or are we simply adding some emission / gloom effect to decorate the shape? (edited) 
+3 files Manolis  [9:07 AM]
+@Xingguang (Kevin) Yan These are good questions to ask.  My view is that the motivation should include all three aspects: illumination, decoration, and novelty (of generating emission).  And working on a refined teaser would also be good, perhaps you can help with that?  The above said, let’s not lose sight of the important first steps: we need to implement things, finalize and describe dataset, benchmark, metrics, and gather insights from evaluation etc.  I strongly recommend that you work closely together on all these aspects @Dongchen & @Xingguang (Kevin) Yan.
+Xingguang (Kevin) Yan  [11:42 AM]
+Yes, we will understand more while implementing these aspects.
+Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Wed, Feb 11. :sparkles:
+*Dongchen*Progress since last update:Finished a first pass of the draft
+TexGen training with 1000 prototype data has been finished under the batchsize of 32 setting.Plan until next update:Start on finetuning Trellis2I didn't hear from @Xingguang (Kevin) Yan. | Added by Standup & ProsperDongchen  [4:04 PM]
+I found that in the training process, there is a very weird psnr oscillation. I think there could be something wrong with reloading from the previous checkpoints. I will look into it.
+image.png Dongchen  [4:04 PM]
+Also for the iteration vs epoch curve, there is also a weird pattern.
+image.png Dongchen  [10:41 PM]
+I think the problems is fixed. The problem is that the lr scheduler's state was not being loaded correctly and it was being reset every time when reload the ckpt.
+Dongchen  [3:28 PM]
+Today's meeting note: https://docs.google.com/document/d/1gbIq-SxoiR_3e3WxXxptJ8WKoZy3mTew2qPPA-YgQjI/edit?usp=sharing
+Google DocsDongchen  [4:05 PM]
+I tried to go through the digital twin catalog a bit as for the discussion about real data. I think there could be some emitters in the dataset, for example, this TV.
+image.png Dongchen  [4:11 PM]
+And it could also be interesting to make those sculptures light up.
+image.png Dongchen  [7:49 PM]
+I did a quick check on our subset of data. There are 57 objects out of ~1100 are completely dark.
+Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Mon, Feb 16. :sparkles:
+*Dongchen*Progress since last update:incorperating feedbacks on the draft from our last meetingPlan until next update:We should discuss about the choice of seqtex vs texgen over slack
+We should also discuss about implementation for Trellis2 baseline over slackI didn't hear from @Xingguang (Kevin) Yan. | Added by Standup & ProsperDongchen  [10:52 PM]
+I signed up LightGen for the paper swap. It’s still pretty early stage, so I think we can probably look for some feedback on the general idea and problem setup.
+Manolis  [8:25 AM]
+The draft needs a lot of work.  Please do your best to flesh it out as fully as possible.  If it is not substantially more complete by the deadline, I am not sure that the current state is sufficiently fleshed out to get feedback, even for the higher-level idea.
+[8:27 AM]We should respect the reviewer's time commitment as well -- the instructions for the paper swap state that the draft should be far along enough to get substantial feedback, which is not yet the case for our draft.
+Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Dongchen  [5:21 PM]
+For TEXGen and SeqTEX, they both are trying to overcome the limitation of UV parameterization: Surface regions that are adjacent in 3D can be far apart in UV space. But they are using different strategies:
+
+TEXGen:  the UV features are lifted to the 3D surfaces, processed in 3D space, and then projected back to UV for diffusion denoising.
+SeqTEX: the multi-view image tokens and UV tokens are jointly denoised via a video diffusion model with the guidance of some geometry cues.
+
+I am not quite sure if they should belong to the same family or not: they are trying to solve the same limitation of UV parameterization but with different strategy.
+Canvas updated  [10:10 AM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [10:29 AM]
+Just made the plan for the week and today on this project checklist tab. As for next week, we plan to implement the evaluation metrics, evaluate TEXGen, and modify TRELLIS for our emission generation task. As for today, we plan to mainly focus on implementation and sanity check for the evaluation metrics.
+Canvas updated  [2:52 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [5:13 PM]
+I finished 2D IoU and PSNR metric implementation with sanity checks.
+[5:16 PM]I am currently on the VLM as a judge.
+Now, we are able to project the emission from UV back to the 3D geometry and render an image. Here is a video clip for steadily increasing the emission strength .
+
+The first half is using the gt emission, the second half is using the albedo as the "pred emission". You will see the first half of the clip the object is lit up in a correct way, while the second half of the clip is lit up in a wrong way. (edited) 
+render_video.mp4 1xDongchen  [5:18 PM]
+I think for VLM as a judge, we could use such sequence of images that steadily light up the object and ask VLM to judge if this is the correct way for this object to be lit up.
+Dongchen  [5:18 PM]
+Do we have api key for Gemini or ChatGPT? (edited) 
+Dongchen  [12:48 AM]
+replied to a thread:I am querying gpt4.1 with this prompt:
+ "You are evaluating the quality of 3D object emission (glow) textures. "
+        "I will show you two image strips of the same 3D object. "
+        "Each strip contains 10 rendered views at increasing emission strength "
+        "(left = no emission, right = strong emission). "
+        "Reply with exactly one word: '1' if the first strip has better emission quality, "
+        "or '2' if the second strip has better emission quality."For this example, it correctly classified that the 1st image is better than the 2nd one.
+2 files Canvas updated  [1:06 AM]
+Dongchen Yang made updates to Project Checklist
+.Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Fri, Feb 20. :sparkles:
+*Dongchen*Progress since last update:Evaluation Metric: PSNR, 2DIoU, VLM as judgePlan until next update:Evaluation Metric: 3DIoU
+Evaluation on TEXGenI didn't hear from @Xingguang (Kevin) Yan. | Added by Standup & ProsperDongchen  [5:06 PM]
+Implemented a 3D IoU metric. It is a voxel based IoU evaluation. We first map the predicted emission and ground truth emission to 3D points based on the position map. Then the points are voxelized and the IoU can be computed.
+Canvas updated  [5:07 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [5:08 PM]
+The advantage for this metric is that for methods directly work on 3D space, we can also voxelize their predictions and do direct evaluations without mapping them to UV space. (edited) 
+Dongchen  [5:10 PM]
+I think as for next step, we can do a small scale test for our implemented metrics for probably 10 inference samples from TEXGen.
+Canvas updated  [9:54 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [10:23 PM]
+Finished a subset test (10 samples from test set from the model that was trained). Here is a summary:
+============================================================
+SUMMARY
+============================================================
+                        shape_id   iou_2d   psnr_uv  psnr_emission   iou_3d
+008ac92377d547c391a83f96e485c313 0.900487 27.290651      14.492263 0.951936
+0d66475a413b4c6288178ad94251677f 0.470552  6.031891      25.016762 0.498130
+0ee07f5656fc41bf9f36bc19e6605017 0.030491  6.785127       0.443688 0.054521
+20a021a4f4eb4bc6a920d018ef2d02a2 0.307073 11.282928      12.278212 0.505486
+21170b1a94664f2fae7c00c4e2c25577 0.094154  7.198558       2.053148 0.099101
+4532362cb3764e0e90547d886a37f52a 0.551801 10.798485       7.402173 0.660576
+6cfba09348b64230b274026e175710ed 0.034105  2.562815       7.862144 0.020649
+9c7467268bf34ada8e57429736dfba19 0.608446 20.918863       8.515100 0.707720
+f42e52eb50c041cfb4e29310e4a95e33 0.191718  5.642171       0.562683 0.419732
+fff48e914c4847a08660b9e08b1b733c 0.924930 31.369726      20.185390 0.832640
+------------------------------------------------------------
+Mean: iou_2d=0.4114  psnr_uv=12.9881  psnr_emission=9.8812  iou_3d=0.4750
+
+VLM votes — 1 (GT): 6  2 (Pred): 4  N/A: 0I think the evaluation runs ok for this scale and it would be easy to expand to larger scale evaluation.
+[10:24 PM]One thing I noticed for VLM evaluation is that: currently we are just using the default view from Xingguang's preset_glb.blend file, but this will result in emitting part not visible for the evaluation (For example, this image attached here and this is one case that the VLM cannot classify the gt as the better one).
+
+We can expand this VLM based evaluation with multiple views. (edited) 
+image.png Dongchen  [10:26 PM]
+I also attached other 3 objects' video (left is gt and right is the prediction), where VLM failed to justify  gt as the better emitter:
+
+For the first one, it is not obvious enough to tell which one is better even for human. 
+For the second one, there is some issue with projecting the UV to the geometry and render the image as the original thumbnail rendering looked very different (the last attached image). @Xingguang (Kevin) Yan Probably you can help with investigating the issue? 
+For the third one, it is not a real object and the light ray also has geometry with it.
+3 files 1x1x1xDongchen  [10:27 PM]
+image.png Canvas updated  [1:53 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [2:13 PM]
+https://arxiv.org/pdf/2512.02993v1 Another recent work on texture generation. It also contains the generation of part segmentation.
+Dongchen  [2:32 PM]
+They also has a channel k_e. They said it is "other 3D attributes". Not sure if it is emission....
+Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Canvas updated  [12:57 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [4:58 PM]
+I expanded the rendered views for VLM evaluation to 6 views (front, back, left, right, top, and bottom).  But I think the views are not natural enough (the last one, we cannot see other parts of the flashlight)...
+I think we can try to proceed with the default view on the test set first and then come back to this multiview setting.render_video.mp4 1xXingguang (Kevin) Yan  [5:01 PM]
+replied to a thread:I have checked this case: 20a021a4f4eb4bc6a920d018ef2d02a2
+Our rendering is different from the thumbnail because this shape has all '0' uv, meaning that the textures are based on vertices color, which can not be converted and saved to a texture map.
+So the final texture seems random and has artifacts.
+To handle / filter out these cases, we can filter by geometry image reconstruction error, as no real geometry will be reconstructed for shapes with all 0 uv map.2 files Canvas updated  [5:03 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [5:21 PM]
+Just get started running the evaluation on TEXGen's test set.
+Xingguang (Kevin) Yan  [5:51 PM]
+replied to a thread:[Thoughts on the field of texture generation]
+By observing and thinking about the texture generation works.
+I found that not so many people are paying attention to the 'interaction' part of the problem.
+Current paradigm is mostly 'image to texture' or 'prompt to texture'.
+But to enable user freely and efficiently explore their ideas, 3D interaction should be there.
+One just can not create amazing textures by just edit the text/image prompt.
+Instead, part-based, patch-based, or even region based editing is really needed, as what artists do in practice: One example of local edits is here: link
+Along this line, I believe we can think more and possibly observe how artists create really good textures in practice.
+
+If we can come up with a much better way of interaction / controlling of the texture generation module, we have an additional strong point besides being able to create emissive lights.
+One such example would be:
+Material aware interactive local semantic segmentation for texture generation and editing. (edited) 
+mokunachoi:dragon: 3D Comms OPEN (@mokunachoi) on XTexture Stencil with Blender :art:X (formerly Twitter)https://x.com/mokunachoi/status/1964921596961079429?s=20Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Dongchen  [8:37 PM]
+replied to a thread:Hi @Xingguang (Kevin) Yan and @Manolis. I am writing an email asking about what is k_e in the TEXTRIX paper (they did not explain that in the paper and the code is currently not available ). Here is the draft for the email. What do you think?
+Hi Yifei,
+
+Thanks for your recent work on TEXTRIX. It is highly relevant to my current research.
+
+I noticed you generate (k_e), and demoted it as "other 3D attributes" in the paper. Could you clarify what specific 3D attributes this refers to in your setup? 
+
+Thanks for your time.
+
+Best,
+
+Dongchen(edited)
+Dongchen  [1:13 AM]
+I have uploaded the current results with TEXGen here: https://aspis.cmpt.sfu.ca/projects/lightgen/pointuv_256res_batch32_it17400_flipped/results.html we can probably take a look and discuss together tomorrow.
+Xingguang (Kevin) Yan  [8:56 AM]
+Hi guys, sorry for the short notice but I have to skip today's meeting due to the MICCAI submission (deadline is tonight) (edited) 
+Canvas updated  [9:08 AM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [9:43 AM]
+https://docs.google.com/document/d/1gbIq-SxoiR_3e3WxXxptJ8WKoZy3mTew2qPPA-YgQjI/edit?usp=sharing today's meeting notes
+Google DocsDongchen  [9:51 AM]
+I also updated the plan for this week. https://sfu-vcr.slack.com/docs/TGZNXBYTC/F09NVUDFD8X
+Canvas Project Checklist
+Canvas
+finish the overfitting test and fix problems if there are any
+
+OOM error
+
+pythonrun → torchrun
+
+add validation
+
+save top-k instead of certain number of epochs
+
+start the 1000 subset training for VAE
+scale up the training for TEXGen (1000 → 80K)
+overfitting test PBRVAE
+start the 1000 subset training for DiT
+scale up the training for TEXGen (1000 → 80K)
+
+TEXGen test
+
+1 sample overfitting
+
+vanila
+with gt mask cond
+with mask loss
+
+10 sample overfitting
+
+vanila
+with gt mask cond
+with mask loss
+
+10 sample overfitting (with a larger model size)
+1000 subset test
+
+vanila
+with gt mask cond
+with mask loss
+
+TRELLIS
+
+VAE test
+
+1 sample
+
+vanila
+
+10 sample
+
+vanila
+
+entire 1000 subset
+
+vanila
+
+DiT test
+
+1 sample
+
+vanila
+
+10 sample
+
+vanila
+
+entire 1000 subset
+
+vanila
+Dongchen  [3:39 PM]
+Hi @Manolis . As a followup for today's discussion, I checked the code for baking the position map and confirmed with @Xingguang (Kevin) Yan: the position map is already normalized when baking it into UV space, so there is no need for further normalization during the evaluation. (edited) 
+Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Standup and Prosper  [4:00 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Canvas updated  [4:05 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [5:42 PM]
+I finished updating the config and data split  for training the TEXGen with the filtered data (filtering out the objects with completely dark baked emission). The training is getting started now. (edited) 
+Canvas updated  [3:38 PM]
+Dongchen Yang made updates to Project Checklist
+.Manolis  [3:49 PM]
+Hi guys, I want to free up some time to work on ECCV drafts tomorrow morning.  Do you have anything to bring for discussion to the meeting?  If not, we may not need to meet.  If you do have something to discuss, we can perhaps meet Friday morning instead, I am free 9:30am onwards.
+Dongchen  [3:55 PM]
+I think we can skip tomorrow. Xingguang is also working on a resubmission.
+[3:58 PM]I am currently working on modifying TRELLIS.2 for our setting. Hopefully we can get some overfitting result tomorrow. I think we can meet up on Friday morning to discuss about it.
+Manolis  [3:59 PM]
+Ok, sounds good, thanks
+Standup and Prosper  [4:00 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Canvas updated  [1:54 AM]
+Dongchen Yang made updates to Project Checklist
+.Manolis  [9:29 AM]
+Are we meeting today?  Let’s meet in my office if we are meeting
+Manolis  [9:31 AM]
+(If there isn’t much to discuss we can also skip this week — ideally there should be quite a bit more communication over Slack)
+Dongchen  [10:16 AM]
+Some updates about TRELLIS.2 modification:
+
+Conducted a sanity check for the PBR VAE of TRELLIS.2. It looks reasonable (1st image about the sanity check on reconstructing different PBR channels).
+The PBR VAE is modified to an Emission VAE. The main difference is the input and output, and we concat the PBR latent with the emission latent for the decoder input (2nd image about a comparison table).
+The overfitting test for the emission VAE looked reasonable (3rd image about the input original voxelized emission and reconstructed emission).
+An emission DiT is also modified from the PBR DiT. The main difference is the input and output (4th image about a comparison table).
+The overfitting test for the emission DiT also looked reasonable (5th image about the emission latent output and the decoded emission latent).
+5 files Standup and Prosper  [3:59 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Canvas updated  [1:23 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [3:10 PM]
+I tried to expand the overfitting experiment from 1 to 10. It seems the VAE result on 10 samples does not look as good as with only 1 sample. Previously, the overfitting experiment only trains for 500 iterations. I am trying to increase the number of iterations to see if there is any improvement.
+image.png Standup and Prosper  [4:00 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Dongchen  [3:32 PM]
+I extended the training iterations for VAE, now the results look much better (the left row is the GT, and the right row is the prediction). (edited) 
+image.png Xingguang (Kevin) Yan  [3:32 PM]
+replied to a thread:[About the discrepancy of our rendering vs thumbnails]
+It seems this is largely due to the shape quality.
+But when I tried to render by myself, the results look more similar to the thumbnail. But still has issues due to the geometry of the shape.
+
+I am looking into how this happens. And we want to understand how many  such cases with discrepancy are there in the dataset.
+image.png Dongchen  [3:55 PM]
+Another observation is that during the VAE overfitting with the 10 samples, if the emission area is small, the VAE fails to reconstruct it (the left 2 are GT and the right 2 are VAE's reconstruction). I will try to do the overfitting for this specific example and see if it works.
+image.png Standup and Prosper  [4:00 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Dongchen  [6:44 PM]
+The overfitting on this example works. For this example, it takes more steps to converge (around 10000 steps). I will try to run the overfitting over the 10 samples for longer steps.
+emission_vae_1sample_overfit.png Canvas updated  [7:39 PM]
+Dongchen Yang made updates to Project Checklist
+.Standup and Prosper  [8:00 PM]
+I haven't seen that many responses for the past few days. Maybe it's me, or is it you? It's probably me. It's definitely me. I'm sure that it is something that I did, or didn't do. Sometimes standups don't work out and it's best to pause them, or I just need to improve them in some way. Let me know how and I'll make the necessary adjustments.I came to this conclusion based on the number of direct responses I've received from your team. Perhaps this was an oversight. I won't make any changes to your standup and it will continue to work for another week, just make sure at least one person answers a standup before then.Dongchen  [9:04 PM]
+I have also set up the TRELLIS.2 environment on fir, so we can scale up our training after our overfitting test. (edited) 
+Xingguang (Kevin) Yan  [12:27 AM]
+I lost connection to servers in recent two days due to the issues of sfu vpn. I just went to the lab and set up the vscode tunnel so I can access the system now.
+Will take a look at the rendering code tomorrow.Dongchen  [9:58 AM]
+@Xingguang (Kevin) Yan and I just discussed some ideas for this project. One thought he raised is that, to better distinguish our work from existing texture generation methods, we could focus more on the interactive aspect. For example, instead of generating illumination in a fully automatic way, the user could click on specific regions and the system would generate the corresponding illumination for those selected areas.
+
+I think a starting point for this direction would be retrain the TEXGen with an additional condition of the ground truth emission mask. This is also a good way to test the upper bound for emission generation of TEXGen, because the gt emission mask is also given.
+
+@Manolis, what do you think?
+Standup and Prosper  [4:00 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Canvas updated  [10:22 AM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [10:42 AM]
+I am currently working on the o-voxel conversion for the emission map. It seems that there is some problem with the o-voxel conversion for emission. On the left is the visualization of the emission for the original .glb file. On the right is the visualization of the o-voxel for the emission. (edited) 
+image.png Dongchen  [11:01 AM]
+The emission voxel is now correct I think. The issue is that there is a bug in the original TRELLIS.2's o-voxel conversion for the emission map where they are using the values of roughness mipmaps instead  of emission. https://github.com/microsoft/TRELLIS.2/blob/5565d240c4a494caaf9ece7a554542b76ffa36d3/o-voxel/src/convert/volumetic_attr.cpp#L559
+[11:01 AM]image.png Dongchen  [3:23 PM]
+I am wondering since TRELLIS.2 already has the feature to convert the emission to o-voxel space, why they did not generate the emission... (edited) 
+Canvas updated  [3:24 PM]
+Dongchen Yang made updates to Project Checklist
+.Standup and Prosper  [3:59 PM]
+:sparkles: Standup Completed - Mon, Mar 16. :sparkles: (edited) 
+*Dongchen*Progress since last update:Fix the color issue of the o-voxel
+Update the texgen with an additional emission mask as the conditionPlan until next update:continue the overfitting test of VAE for TRELLIS.2
+train TEXGen with the additional conditionI didn't hear from @Xingguang (Kevin) Yan. | Added by Standup & ProsperDongchen  [8:00 PM]
+replied to a thread:Hi Dongchen,
+
+Thanks for your interest in our work! Please excuse the delayed response as I've been occupied with my graduation thesis.
+
+Regarding your question on k_e, we included this term to highlight the extensibility and versatility of the TEXTRIX framework. While our current experiments focus on color (k_color), semantic labels (k_semantic), and PBR materials (k_PBR), the native 3D attribute grid is designed as a unified representation. In theory, k_e can incorporate any additional per-voxel attributes—such as alpha maps or index of refraction (IOR)—provided that corresponding training data is available.
+
+We are currently finalizing the codebase for release. I'll definitely keep you informed at the time we release.
+
+Best regards,
+
+YifeiJust got the reply from the author of TEXTRIX. So e in k_e is not for "emission", but it is for other attributes (I guess it should stand for "extension").
+Dongchen  [8:06 PM]
+They only said TEXTRIX can model other attributes "in theory", so if we can identify the technical challenges for generating emission and try to solve them, I think it can still be some valid technical contribution.
+Manolis  [8:56 PM]
+Hi folks, I can’t make our meeting time this Thursday as I will be at the 3DV AC workshop that day.  Please sync up regardless, and keep me in the loop over Slack — let’s keep this channel alive.
+Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Dongchen  [4:08 PM]
+I have a few questions about our LightGen project, and I just want to put them out there so that we can discuss a bit:
+
+Emission could just be an extra channel for textures: I’m a bit worried that our emission generation might be regarded as just an additional channel compared to standard PBR texture generation.
+Is our task "generation"? It seems that we are trying to reconstruct the emission parameter based on the image, and the emission is usually fixed. We are currently just using generative models to solve this problem.
+TRELLIS.2 already has the feature of converting emission to o-voxel: I noticed that TRELLIS.2's code has the feature to convert emission to o-voxel and even has it loaded in their Dataset code but didn't generate emission paramter. What do you think the reason they dropped it? Is it because generating physically accurate emission is hard (which would be great for us), or because they felt the problem is not that important, or they think generating PBR texture is already enough for their paper's contribution, or they want to be consistent since many of the objects do not contain emission? Shall we write an email to the authors to ask about it?
+(edited)
+Manolis  [7:26 AM]
+These are good higher-level discussion points to clarify motivations.  I encourage discussion — maybe @Xingguang (Kevin) Yan can also put down some thoughts.  That said, a few very quick thoughts from my end:
+
+Emission could just be an extra channel for textures: I don’t see the concern here. We simply show through an experiment whether this is possible or not.  If it is, we move on.  If it is not, we understand why and can explain why.  I believe this is already our plan, and we just need to execute on it as efficiently as possible.  So I don’t see the reason to be concerned.
+Is our task “generation”? The line between reconstruction and generation is blurry nowadays.  If there are multiple plausible outputs for one input, or if the input provides only partial information generation is the better fit for terminology.  I don’t see a big issue here.
+TRELLIS.2 already has the feature of converting emission to o-voxel: Same as first point. I don’t see a need to be worried about this.  We simply have to do the work.  We run experiments to show whether TRELLIS.2 framework can be used for our task, and how and when it fails.  Could of course follow up with authors too to ask, but I think we should first do the work on our end.
+Hope the above is helpful.
+Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Standup and Prosper  [3:59 PM]
+The standup is over. I didn't hear from anyone today.Dongchen  [9:14 PM]
+I felt our previous experiments were not very organized, so I just get started with maintaining an experiment notebook to record all our results. The notebook link is here (I also added it to our bookmark tab): https://www.notion.so/Experiment-Result-32c3e115788b81ff8d16ea5c655a1f00?source=copy_link
+
+I did an overfitting test (1 sample) on TEXGen with three variants:
+
+  Vanilla model 
+  GT emission mask as additional conditioning (as we discussed earlier, to see the upper bound)                                                                                                                          
+  Additional mask loss on predicted emission (threshold the predicted emission map to get a mask, then compare with the GT emission mask, which is obtained by thresholding the gt emission and find the intersection with the gt mask map)
+
+
+Observation on this 1 sample overfitting: The GT emission mask conditioning performs best. The additional mask loss also yields slightly better results compared to the vanilla model.
+Currently running a 10-sample overfitting test to see if this trend holds. I have set up experiments for the 1000-sample subset runs (queuing on fir now). (edited) 
+:test_tube: Experiment ResultCreated by Dongchen | Mar 22nd | Added by NotionNotion  [9:14 PM]
+was added to proj-light-gen by .Canvas updated  [9:51 PM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [5:41 PM]
+Completed the 10-sample overfitting experiment on TEXGen. The observation we got from 1 sample overfitting does not quite hold on this trial of 10 sample overfitting: all variants of TEXGen performs very similarly.
+
+And with the 1 sample overfitting, the background is very clean (1st image). With the 10 sample overfitting, the background is not clean (2nd image).
+
+I think possible reason could be related to the model size since we are using a smaller model for overfitting. We can try to expand the model size a bit to see if this make a difference. Also updated the results here: https://www.notion.so/Mar24-TEXGen-overfitting-with-10-samples-Vanilla-vs-GT-mask-c[…]ask-Cls-0-01-32d3e115788b81bd967ad75599f5a3ec?source=copy_link
+2 files Canvas updated  [5:47 PM]
+Dongchen Yang made updates to Project Checklist
+.Standup and Prosper  [4:00 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Xingguang (Kevin) Yan  [9:22 AM]
+on my way
+Dongchen  [9:38 AM]
+I think we can also do a quick ablation on the regularization terms. I applied multiple of them including EMA, dropout, and condition dropout. I am a bit curious on which one of them helps the most.
+Standup and Prosper  [4:00 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Dongchen  [12:03 PM]
+I did an ablation on the regularization techniques. Here is the experiment note link. The comparisons are:
+
+with all regularizations
+remove EMA
+remove weight decay
+remove condition dropout
+remove dropout
+The results is that the condition dropout plays the most critical role. Without it, the performance drops significantly (~-10db in PSNR, and the background noise show  up). For others, removing them on result in small changes in the final result. (edited) 
+2 files Standup and Prosper  [3:58 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Dongchen  [4:12 PM]
+added a mask based view selection for rendering the reconstructed object. Previously, the default view may not cover the emission area. Simply render top/bottom/left... views still cannot solve the problem. Here is the new pipeline:
+
+sample 50 views on a sphere around the object
+render the masks for emissive area and non-emissive fixtures for the 50 views
+calculate the ratio of the emissive area/non-emissive fixture mask and select the view with the ratio closest to 20% (a manual set value)
+
+
+The upper row is the default view and the bottom row is the selected view. (edited) 
+image.png Dongchen  [9:16 PM]
+I am testing the evaluation pipelines with our overfitting models on the 10 samples. It seems the results does not quite align with what we expected. The quantitative numbers in our evaluation pipeline is much lower compared with what we have by directly retrieving the training logs. I will spend a bit time investigating it. Hopefully it can be a easy fix.
+image.png Standup and Prosper  [3:59 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Dongchen  [8:45 PM]
+I am currently working on the overfitting test for the VAE for emission of TRELLIS.2. Also made this 3D visualizer https://aspis.cmpt.sfu.ca/projects/lightgen/emission_vae_3d_1sample_overfit.html so that we can compare the original voxel and the reconstructed voxel.
+Dongchen  [8:59 PM]
+The overfitting of 1 sample converges. This is a screenshot from the 3D visualizer. On the left is the ground truth in voxel space, and on the right is the prediction reconstructed by the VAE. I updated the experiment notes here: https://www.notion.so/Apr01-TRELLIS-2-Emission-VAE-1-Sample-Overfit-0007deb6d96c447[…]aa5aa3888760-3363e115788b812f98a6d0cccf33794e?source=copy_link. (edited) 
+image.png [9:01 PM]Currently, I am running the 10 sample overfitting for the VAE.
+Canvas updated  [1:25 AM]
+Dongchen Yang made updates to Project Checklist
+.Manolis  [9:53 AM]
+https://neelguha.github.io/blog/2026/templates/
+neelguha.github.ioTemplates for machine learning research papers | Neel GuhaPhD student in Computer Science at Stanford University.Dongchen  [11:40 AM]
+Xingguang mentioned a way to test if emission generation is different from texture generation:
+
+use the TRELLIS.2's original PBR VAE
+we use the emission map as the albedo, and set roughness =1 and metallic =0
+see if there is relation between the reconstructed quality and the ratio of the emissive region. If the reconstruction quality is poorer with lower ratio of the emissive region, then we can tell that emission generation can be different from just albedo generation.
+(edited)
+[11:40 AM]I am currently testing it.
+Dongchen  [9:00 PM]
+With the pretrained TRELLIS.2 PBR, it looks better than our from-scratch  overfitting training. But it does how a trend:
+If the ratio of the emissive region is smaller, the reconstruction quality is worse.
+
+I think we can try to fintune the PBR VAE to see if similar trends hold.
+image.png Standup and Prosper  [4:00 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Dongchen  [5:59 PM]
+As for the mask loss, there is a class imbalance where the emission usually takes a small portion. We could try another experiment where we apply a class balanced BCE loss. I am currently running the experiment and will update it once it is finished. (edited) 
+Standup and Prosper  [8:00 PM]
+I haven't seen that many responses for the past few days. Maybe it's me, or is it you? It's probably me. It's definitely me. I'm sure that it is something that I did, or didn't do. Sometimes standups don't work out and it's best to pause them, or I just need to improve them in some way. Let me know how and I'll make the necessary adjustments.I came to this conclusion based on the number of direct responses I've received from your team. Perhaps this was an oversight. I won't make any changes to your standup and it will continue to work for another week, just make sure at least one person answers a standup before then.Standup and Prosper  [3:59 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Manolis  [7:54 AM]
+Hi folks, this Thursday I will be in a thesis defence committee in the morning.  Can we shift our meeting to the afternoon, say at 1:30pm instead? (edited) 
+Dongchen  [9:16 AM]
+Sure. That works for me.
+Dongchen  [10:51 PM]
+replied to a thread:I did the overfitting test with the pertained PBR VAE using the 10 samples. The overall results with this finetuning is much better (1st table).
+One note is that this PBR VAE's input and output is a bit different from our VAE:
+
+our VAE is working on emission directly
+our decoder also takes the PBR latent as the input
+Also from this 10 sample overfitting test, it seems all models performs relatively worse if the emission ratio is low (2nd table).
+
+Another observation is that the VAE has this some little dark artifacts (3rd image). I think the reason could be the reconstructed  emission is having non-zero (but very close to zero) values for those part so there are these dark artifacts. I need to double check it.
+
+I will finetune the VAE with the 1000 subset and further validate our observations. (edited) 
+3 files Dongchen  [10:54 PM]
+replied to a thread:I made a mistake earlier for this experiment where I did not include the regularizations for the overfitting test. Thus the overfitting test does not perform well compared with other baselines. I am redoing this overfitting test. I also queued the fir job for the 1000 subset training.
+Canvas updated  [1:14 PM]
+Dongchen Yang made updates to Project Checklist
+.Standup and Prosper  [3:59 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Dongchen  [5:14 PM]
+The finetuning for the PBR VAE with 1000 samples is able to run now on fir. The job is queued on fir. (edited) 
+Standup and Prosper  [4:00 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Standup and Prosper  [3:59 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Dongchen  [2:20 PM]
+https://arxiv.org/pdf/2604.11006 Just noticed a work about emission generation.... (edited) 
+Dongchen  [2:29 PM]
+They curated Objaverse and built based on Hunyuan3D-2.1, for this task. (edited) 
+Manolis  [3:03 PM]
+Hmm, interesting.  Looks very close in spirit to the minimal goals of this project.  Not too surprising that others would move in similar directions, as the conditions have been right for this type of project to happen for a while.  I would be curious to hear from the two of you about any differences you see.  And we can also discuss in more detail when we meet.
+Dongchen  [3:26 PM]
+In terms of method, they are generating multiview images and then project back to 3D, while what we tried so far are generating in UV space or 3D latent space.
+
+One thing I am curious about is how accurate can we control the emission color. For example, in their pipeline figure, if the color of the emission is green instead orange for the car, will the corresponding generated emission be correct. I think we can do a quick experiment with our TEXGen model. (edited) 
+image.png Dongchen  [3:47 PM]
+Another thing is that the numbers they reported in their quantitative table is very low...
+image.png Dongchen  [8:55 PM]
+Did a quick experiment with TEXGen. On the top are the thumbnail images, on the bottom are the generated emission map in UV.
+The first column is the original thumbnail image. I modified the emission color of the thumbnail image by Gemini (2ed, 3rd ... columns).
+
+It seems that the currently, the control of color only works if the color is close to yellow (like the second red emission color example). This is probably because of the training data as this is only trained with our 1000-subset.
+image.png Standup and Prosper  [3:59 PM]
+The standup is over, but I didn't hear from anyone today. Is everyone on vacation?Dongchen  [4:58 PM]
+I ran an experiment with our previous from-scratch overfitting VAE. For some objects, the predicted emission is completely dark. We raised a point that this might be a threshold issue where near-dark voxels are occluding the actual emission area and that's what makes the prediction look dark. I tried visualizing with only the GT voxel indices, but it's still dark. So it is not because of the near-dark voxels. https://www.notion.so/Apr15-From-Scratch-Emission-VAE-Are-true-emissive-part-being-[…]-dark-voxels-3433e115788b8181b3ffcda030c48e52?source=copy_link
+image.png :hole: Apr15: From-Scratch Emission VAE — Are true emissive part being blocked by near-dark voxels?ContextCreated by Dongchen | Apr 15th | Added by NotionStandup and Prosper  [8:00 PM]
+Got it, I've enabled this standup. (edited) 
+Xingguang (Kevin) Yan  [9:03 AM]
+on my way
+Standup and Prosper  [3:00 PM]
+Got it, I've enabled this standup. (edited) 
+Standup and Prosper  [3:58 PM]
+:sparkles: Standup Completed - Fri, Apr 17. :sparkles:
+*Dongchen*Progress since last update:Started the overfitting test for finetuning PBR VAE with the exactly same setup as the 1000 subset training:
+
+• same config except the datasetPlan until next update:finish the overfitting test and fix problems if there are any
+start the 1000 subset training for VAE
+scale up the training for TEXGen (1000 -> 80K)@Xingguang (Kevin) Yan skipped the standup. | Added by Standup & ProsperCanvas updated  [1:13 PM]
+Dongchen Yang made updates to Project Checklist
+.Standup and Prosper  [4:00 PM]
+:sparkles: Standup Completed - Mon, Apr 20. :sparkles:
+*Dongchen*Progress since last update:Will update later tonight.Canvas updated  [12:03 AM]
+Dongchen Yang made updates to Project Checklist
+.Dongchen  [3:23 AM]
+I am currently doing the experiment for TRELLIS.2 VAE. As we discussed , we need to keep the overfitting and actual training's setup exactly the same to sort out potential issues. For finetuning the PBR VAE, the 10 sample overfitting  is now running with the exactly same setup with the 1k sample (same batch size, same GPU numbers, etc.). Since 1k sample is with a batchsize of 64 and the 10 sample overfitting cannot run with batchsize of 64, I just duplicate those 10 samples to match the actual size of the 1K samples.
+
+Currently, the 10 sample overfit shows a sign of convergence based on the loss curve (1st image and this is from a earlier probe test that is with a batchsize of 48). At 2000 steps, the visualization still shows some dark floating voxels. I think it could be because the optimization steps are much fewer than our previous run, where batch size is 5 on a single GPU, but with  20000 steps. I am currently running an experiment with larger steps to see if this dark voxel issue is resolved.
+
+At the same time, I also set up the 1000 sample test and queued for running. (edited) 
+2 files [3:27 AM]For nest step, I will try to scale up our TEXGen experiment with the full 80k dataset while waiting to see the results of TRELLIS.2. (edited) 
+Standup and Prosper  [3:59 PM]
+:sparkles: Standup Completed - Wed, Apr 22. :sparkles:
+*Dongchen*Progress since last update:Finished finetuning PBR VAE with 10 sample
+Finished finetuning PBR VAE with 1000 sample
+Need to check the results
+
+Will send more updates later today.Dongchen  [12:51 AM]
+I also updated our visualization tool. Now we can see the original mesh.
+image.png Dongchen  [1:29 AM]
+One observation from the 10-sample overfit run on finetuning the TRELLIS.2's PBR VAE: the model struggles to produce exact-zero values in non-emissive regions.
+
+In our previous visualization the --threshold 0.05 filter hides this. But if I drop the threshold, dark floating particles appear everywhere.
+
+A simple threshold works at small scale, but at larger scale I expect the "dark particle" density to rise and more varied scenes means more edge cases where the lowest value for such dark particles exceeds a simple fixed threshold, and a threshold high enough to catch them also starts removing the actual emission.
+
+If those non zero dark particles are there and we don't care about them, as we increase the emission strength, the entire object will have dim light, which is unacceptable I think.
+
+Similar problem also exists in TEXGen pipeline, where those UV maps look clean for those non-emissive regions, but they are actually not zero. For example, the second image looks very clean (it is from the 10 sample overfitting test from TEXGen). But if we times by 20 (2n image), there will be some noise show up, then even more with 50 (3rd image).
+
+I think this is could be common failure mode for those methods. What do you think? (edited) 
+4 files [1:32 AM]I think a simple solution is to make it a multihead generation, one head is genearting color, another head is genearting a mask. At the end, we time them together.
+[1:33 AM]I will also increase the training time for TRELLIS.2 PBR VAE to see if it can bring any improvement. (edited) 
+Manolis  [11:35 AM]
+Thanks for the updates. My intuition is that the failure mode you described above (inability to correctly produce “empty” or “zero”) is common for approaches that do not disentangle binary present/absent in the volume from the continuous value assigned to each voxel/point.
+
+While pushing forward the above is good, it is really important to also work on having a fleshed out draft.
+Dongchen  [4:00 PM]
+Migrated the entire dataset (~74k including UVs and original .glb files for objects with emissions) as several .tar files  to our project folder on jupyter and fir so that we can start larger scale experiment. (edited) 
+Dongchen  [9:31 PM]
+Just noticed that the pipeline figure for EmissionGen is nearly identical to Hunyuan3D 2.1 ...
+2 files Xingguang (Kevin) Yan  [12:02 AM]
+We are further exploring the segmentation for emission generation.
+Here is a DiffusionNet overfitting result (trained on 10 samples).
+Although not perfect, the segmentation overfitting can be regarded as successful.
+Next I will start the training over the 1000 samples to test generalization.2 files Xingguang (Kevin) Yan  [12:09 AM]
+A bit more context:
+Model: DiffusionNet
+Input: triangle mesh, with vertex features of shape (N,11) (xyz, normals, RGB, ...)
+output: triangle maskDongchen  [12:11 AM]
+For this sample, I think the emissive part should be the claw?
+image.png Dongchen  [12:49 AM]
+I finished writing a complete version of related work. You can probably take a look and provide feedback when you get time.
+Dongchen  [12:57 AM]
+The main flow is:
+texture generation --> texture generation does not model underlying physical properties (PBR properties) --> material generation -- material generation does not model the emission property --> concurrent work EmissionGen ---> but their multiview-based method is fundamentally not suitable for emission generation --> why ours
+
+Object-centric Inverse rendering --> did not model emission --> scene level inverse rendering models emission -->for scene level, we  can rely on observations about how emitter interact with the environment --> but object level, there is little observation of such interaction --> we need to use generation based method (ours) to generate plausible light (edited) 
+Dongchen  [2:01 AM]
+Also, for the 1000 sample finetuning with the PBR VAE of TRELLIS.2, I think other than the near-dark issue for the non-emissive regions, the emissive color are recovered well. I think we can move forward with training the DiT.
+image.png Dongchen  [3:14 AM]
+launched the overfitting and 1k sample training for finetuning pretrained PBR DiT for TRELLIS.2. (edited) 
+Standup and Prosper  [4:00 PM]
+The standup is over. I didn't hear from anyone today.Dongchen  [5:02 PM]
+I updated the dataset section. I think we still need to work on the dataset preparation for a bit.
+
+As for our main synthetic dataset, currently the subset is only derived from a DuoDuoCLIP embedding retrieval against a single text query ("flashlight"). After manual validation it's 1,077 assets, with a category distribution where majority is not "flashlight". This may not be a strong selection criterion.
+
+We planned to include Digital Twin Catalog as additional evaluation but we have not actually work on it.
+
+We also planned to get some generated data for further test, but we did not have it yet. Also we plan to use TRELLIS.2 to generate those generated data, but we may also need to justify why we use TRELLIS.2. Or I think we can generate the data from multiple different models.

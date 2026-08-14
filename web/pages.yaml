@@ -10,6 +10,95 @@
 # in the scan but missing here surfaces as uncurated — add an entry at every
 # promotion.
 pages:
+  - name: _preview/target_check
+    tags: [diagnostic, workspace]
+    important: false
+    blurb: >
+      Decode check on the actual training/eval target: does <code>output_tex_slat.pth</code>
+      hold the binary emission mask it should, or (as the owner's albedo-glow observation
+      suggested) the shape's own PBR albedo, swapped in by a dataset-builder bug? Decodes
+      the real on-disk file through the TRELLIS.2 tex_decoder on 5 shapes (ct10, the
+      single-shape control, train_72k) and compares against the raw pre-encode ground
+      truth still on disk. Verdict: REFUTED &mdash; the stored target is the emission mask
+      on every shape checked (correlation 0.94&ndash;0.999), with a positive-control decode
+      proving the pipeline isn't hiding a real leak. Not a data bug; the albedo-glow
+      symptom is downstream (model behavior or an eval/viz attribution issue).
+
+  - name: _preview/data_compare
+    tags: [reference, workspace]
+    important: true
+    blurb: >
+      Dongchen's preprocessed 256&sup3; o-voxels vs our native 512&sup3; re-extraction, checked
+      against each other quantitatively (17,894 shapes scanned, 400 decoded in full) and
+      visually (12 shapes spanning emissive_frac 0 to 1). Occupied-voxel count scales
+      4.10&times; median 256&rarr;512, matching a surface's expected ~4&times; (not the 8&times; a
+      solid volume would give). The two occupancy sets nest almost perfectly (31% of shapes
+      have zero gap) but with a genuine long tail (31 shapes exceed 10% gap, one hits 100%).
+      Tests the brief's highest-value hypothesis directly: do emissive 256-parents yield more
+      512-children than dark parents? Only 1.0% more, pooled over 72M parent cells, too small
+      to explain the sparse-shape emissive_frac drift seen elsewhere. The key validation:
+      two independently-computed dual-grid geometries (256&sup3; vs 512&sup3; averaged down)
+      agree to 0.12 voxel widths mean with no systematic per-axis offset.
+
+  - name: _preview/data_pipeline
+    tags: [reference, workspace]
+    important: true
+    blurb: >
+      GLB to latent explainer: makes the three resolutions (256&sup3; where Dongchen bakes
+      attribute values, 512&sup3; the pretrained encoder's native grid where geometry is
+      extracted, 32&sup3; the latent the model trains on) and the file/variable flow between
+      them unambiguous at a glance. One end-to-end flow diagram with resolution lanes (GLB
+      splitting into the two independent o_voxel extractions, merging into the input.vxz /
+      output.vxz 512 pair, then the unchanged SegviGen encoder), a nesting-arithmetic diagram
+      (1 latent token = 16&sup3; of 512 cells = 8&sup3; of 256 cells), and per-stage file/
+      variable tables grounded in file:line citations. Explains the channel hijack (emission
+      binarized into the base_color slot to reuse the pretrained PBR encoder byte-identically),
+      why Dongchen's 256&sup3; bake has no geometry channel (scope, not a defect: TRELLIS.2's
+      own preprocessing calls both o_voxel functions, he only needed one), and why upsampling
+      attribute values rather than re-baking at 512&sup3; sidesteps a real, documented bug in
+      o_voxel's emissive mip sampling.
+
+  - name: _preview/ovoxel_explained
+    tags: [reference, workspace]
+    important: true
+    blurb: >
+      Textbook-depth explainer: O-Voxel and TRELLIS.2. Corrects "it's just sparse voxel
+      features" (half right: describes only the attribute/reflectance channel) by building
+      the missing sub-voxel geometry channel (dual vertices + edge-crossing flags) from
+      first principles, with piecewise-linear computed-geometry diagrams (a real QEF
+      least-squares solve recovers a sharp corner that a naive crossing-average blurs).
+      Frames the three per-voxel latents as where (shape_slat) / how it reflects light
+      (input_tex_slat) / what it emits (output_tex_slat), mapped onto the rendering
+      equation (this project's own framing, not TRELLIS.2's, attributed accordingly).
+      Compares the two dataset preprocessing pipelines (attribute-only dataset generator
+      vs SegviGen-emissive's combined shape+attribute chain) and explains why shape_slat
+      is architecturally required for fine-tuning (concat_cond, not cross-attention).
+      Walks the pipeline stage-by-stage with file:line citations against TRELLIS2 (commit
+      2dabb82) and SegviGen-emissive (f3443da), quotes the TRELLIS.2 (arXiv:2512.14692)
+      and TRELLIS v1 (arXiv:2412.01506) papers, and includes a 14-row variable-name
+      glossary. Corrects a pipeline-order assumption (get_common_coords runs downstream on
+      latents, not between extraction and encoding) and clarifies the SC-VAE's two
+      independent compressions (16x spatial vs the 6->32 channel width).
+
+  - name: _preview/ovoxel_construction
+    tags: [reference, workspace]
+    important: true
+    blurb: >
+      Deep-dive companion to ovoxel_explained: O-Voxel construction, dual contouring, and
+      the QEF, derived from first principles for a reader who wants the machinery, not an
+      orientation. Sign classification and Hermite data on a real (point-in-polygon,
+      real segment-intersection) piecewise-linear grid; marching squares vs. dual
+      contouring on the same sharp corner; the QEF as sum-of-squared-plane-distances,
+      the normal equations, and a rank analysis of A^TA (flat patch = plane of solutions,
+      crease = line, corner = unique point) illustrated with computed isometric-cube
+      panels. Two worked numerical examples verified with numpy: an orthogonal-normal
+      corner solved exactly, and a near-parallel-normal patch whose unregularized solve
+      lands 21 cell-widths outside the voxel until regularization pulls it back to the
+      mean-of-crossings. Reconciles the paper's clean two-term energy (TRELLIS.2 Eq. 2)
+      with the code's three C++ accumulation passes (intersect_qef/face_qef/boundry_qef)
+      and its actual solve method (regularized QR + exhaustive box-boundary enumeration,
+      not SVD truncation). All paper quotes fetched verbatim from arXiv:2512.14692.
+
   - name: workspace
     tags: [workspace]
     blurb: >

@@ -6,7 +6,7 @@ started: 2026-08-09 16:30
 updated: 2026-08-09 19:20
 slurm: 
 link: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/graph.html
-page: 
+page: none (console surface, not in the pages inventory; direct link below)
 needs: evaluation: Round 2 answers your two criticisms. Click a node (selects now; double-click opens), then click the background or press Escape: everything resets, no refresh needed. Try the Timeline toggle: pages left to right by creation date in tier lanes. Is the interaction clean and does the timeline show the development flow you wanted?
 motivation: The owner asked for an Obsidian-style graph of the project's published pages, so the owner and future agents can see how pages relate and how the project developed, as a permanent tab on the console rather than a one-off page.
 log:

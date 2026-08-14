@@ -1,0 +1,104 @@
+/* expsview.css -- the interactive experiments-view component (run overlay
+ * chart + media scrubber). Package asset, loaded after theme.css/theme2.css/
+ * theme3.css so it inherits the v3 tokens (--bg/--panel/--panel2/--border/
+ * --text/--muted/--accent), same convention as graph_view.css. Phone reflow
+ * at 480px (controls stack; chart height shrinks) matches graph_view.css's
+ * own breakpoints.
+ */
+.expsview { margin: 4px 0 14px; }
+.expsview-note { margin: 0 0 10px; }
+
+.ev-toolbar {
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between;
+  gap: 14px 20px; margin: 0 0 12px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+}
+.ev-runs { display: flex; flex-wrap: wrap; gap: 6px 14px; max-width: 100%; }
+.ev-run {
+  display: inline-flex; align-items: center; gap: 6px; font-size: .85rem;
+  color: var(--text); cursor: pointer; user-select: none;
+}
+.ev-run input[type="checkbox"] { margin: 0; accent-color: var(--accent); }
+.ev-run input[type="checkbox"]:disabled + .ev-swatch { opacity: .3; }
+.ev-swatch {
+  width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none;
+}
+
+.ev-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+.ev-smooth { display: inline-flex; align-items: center; gap: 8px; font-size: .82rem; color: var(--muted); }
+.ev-smooth input[type="range"] { width: 110px; accent-color: var(--accent); }
+.ev-smooth-val { font-variant-numeric: tabular-nums; min-width: 2.4em; color: var(--text); }
+
+.ev-axis-modes, .ev-scale-modes {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden;
+}
+.ev-axis-modes button, .ev-scale-modes button {
+  font: inherit; font-size: .82rem; padding: 5px 11px; border: none; cursor: pointer;
+  background: var(--panel); color: var(--muted);
+}
+.ev-axis-modes button + button, .ev-scale-modes button + button { border-left: 1px solid var(--border); }
+.ev-axis-modes button.active, .ev-scale-modes button.active { background: var(--accent); color: #fff; }
+.ev-axis-modes button:not(.active):hover, .ev-scale-modes button:not(.active):hover {
+  color: var(--text); background: var(--panel2);
+}
+.ev-reset {
+  font: inherit; font-size: .82rem; padding: 5px 12px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--muted);
+}
+.ev-reset:hover { color: var(--text); background: var(--panel2); }
+
+.ev-chart-wrap {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+  padding: 10px 12px 4px; overflow: hidden;
+}
+.ev-chart { width: 100%; min-height: 320px; }
+.ev-hint { margin: 6px 0 0; font-size: .76rem; }
+.ev-axis-warning { margin: 4px 0 0; color: var(--accent2, var(--muted)); }
+
+.ev-media {
+  margin-top: 16px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--panel); padding: 12px 14px;
+}
+.ev-media-head {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+  margin-bottom: 10px; font-size: .85rem; color: var(--text);
+}
+/* A native <select>'s intrinsic width is its LONGEST option's rendered text
+ * (a run title here, no length cap), and a flex item's default min-width is
+ * auto (its own content size), not 0 -- flex-wrap alone does not let an item
+ * shrink below that, so an unconstrained select silently grew past the
+ * viewport and dragged the whole document into horizontal scroll at 390px
+ * (found live on the somages console's own exps.html, not in the isolated
+ * worked example, which never happened to carry a long enough run title to
+ * trip it). min-width: 0 lets the flex item shrink; max-width caps it to
+ * whatever the row has left; the ellipsis rule truncates the DISPLAYED
+ * value (not the option list) once it no longer fits.
+ */
+.ev-media-head label { min-width: 0; flex: 1 1 220px; }
+.ev-media-head select {
+  font: inherit; font-size: .85rem; padding: 3px 6px; margin-left: 6px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); color: var(--text);
+  min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ev-media-body { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.ev-media-body img {
+  max-width: 100%; max-height: 380px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel2);
+}
+.ev-media-scrub { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 420px; }
+.ev-media-scrub input[type="range"] { flex: 1 1 auto; accent-color: var(--accent); }
+.ev-media-label {
+  font-size: .78rem; color: var(--muted); min-width: 6.5em; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .ev-toolbar { flex-direction: column; align-items: stretch; }
+  .ev-controls { justify-content: space-between; }
+  .ev-chart { min-height: 260px; }
+}
+@media (max-width: 480px) {
+  .ev-controls { gap: 10px 12px; }
+  .ev-smooth input[type="range"] { width: 84px; }
+  .ev-media-scrub { max-width: none; }
+}

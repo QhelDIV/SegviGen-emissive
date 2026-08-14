@@ -1,0 +1,8 @@
+- [*] 10 Sample overfitting 
+- [ ] We need to first understand where the data splits of 10, 1000, 80k are from
+- [ ] Give stats on the 1000 / 80k training data (stats on the vertices count )
+- [ ] 1000 sample training 
+- [ ] 80k training (We should first understand which does this 80k data mean)
+- [ ] direct repurpose the model as texture generation
+- [ ] make the mask as the condition for texture generation 
+- [ ] Paper writing: completing the DiffusionNet section in the paper draft

@@ -1,0 +1,98 @@
+[
+  {
+    "sid": "7ec80d13800e4594a51c2f15905766a0",
+    "split": "test_72k",
+    "emissive_frac_512": 0.0,
+    "n_voxels_512": 52518,
+    "n_voxels_256": 12762,
+    "gap_frac": 0.0
+  },
+  {
+    "sid": "5e89af269fc84893a3c680ddbde08ce3",
+    "split": "val_72k",
+    "emissive_frac_512": 0.020007431507110596,
+    "n_voxels_512": 586632,
+    "n_voxels_256": 145351,
+    "gap_frac": 0.0
+  },
+  {
+    "sid": "6e6018d081444340a2eda5c4704979d9",
+    "split": "test_72k",
+    "emissive_frac_512": 0.05006910115480423,
+    "n_voxels_512": 1750341,
+    "n_voxels_256": 433834,
+    "gap_frac": 1.5425565646922512e-05
+  },
+  {
+    "sid": "a78041c0b312435e8c49cca353dd9a3f",
+    "split": "test_72k",
+    "emissive_frac_512": 0.10000674426555634,
+    "n_voxels_512": 1127264,
+    "n_voxels_256": 266329,
+    "gap_frac": 0.0
+  },
+  {
+    "sid": "bab32fb60ecb4fbc889a0f298144d835",
+    "split": "val_72k",
+    "emissive_frac_512": 0.20008625090122223,
+    "n_voxels_512": 92760,
+    "n_voxels_256": 23125,
+    "gap_frac": 0.0
+  },
+  {
+    "sid": "900e70f33acf409799eb19d11f78d60c",
+    "split": "train_72k",
+    "emissive_frac_512": 0.3500030040740967,
+    "n_voxels_512": 50171,
+    "n_voxels_256": 12501,
+    "gap_frac": 0.0
+  },
+  {
+    "sid": "5b42f113b32a4ae1b9d7553c89f9c2e9",
+    "split": "val_72k",
+    "emissive_frac_512": 0.5,
+    "n_voxels_512": 350208,
+    "n_voxels_256": 88064,
+    "gap_frac": 0.0
+  },
+  {
+    "sid": "af8dfda8356e43d19ca1233d533dc308",
+    "split": "test_72k",
+    "emissive_frac_512": 0.6499104499816895,
+    "n_voxels_512": 912615,
+    "n_voxels_256": 227632,
+    "gap_frac": 0.0
+  },
+  {
+    "sid": "e45249cf511e4e2f9be5bb63537abb77",
+    "split": "val_72k",
+    "emissive_frac_512": 0.8000585436820984,
+    "n_voxels_512": 163908,
+    "n_voxels_256": 40960,
+    "gap_frac": 0.0
+  },
+  {
+    "sid": "5c68a497df7e48358e25f4c115902858",
+    "split": "val_72k",
+    "emissive_frac_512": 0.8999104499816895,
+    "n_voxels_512": 890852,
+    "n_voxels_256": 222471,
+    "gap_frac": 0.0
+  },
+  {
+    "sid": "33fbe977d9eb434d9969a812e61dc7b3",
+    "split": "val_72k",
+    "emissive_frac_512": 0.9701663255691528,
+    "n_voxels_512": 239930,
+    "n_voxels_256": 59964,
+    "gap_frac": 0.0
+  },
+  {
+    "sid": "c110cb5e869c4f18a8043435b3bb65ea",
+    "split": "train_72k",
+    "emissive_frac_512": 1.0,
+    "n_voxels_512": 1124744,
+    "n_voxels_256": 239553,
+    "gap_frac": 1.3336368097984963e-05
+  }
+]

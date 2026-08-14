@@ -61,3 +61,16 @@ Verification discipline:
 Writing register (all rendered text and board lines): plain words; no em
 dashes; never "corpus" (say dataset), "audit" (say check), or "contact sheet"
 (say grid). No git commits or pushes anywhere; the master commits.
+
+Page writing (owner-ratified 2026-08-12): every page is a SELF-CONTAINED
+ARTICLE, not a work log. A cold reader must understand why the page exists,
+what question it answers, and the answer, before the detail starts. For
+sampling-based results, show the FULL sample (all draws; small renders are
+fine), with any picked draw presented in context of that distribution,
+never alone.
+
+Job-page anatomy (owner-set 2026-08-13): a job-reporting page carries six
+elements: the motivation for the job, the context it sits in, the method,
+the outcome, the evidence, and the reasoning. The first three are the
+ones habitually omitted; a page missing them reads as a log and fails
+review regardless of evidence quality.
