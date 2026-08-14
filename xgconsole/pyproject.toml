@@ -1,0 +1,26 @@
+[project]
+name = "xgconsole"
+version = "0.1.0"
+description = "Project console for SegviGen-emissive: xgpage page sources, jobs board, console/roadmap builders, cluster tools"
+requires-python = ">=3.10"
+dependencies = [
+    # xgpage is not on PyPI: install it first with
+    #   uv pip install -e ~/studio/xgpage
+    # (or clone github.com:QhelDIV/xgpage.git there); pip then accepts this
+    # requirement as already satisfied.
+    "xgpage",
+    "pyyaml",
+    "markdown",
+    "numpy",
+    "pillow",
+    "matplotlib",
+]
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Tools are run by path (python xgconsole/tools/build_jobs.py, tools/xgjobs);
+# this package declares the console environment's dependencies only.
+packages = []

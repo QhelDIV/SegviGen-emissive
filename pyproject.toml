@@ -1,0 +1,8 @@
+# Workspace root. The two packages keep separate dependency sets:
+#   emissive/   research code (training, inference, bake, render, eval)
+#   xgconsole/  project console (page builders, jobs board, cluster tools)
+# Install each with `uv pip install -e emissive` / `uv pip install -e xgconsole`
+# into its own environment; nothing at the root is importable.
+
+[tool.uv.workspace]
+members = ["emissive", "xgconsole"]

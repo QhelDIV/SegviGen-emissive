@@ -143,19 +143,37 @@ Pipeline stages:
 
 ## Layout
 
+Since the 2026-08-14 consolidation this repository holds the whole project:
+the research package (`emissive/`) and the project console (`xgconsole/`),
+with separate dependency sets declared in each package's `pyproject.toml`
+(the root `pyproject.toml` is the workspace marker). The former lightgen-ops
+repository was merged in with its history; its console layer lives under
+`xgconsole/` unchanged in relative geometry.
+
 ```
-emissive/
+pyproject.toml   # workspace root: members emissive/, xgconsole/
+emissive/        # research package (own pyproject.toml: torch stack)
   data_prep/   somage_to_glb.py  make_emis_mask.py  build_dataset.py  gt_parts_extract.py
   train/       train_emissive.py
   eval/        eval_emissive.py  seg_covers_emissive.py  seg_to_mesh.py  make_pred_glb.py
   infer/       predict_emissive.py            # agent-facing: glb in -> mask + mesh out
+  render/      bpy_rebake.py (--continuous)  render_emissive_closest.py  render_voxels.py
+               gallery + figure scripts, cameras/, example/ (cluster staging pattern)
+  pages/       result-page builders and their small data (run in the console env)
   slurm/       *_v5.sbatch, eval_emissive.sbatch, eval_val96.sbatch, build_dataset*.sbatch,
                make_pred_glb.sbatch, seg_covers_*.sbatch, dl_weights.sbatch, gpu_smoke.sbatch,
                build_canon10.sbatch
   slurm/archive/  superseded train_emissive* variants (kept for history, not for use)
   env/         setup_trellis_env.sh  resume_env.sh  smoke_test.py
-  docs/        EXPERIMENTS.md                 # run/checkpoint registry — read this first
+  docs/        EXPERIMENTS.md WORKLOG.md factsheets  # run/checkpoint registry — read EXPERIMENTS first
   canon_overfit10.txt
+xgconsole/       # project console (own pyproject.toml: xgpage stack)
+  tools/       xgjobs (board CLI), build_console/jobs/roadmap/workspace, inventories
+  web/         pages.yaml + _preview/ page sources (code and small data; pixels stay out of git)
+  jobs/        board entries (one markdown file per job)
+  cluster_skill/  cluster_ssh.py + commands
+  notes/ updates/ AGENTS.md BRIEF.md ROADMAP.md   # project docs the console renders
+attic/           # kept-for-record: superseded pilots and workspace scratch
 ```
 
 Data prep / conversion (`emissive/data_prep/`):

@@ -1,0 +1,35 @@
+[project]
+name = "emissive"
+version = "0.1.0"
+description = "SegviGen-emissive research code: dataset building, fine-tuning, inference, emission bake, rendering, and evaluation"
+requires-python = ">=3.10"
+dependencies = [
+    # from actual imports across emissive/**/*.py
+    "numpy",
+    "pandas",
+    "pillow",
+    "scipy",
+    "torch",
+    "trimesh",
+    "huggingface_hub",
+]
+
+# NOT declared on purpose:
+# - bpy / mathutils: provided by the Blender render environment
+#   (omages_internal venv on the cluster), not installed via this package.
+# - trellis2 / SegviGen model code: this repository's own root
+#   (inference_full.py marks it); scripts locate it with a parent-dir walk.
+# - o_voxel: Dongchen's voxel package, cluster-provided.
+# - xgutils: installed separately from its own repo.
+# - xgpage (used by emissive/pages builders): install from ~/studio/xgpage;
+#   the page builders run in the console environment, not the training env.
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Scripts are run by path (python emissive/eval/eval_emissive.py); this
+# package exists to declare the research environment's dependencies, so
+# no importable packages are shipped.
+packages = []
