@@ -1,0 +1,38 @@
+{
+ "rendered_frames": 33,
+ "video_frames": 64,
+ "fps": 24,
+ "camera": [
+  2.452,
+  -3.138417,
+  1.907314
+ ],
+ "box_settings": {
+  "samples": 1024,
+  "max_bounces": 32,
+  "diffuse_bounces": 16,
+  "wall": 0.8,
+  "view_transform": "Filmic",
+  "exposure": 1.5
+ },
+ "seconds": 2.67,
+ "poster_frame": 32,
+ "max_strength": 16.0,
+ "easing": "smoothstep",
+ "webm": {
+  "codec": "vp9",
+  "w": 768,
+  "h": 768,
+  "fps": "24/1",
+  "frames": 64
+ },
+ "mp4": {
+  "codec": "h264",
+  "w": 768,
+  "h": 768,
+  "fps": "24/1",
+  "frames": 64
+ },
+ "webm_bytes": 98756,
+ "mp4_bytes": 206284
+}

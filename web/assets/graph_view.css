@@ -1,0 +1,159 @@
+/* graph_view.css — the page-relationship graph (graph.html).
+ * Lightgen-local, NOT part of the xgpage package (project-specific
+ * component; see tools/build_graph.py's module docstring). Loaded only on
+ * graph.html, after theme.css/theme2.css/theme3.css, so it inherits the v3
+ * tokens (--bg/--panel/--border/--text/--muted/--accent/--good/--blue-ink/
+ * --violet-ink/--accent-ink) and only adds this page's own layout.
+ */
+.graph-page .graph-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin: 4px 0 14px;
+}
+.graph-page #graph-search {
+  font: inherit; font-size: .92rem; padding: 7px 12px; min-width: 220px;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--panel); color: var(--text);
+}
+.graph-page #graph-search:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Map / Timeline mode toggle: a small segmented control, same visual
+ * weight as the search box, always visible in the toolbar. */
+.graph-modes { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.graph-modes button {
+  font: inherit; font-size: .85rem; padding: 6px 14px; border: none; cursor: pointer;
+  background: var(--panel); color: var(--muted);
+}
+.graph-modes button + button { border-left: 1px solid var(--border); }
+.graph-modes button.active { background: var(--accent); color: #fff; }
+.graph-modes button:not(.active):hover { color: var(--text); background: var(--panel2); }
+
+.graph-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); }
+.graph-legend .gl-item { display: inline-flex; align-items: center; gap: 6px; }
+.graph-legend .gl-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.graph-legend .gl-dash {
+  width: 18px; height: 0; border-top: 2px dashed var(--accent-ink); display: inline-block; flex: none;
+}
+
+.graph-layout { display: flex; gap: 20px; align-items: flex-start; }
+.graph-canvas-wrap {
+  position: relative; flex: 1 1 auto; min-width: 0;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+  overflow: hidden;
+}
+.graph-svg { display: block; width: 100%; height: 62vh; min-height: 420px; touch-action: none; cursor: grab; }
+.graph-svg.panning { cursor: grabbing; }
+.graph-hint {
+  position: absolute; left: 10px; bottom: 8px; font-size: .72rem; color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 75%, transparent); padding: 2px 7px; border-radius: 5px;
+  pointer-events: none; letter-spacing: .01em;
+}
+
+.graph-orphans {
+  flex: 0 0 260px; max-width: 260px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+  padding: 14px 16px; max-height: 62vh; min-height: 420px; overflow-y: auto;
+}
+.graph-orphans h3 { margin: 0 0 4px; font-size: .95rem; }
+.graph-orphans .sub { margin: 0 0 10px; font-size: .78rem; color: var(--muted); }
+.graph-orphans ul { list-style: none; margin: 0; padding: 0; }
+.graph-orphans li { margin: 0 0 2px; }
+.graph-orphans a {
+  display: block; padding: 6px 8px; border-radius: 6px; text-decoration: none;
+  color: var(--text); font-size: .85rem; line-height: 1.35;
+}
+.graph-orphans a:hover { background: var(--panel2); color: var(--accent-ink); }
+.graph-orphans .go-tier { display: block; font-size: .7rem; color: var(--muted); margin-top: 1px; }
+.graph-orphans .go-empty { font-size: .82rem; color: var(--muted); }
+
+/* nodes + edges */
+.gn-node { cursor: pointer; }
+.gn-circle { stroke: var(--bg); stroke-width: 1.5; transition: opacity .12s ease; }
+.gn-label {
+  font-size: 10.5px; fill: var(--text); pointer-events: none; user-select: none;
+  paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round;
+  transition: opacity .12s ease;
+}
+.gn-edge { fill: none; stroke-width: 1.4; transition: opacity .12s ease, stroke-width .12s ease; }
+.gn-edge.lit { stroke-width: 2.4; }
+
+/* Orphan labels (23 of 41 nodes here) are hidden by default -- at overview
+ * zoom, 41 constant-size labels on a real sparse layout collide badly, and
+ * an unconnected page's title is already one click away in the "not yet
+ * connected" panel. The dot (colored by tier) still marks its position and
+ * still hovers/searches/clicks normally; only the label text is deferred. */
+.gn-orphan .gn-label { opacity: 0; }
+.gn-orphan.hi .gn-label, .gn-orphan.search-hit .gn-label,
+.gn-orphan:hover .gn-label { opacity: 1; }
+
+/* Timeline mode: EVERY label starts hidden (not just orphans), same reveal
+ * triggers as above. A date-packed layout collides labels regardless of
+ * connectivity (found live: a busy week of root pages rendered as one
+ * unreadable smear); the dots' position/color/lane already carry the
+ * pattern this view exists to show. */
+.graph-svg.mode-timeline .gn-label { opacity: 0; }
+.graph-svg.mode-timeline .gn-node.hi .gn-label,
+.graph-svg.mode-timeline .gn-node.search-hit .gn-label,
+.graph-svg.mode-timeline .gn-node:hover .gn-label { opacity: 1; }
+
+/* Found in the round-2 audit: an earlier ", .gn-label:not(.hi)" clause here
+ * matched every label unconditionally (.hi is only ever set on the parent
+ * .gn-node, never on the label itself), so a highlighted node's OWN label
+ * was still forced to opacity .16 despite its parent being at full opacity.
+ * Dimming the parent .gn-node is already sufficient -- a label's rendered
+ * opacity composites with its ancestor's, no separate rule needed. */
+.graph-svg.dimmed .gn-node:not(.hi) { opacity: .16; }
+.graph-svg.dimmed .gn-edge:not(.lit) { opacity: .07; }
+
+/* Timeline mode chrome: lane guide lines/labels + date ticks. Rendered in
+ * WORLD space (inside .viewport, same as edges/nodes) so it pans/zooms with
+ * the content, not fixed to the viewport. */
+.tl-lane-line { stroke: var(--border); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.tl-lane-label {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px;
+  fill: var(--muted); text-anchor: end;
+}
+.tl-tick-line { stroke: var(--border); stroke-width: 1px; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; opacity: .6; }
+.tl-tick-label {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px;
+  fill: var(--muted); text-anchor: middle;
+}
+/* Timeline chrome text should stay screen-constant like node labels, not
+ * shrink/grow with zoom -- it is rendered inside .viewport (for panning)
+ * but graph_view.js counter-scales it the same way it counter-scales node
+ * markers (see updateNodeScale()). */
+
+/* Curated typed edges (round-2, web/graph_edges.yaml): dashed, with the
+ * relationship word labeled directly on the edge rather than adding a
+ * separate legend entry per type -- three types sharing one "dashed"
+ * treatment need a way to tell them apart, and a per-edge label reads at
+ * the point of use instead of asking the reader to cross-reference a
+ * legend. */
+.gn-edge.typed { stroke-dasharray: 5 4; }
+.gn-typed-label {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px;
+  letter-spacing: .04em; text-transform: uppercase;
+  fill: var(--accent-ink); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round;
+  text-anchor: middle; pointer-events: none;
+}
+
+.gn-node.search-hit .gn-circle { stroke: var(--accent); stroke-width: 3px; }
+.gn-node.search-hit .gn-label { fill: var(--accent-ink); font-weight: 600; }
+
+/* Selected (click, sticky until background-click/Escape) reads distinctly
+ * from a merely-hovered/searched node: a dashed ring OUTSIDE the circle
+ * (its own element, gn-sel-ring, always present but invisible until
+ * .selected is toggled) rather than a thicker circle stroke, so a selected
+ * node stays identifiable even while dimmed classes are toggling around it. */
+.gn-sel-ring { fill: none; stroke: var(--accent-ink); stroke-width: 1.5px; stroke-dasharray: 2 2; opacity: 0; transition: opacity .12s ease; pointer-events: none; }
+.gn-node.selected .gn-sel-ring { opacity: .9; }
+
+@media (max-width: 900px) {
+  .graph-layout { flex-direction: column; }
+  .graph-orphans { flex: 1 1 auto; max-width: none; max-height: 260px; min-height: 0; }
+  .graph-svg { height: 52vh; min-height: 340px; }
+}
+@media (max-width: 480px) {
+  .graph-page .graph-toolbar { flex-direction: column; align-items: stretch; }
+  .graph-page #graph-search { min-width: 0; width: 100%; }
+  .graph-svg { height: 46vh; min-height: 300px; }
+}

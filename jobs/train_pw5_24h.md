@@ -1,0 +1,13 @@
+title: 24h conditioned training, pos_weight 5 (uncapped)
+executor: team-lead
+track: research
+status: done
+started: 2026-08-08 13:35
+updated: 2026-08-09 15:07
+slurm: 240811
+link: 
+page: none (training run; results land on the overfit/eval pages)
+motivation: First attempt at image-conditioned training on the full 72k dataset.
+log:
+- 2026-08-09 15:07 TIMEOUT with nothing saved; epoch ~20h due to 600GB/epoch cond I/O; led to the capped relaunch and the I/O fix backlog
+outcome: TIMEOUT with nothing saved; epoch ~20h due to 600GB/epoch cond I/O; led to the capped relaunch and the I/O fix backlog

@@ -1,0 +1,12 @@
+{
+ "658ecf9f837246509b0b1c4aa81e9e5b/verify": {
+  "mean_abs_diff_255": 0.0,
+  "p99_abs_diff_255": 0.0,
+  "max_abs_diff_255": 0.0
+ },
+ "9418a924a50d44c186dd499006b62424/verify": {
+  "mean_abs_diff_255": 0.008631953713581374,
+  "p99_abs_diff_255": 0.0,
+  "max_abs_diff_255": 1.9999998807907104
+ }
+}

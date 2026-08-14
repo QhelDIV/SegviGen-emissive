@@ -1,0 +1,16 @@
+{
+ "sid": "c1e3035d1ccb49df9c09aa86681faf30",
+ "mode": "box",
+ "area_lit_frac": 0.017782580082238573,
+ "samples": 512,
+ "max_bounces": 32,
+ "diffuse_bounces": 16,
+ "wall": 0.8,
+ "view_transform": "AgX",
+ "exposure": 1.5,
+ "camera": [
+  2.083038460575945,
+  -2.666167647150533,
+  2.0343638000761066
+ ]
+}

@@ -1,0 +1,73 @@
+#!/local-scratch2/xya120/studio/misc/lightgen/.venv_console/bin/python
+"""xgjobs -- lightgen's thin driver over xgpage.jobs's CLI (extracted
+2026-08-10, mirroring the console precedent). Agents express intent (start a
+job, log an update, mark it done); the package owns every mechanical detail
+(timestamps, per-slug locking, format, the writing-standard lint, atomic
+validated writes) -- see xgpage.jobs's module docstring for the full
+mechanism. This file supplies only lightgen's own paths/vocabulary and the
+rebuild step (subprocessing build_jobs.py, which composes the full console
+page -- console shell, tree, etc. -- and stays project-owned).
+
+Hand-editing jobs/*.md directly is DEPRECATED for agents; it stays a
+documented emergency path (recovering a file this tool refuses to touch,
+say). See tools/build_jobs.py's docstring for the field contract if you
+ever do need to hand-edit.
+
+Verbs: start, set-track, log, done, frozen, reopen, flag, unflag -- run
+`tools/xgjobs --help` or `tools/xgjobs <verb> --help` for the full
+description of each (generated from xgpage.jobs, so it always matches the
+code). One example per verb:
+
+    tools/xgjobs start render_doc --executor render-doc --track research \\
+        --title "Name and document the project's rendering setups" \\
+        --motivation "Figures use several lighting setups and nobody can tell which one a figure used." \\
+        --no-page "not started yet"
+    tools/xgjobs set-track render_doc research
+    tools/xgjobs log render_doc "Read every render script and cross-checked each parameter against a real published render."
+    tools/xgjobs done render_doc --outcome "RENDERING.md and a workspace page cover all five setups with verified parameters."
+    tools/xgjobs frozen render_doc --reason "Blocked on a render farm allocation."
+    tools/xgjobs reopen render_doc "The allocation came through."
+    tools/xgjobs flag render_doc --ask "Open the page and check the comparison figure reads correctly."
+    tools/xgjobs unflag render_doc
+    tools/xgjobs log render_doc "Self-check found: the comparison figure's caption is missing units." --as jobs-redesign
+
+AUTHORSHIP: every verb that appends a log line stamps WHO is speaking
+(`--as NAME`, else the XGJOBS_ACTOR environment variable, else a per-verb
+default -- the job's own executor for the normal progress verbs, "master"
+for flag/unflag). [owner] alone reads with a touch more visual weight on
+the board since owner words are the record of verdicts, not progress notes.
+
+TRACK: every job carries a track of research, tooling, or paper (--track is
+required on start; set-track corrects an existing job); the board shows a
+muted chip per job and an All/Research/Tooling/Paper filter.
+"""
+import pathlib
+import subprocess
+import sys
+
+from xgpage import jobs as xj
+
+REPO = pathlib.Path(__file__).resolve().parent.parent
+CONSOLE_PYTHON = REPO / ".venv_console" / "bin" / "python"
+BUILD_JOBS = REPO / "tools" / "build_jobs.py"
+
+CONFIG = xj.JobsConfig(
+    jobs_dir=REPO / "jobs",
+    publish_dest=pathlib.Path("/project/3dlg-hcvc/omages/www/yanxg/lightgen"),
+    site_root="/projects/omages/yanxg/lightgen",
+    track_values=("research", "tooling", "paper"),
+)
+
+
+def rebuild():
+    result = subprocess.run([str(CONSOLE_PYTHON), str(BUILD_JOBS)],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"warning: board rebuild failed (the job file itself was saved fine):\n"
+             f"{result.stderr}", file=sys.stderr)
+    else:
+        print(result.stdout.strip() or "board rebuilt", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    xj.cli_main(CONFIG, rebuild_fn=rebuild)

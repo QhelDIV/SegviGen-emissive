@@ -1,0 +1,37 @@
+# web/graph_edges.yaml — curated typed edges for the page-relationship graph
+# (tools/build_graph.py's load_typed_edges()).
+#
+# Each entry is a relationship the CONTENT-LINK crawler cannot see (a
+# citation link is the only thing scan_edges() finds): {from, to, type},
+# type one of supersedes / evidence-for / part-of. Every entry here must be
+# verified by actually reading both pages, not inferred from names or
+# titles alone; a candidate that does not hold on inspection is left out,
+# not added speculatively. Unknown node ids or types are dropped at build
+# time with a warning, never a hard failure.
+#
+# VERIFICATION RECORD (round-2, 2026-08-10; five candidates checked against
+# the actual page content, one held):
+#
+# KEPT:
+#   glb_direct_pilot_v1 evidence-for pipeline_glb_direct -- an explicit
+#   content href from the pilot page to the proposal page, and the pilot
+#   page frames itself as answering the proposal's own go/no-go gate.
+#
+# DROPPED (checked, did not hold, left out rather than added speculatively):
+#   emissive_filtering_v2_litshading_20260723 supersedes emissive_filtering
+#     -- a line-by-line read shows the two pages measure different funnel
+#     bases (73,470 shapes with a rescue step vs 80,735 with none): a
+#     different claim, not a replacement of the same one. No cross-link
+#     either direction.
+#   overfit_condtest evidence-for workspace/diagnostics -- zero mentions of
+#     either page in the other; the actual narrative motivation runs the
+#     opposite direction from the candidate.
+#   fullseg_19 evidence-for workspace/rendering -- no body-content link;
+#     the only connection is a shared page-tree entry (chrome, not content),
+#     and that tree links render_sweep, not fullseg_19.
+#   results_2k_v1 evidence-for workspace/diagnostics -- zero body mentions
+#     either direction; the apparent matches were both page-tree chrome.
+
+- from: glb_direct_pilot_v1
+  to: pipeline_glb_direct
+  type: evidence-for

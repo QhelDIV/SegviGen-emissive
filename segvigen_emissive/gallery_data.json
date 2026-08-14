@@ -1,0 +1,554 @@
+{
+  "kept": [
+    {
+      "sid": "6617ee9bc9964e3a848d912889afe71a",
+      "name": "Textured Environment",
+      "tags": [],
+      "pbrType": "metalness",
+      "vertexCount": 2566,
+      "thumb_file": "kept_6617ee9bc9964e3a848d912889afe71a.png",
+      "ok": true
+    },
+    {
+      "sid": "15bc856798cc447aaf73f5bd7271f229",
+      "name": "Speakerman Upgraded Ik Rig Mixamo not accurate",
+      "tags": [
+        "studio",
+        "rig",
+        "mixamo"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 282554,
+      "thumb_file": "kept_15bc856798cc447aaf73f5bd7271f229.png",
+      "ok": true
+    },
+    {
+      "sid": "f8a645154cd44607a2ac4078a488bd2f",
+      "name": "Makam Pahlawan Pongtiku",
+      "tags": [],
+      "pbrType": "specular",
+      "vertexCount": 23939,
+      "thumb_file": "kept_f8a645154cd44607a2ac4078a488bd2f.png",
+      "ok": true
+    },
+    {
+      "sid": "dde07c835c0e47c2a93c498f9bc41e7b",
+      "name": "Furry 2B Nier: Automata Free",
+      "tags": [
+        "cat",
+        "2b",
+        "cyborg"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 304476,
+      "thumb_file": "kept_dde07c835c0e47c2a93c498f9bc41e7b.png",
+      "ok": true
+    },
+    {
+      "sid": "ca03ac12250142e3b8d5f59f33f4552b",
+      "name": "Crystal 01 Procedural Material \ud83d\udc8e",
+      "tags": [
+        "jewel",
+        "ice",
+        "jewelry"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 321985,
+      "thumb_file": "kept_ca03ac12250142e3b8d5f59f33f4552b.png",
+      "ok": true
+    },
+    {
+      "sid": "7fc1a3be797c46d7ab35298bcdaf7b9c",
+      "name": "Glam Roxy Retex",
+      "tags": [
+        "fnafmodels",
+        "securitybreach",
+        "roxanne-wolf"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 42256,
+      "thumb_file": "kept_7fc1a3be797c46d7ab35298bcdaf7b9c.png",
+      "ok": true
+    },
+    {
+      "sid": "5e28f71a7eed42569cf249c31fde25cd",
+      "name": "CultureSeoulStation284 Dehabsil_3",
+      "tags": [],
+      "pbrType": "metalness",
+      "vertexCount": 112258,
+      "thumb_file": "kept_5e28f71a7eed42569cf249c31fde25cd.png",
+      "ok": true
+    },
+    {
+      "sid": "5038ada772e142159e244993427d5299",
+      "name": "Serpent Mangle - \"FNAF AR: Special Delivery\"",
+      "tags": [
+        "fnaf",
+        "mangle",
+        "fnafmangle"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 29090,
+      "thumb_file": "kept_5038ada772e142159e244993427d5299.png",
+      "ok": true
+    },
+    {
+      "sid": "ac35155d07a94fe29d397c07a4acfc85",
+      "name": "Meet Mat 2: Meet Cat",
+      "tags": [
+        "catwoman",
+        "substancepainter",
+        "substance"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 28222,
+      "thumb_file": "kept_ac35155d07a94fe29d397c07a4acfc85.png",
+      "ok": true
+    },
+    {
+      "sid": "1bec371fc1ce400e81d56c7a252ad41c",
+      "name": "Battle Armor Sonar Titan",
+      "tags": [
+        "titan",
+        "microphone",
+        "sonar"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 99868,
+      "thumb_file": "kept_1bec371fc1ce400e81d56c7a252ad41c.png",
+      "ok": true
+    },
+    {
+      "sid": "1a4f50b98afa4dfc8984883d798f1fcd",
+      "name": "Unsightly Fish",
+      "tags": [
+        "fish",
+        "substancepainter",
+        "substance"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 1846,
+      "thumb_file": "kept_1a4f50b98afa4dfc8984883d798f1fcd.png",
+      "ok": true
+    },
+    {
+      "sid": "56c146bd762649238a14b252ee4d9335",
+      "name": "tv robot Walking",
+      "tags": [
+        "tv",
+        "walking",
+        "robot"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 25301,
+      "thumb_file": "kept_56c146bd762649238a14b252ee4d9335.png",
+      "ok": true
+    },
+    {
+      "sid": "c5b60baffc674737ba58136e197bf018",
+      "name": "reaper hazmat weapon",
+      "tags": [
+        "overwatch",
+        "fanart3d",
+        "weapon"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 12689,
+      "thumb_file": "kept_c5b60baffc674737ba58136e197bf018.png",
+      "ok": true
+    },
+    {
+      "sid": "d309bace84ed4880b2babe95be95c9d4",
+      "name": "Chef Bot",
+      "tags": [],
+      "pbrType": "metalness",
+      "vertexCount": 20869,
+      "thumb_file": "kept_d309bace84ed4880b2babe95be95c9d4.png",
+      "ok": true
+    },
+    {
+      "sid": "5da30e8bedcf498bb6495fc768eddefa",
+      "name": "Runerock",
+      "tags": [],
+      "pbrType": "metalness",
+      "vertexCount": 226,
+      "thumb_file": "kept_5da30e8bedcf498bb6495fc768eddefa.png",
+      "ok": true
+    },
+    {
+      "sid": "176250ab53a34780b58755e19ef69422",
+      "name": "Character Model Bug",
+      "tags": [],
+      "pbrType": "metalness",
+      "vertexCount": 8668,
+      "thumb_file": "kept_176250ab53a34780b58755e19ef69422.png",
+      "ok": true
+    },
+    {
+      "sid": "b403057c3f814c94894f30294f718486",
+      "name": "Root",
+      "tags": [
+        "cute",
+        "plants",
+        "nature"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 466178,
+      "thumb_file": "kept_b403057c3f814c94894f30294f718486.png",
+      "ok": true
+    },
+    {
+      "sid": "a9190e97e72c4434b0586132fca79275",
+      "name": "Glam Rock Freddy",
+      "tags": [],
+      "pbrType": "metalness",
+      "vertexCount": 131009,
+      "thumb_file": "kept_a9190e97e72c4434b0586132fca79275.png",
+      "ok": true
+    },
+    {
+      "sid": "c720d61408e8424289ffeb6ebef694e1",
+      "name": "Elevator Building",
+      "tags": [
+        "elevator",
+        "building"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 1096,
+      "thumb_file": "kept_c720d61408e8424289ffeb6ebef694e1.png",
+      "ok": true
+    },
+    {
+      "sid": "cdd88b96333c491ebc17043088aae633",
+      "name": "Magic Orb",
+      "tags": [
+        "device",
+        "crystal",
+        "orb"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 3056,
+      "thumb_file": "kept_cdd88b96333c491ebc17043088aae633.png",
+      "ok": true
+    },
+    {
+      "sid": "fb5d595766974a57868f84890f4425d2",
+      "name": "BMW M6 GT3",
+      "tags": [
+        "style",
+        "bmw",
+        "cars"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 48399,
+      "thumb_file": "kept_fb5d595766974a57868f84890f4425d2.png",
+      "ok": true
+    },
+    {
+      "sid": "0595d55919744a1eb994bb991c2aabac",
+      "name": "Blender Collab 14.0 Final Scene",
+      "tags": [
+        "project",
+        "discord",
+        "deus"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 263649,
+      "thumb_file": "kept_0595d55919744a1eb994bb991c2aabac.png",
+      "ok": true
+    },
+    {
+      "sid": "91bc20c4d03e415ab7b45ac110a1ab71",
+      "name": "Finn Sword / Adventure Time",
+      "tags": [
+        "adventure",
+        "adventuretime",
+        "cartoon"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 24613,
+      "thumb_file": "kept_91bc20c4d03e415ab7b45ac110a1ab71.png",
+      "ok": true
+    },
+    {
+      "sid": "ad06f3ec91a24943ad4a38dd70413cda",
+      "name": "Old Green Payphone",
+      "tags": [
+        "prop",
+        "payphone",
+        "realistic"
+      ],
+      "pbrType": "metalness",
+      "vertexCount": 2080,
+      "thumb_file": "kept_ad06f3ec91a24943ad4a38dd70413cda.png",
+      "ok": true
+    }
+  ],
+  "dropped": [
+    {
+      "sid": "64c8230b9d88440693a6a58e95a1131b",
+      "name": "Ghosts on Mushrooms",
+      "tags": [
+        "mushroom",
+        "lowpoly",
+        "fantasy"
+      ],
+      "pbrType": null,
+      "vertexCount": 42670,
+      "thumb_file": "dropped_64c8230b9d88440693a6a58e95a1131b.png",
+      "ok": true
+    },
+    {
+      "sid": "438c47fe9b864bf4b826780815cd7a16",
+      "name": "Cindy The Cat",
+      "tags": [],
+      "pbrType": null,
+      "vertexCount": 86095,
+      "thumb_file": "dropped_438c47fe9b864bf4b826780815cd7a16.png",
+      "ok": true
+    },
+    {
+      "sid": "0d603a9c75f743d2925e57b8631012b4",
+      "name": "Sprinng Bonnie Silver Eyes",
+      "tags": [],
+      "pbrType": null,
+      "vertexCount": 94796,
+      "thumb_file": "dropped_0d603a9c75f743d2925e57b8631012b4.png",
+      "ok": true
+    },
+    {
+      "sid": "a69aa40fbc244b89853909fe636b4aef",
+      "name": "love bot and robot 386",
+      "tags": [
+        "createdwithai"
+      ],
+      "pbrType": null,
+      "vertexCount": 15437,
+      "thumb_file": "dropped_a69aa40fbc244b89853909fe636b4aef.png",
+      "ok": true
+    },
+    {
+      "sid": "947480be3b384fff99279cd6a49994a3",
+      "name": "Project Name - 2022-10-08T121006 909",
+      "tags": [],
+      "pbrType": null,
+      "vertexCount": 4,
+      "thumb_file": "dropped_947480be3b384fff99279cd6a49994a3.png",
+      "ok": true
+    },
+    {
+      "sid": "878a1f0783964860a2e8b8727cfdbc4f",
+      "name": "Trade Show Booth",
+      "tags": [
+        "booth",
+        "architecture",
+        "3d"
+      ],
+      "pbrType": null,
+      "vertexCount": 28464,
+      "thumb_file": "dropped_878a1f0783964860a2e8b8727cfdbc4f.png",
+      "ok": true
+    },
+    {
+      "sid": "56608657f3674aa497998019602ef36d",
+      "name": "urchin model export",
+      "tags": [],
+      "pbrType": null,
+      "vertexCount": 857,
+      "thumb_file": "dropped_56608657f3674aa497998019602ef36d.png",
+      "ok": true
+    },
+    {
+      "sid": "3de800cbccc841eab28c38277fbd4dd8",
+      "name": "Dogday",
+      "tags": [
+        "perro",
+        "poppyplaytimechapter3",
+        "dogday"
+      ],
+      "pbrType": null,
+      "vertexCount": 7596,
+      "thumb_file": "dropped_3de800cbccc841eab28c38277fbd4dd8.png",
+      "ok": true
+    },
+    {
+      "sid": "c2e8b0f46e27468db4c26ebb5e554cac",
+      "name": "notitle11",
+      "tags": [
+        "lowmance",
+        "blender"
+      ],
+      "pbrType": null,
+      "vertexCount": 3684,
+      "thumb_file": "dropped_c2e8b0f46e27468db4c26ebb5e554cac.png",
+      "ok": true
+    },
+    {
+      "sid": "af121f2dc1b144ebaf16794973c56716",
+      "name": "20th Century Fox Film Corporation Logo (July 15,",
+      "tags": [],
+      "pbrType": null,
+      "vertexCount": 226422,
+      "thumb_file": "dropped_af121f2dc1b144ebaf16794973c56716.png",
+      "ok": true
+    },
+    {
+      "sid": "3422973fe50743c4854527420f2f8f1f",
+      "name": "XBUEBLE 4",
+      "tags": [],
+      "pbrType": null,
+      "vertexCount": 12222,
+      "thumb_file": "dropped_3422973fe50743c4854527420f2f8f1f.png",
+      "ok": true
+    },
+    {
+      "sid": "f103bf0db3de4d9dbeeb0c534d361398",
+      "name": "N9941720 Melissa Nguyen 3D Project",
+      "tags": [
+        "japan",
+        "fantasymedieval",
+        "magic"
+      ],
+      "pbrType": null,
+      "vertexCount": 9307,
+      "thumb_file": "dropped_f103bf0db3de4d9dbeeb0c534d361398.png",
+      "ok": true
+    },
+    {
+      "sid": "febbe10dc8534eae8d523959f3d3b524",
+      "name": "Vintage San Diego RRY Traffic Light posts",
+      "tags": [
+        "trafficlight",
+        "traffic",
+        "vintage"
+      ],
+      "pbrType": null,
+      "vertexCount": 53936,
+      "thumb_file": "dropped_febbe10dc8534eae8d523959f3d3b524.png",
+      "ok": true
+    },
+    {
+      "sid": "11741f3e71f84492a89f44403bf6ac9b",
+      "name": "Fnaf 1 Classics release",
+      "tags": [
+        "createdwithai"
+      ],
+      "pbrType": null,
+      "vertexCount": 158426,
+      "thumb_file": "dropped_11741f3e71f84492a89f44403bf6ac9b.png",
+      "ok": true
+    },
+    {
+      "sid": "1064b1c5748947fc825fbca88d110526",
+      "name": "Torres Chica The Chicken",
+      "tags": [],
+      "pbrType": null,
+      "vertexCount": 95446,
+      "thumb_file": "dropped_1064b1c5748947fc825fbca88d110526.png",
+      "ok": true
+    },
+    {
+      "sid": "38196a0e8961492481953f1d30f97c78",
+      "name": "StageShibuy002",
+      "tags": [
+        "effect",
+        "stage",
+        "axis"
+      ],
+      "pbrType": null,
+      "vertexCount": 1004,
+      "thumb_file": "dropped_38196a0e8961492481953f1d30f97c78.png",
+      "ok": true
+    },
+    {
+      "sid": "84eccc7888f34456a55433eb17251a3b",
+      "name": "Enviroment_5030370",
+      "tags": [],
+      "pbrType": null,
+      "vertexCount": 61126,
+      "thumb_file": "dropped_84eccc7888f34456a55433eb17251a3b.png",
+      "ok": true
+    },
+    {
+      "sid": "8d2412c1fd504a5f80a1314e51612078",
+      "name": "71c390db-8f7a-4f67-8308-2979af2ddc83.usdz",
+      "tags": [
+        "celumid-eda6428c-339f-4068-835d-0d40b877f1f1"
+      ],
+      "pbrType": null,
+      "vertexCount": 115094,
+      "thumb_file": "dropped_8d2412c1fd504a5f80a1314e51612078.png",
+      "ok": true
+    },
+    {
+      "sid": "7571a872611c4ae69fbd9204220053e7",
+      "name": "Vas cu m\u00e2nere apar\u021bin\u00e2nd culturii Boian",
+      "tags": [
+        "neolithic",
+        "culturalheritage",
+        "photogrammetry"
+      ],
+      "pbrType": null,
+      "vertexCount": 73037,
+      "thumb_file": "dropped_7571a872611c4ae69fbd9204220053e7.png",
+      "ok": true
+    },
+    {
+      "sid": "024dc21eddd2420aabe8463cb96fb202",
+      "name": "204v2",
+      "tags": [],
+      "pbrType": null,
+      "vertexCount": 44428,
+      "thumb_file": "dropped_024dc21eddd2420aabe8463cb96fb202.png",
+      "ok": true
+    },
+    {
+      "sid": "0e539be9a4f94d4c875f61416197d68b",
+      "name": "214449 Rullo Lightstar ceiling lamp",
+      "tags": [
+        "lamp",
+        "ceilinglamp",
+        "lighting"
+      ],
+      "pbrType": null,
+      "vertexCount": 53302,
+      "thumb_file": "dropped_0e539be9a4f94d4c875f61416197d68b.png",
+      "ok": true
+    },
+    {
+      "sid": "c65f7330ce7746b6af3505648596ecf5",
+      "name": "191013 Elevated Small Shelter",
+      "tags": [
+        "game-model"
+      ],
+      "pbrType": null,
+      "vertexCount": 2562,
+      "thumb_file": "dropped_c65f7330ce7746b6af3505648596ecf5.png",
+      "ok": true
+    },
+    {
+      "sid": "79be1cd37fb74aa084ce9642fc7b7a3f",
+      "name": "Lottie (OOTIM)",
+      "tags": [],
+      "pbrType": null,
+      "vertexCount": 20176,
+      "thumb_file": "dropped_79be1cd37fb74aa084ce9642fc7b7a3f.png",
+      "ok": true
+    },
+    {
+      "sid": "7efffde02d0d4c05b4b39ad42b086ad3",
+      "name": "Cyber Traffic",
+      "tags": [
+        "traffic",
+        "cyber",
+        "information"
+      ],
+      "pbrType": null,
+      "vertexCount": 22832,
+      "thumb_file": "dropped_7efffde02d0d4c05b4b39ad42b086ad3.png",
+      "ok": true
+    }
+  ],
+  "kept_failures": [],
+  "dropped_failures": []
+}
