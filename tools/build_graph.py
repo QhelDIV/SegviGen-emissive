@@ -558,10 +558,17 @@ def legend_html():
         f'<span class="gl-item"><span class="gl-dot" style="background:{color}"></span>{html.escape(label)}</span>'
         for _, label, color in TRACK_LEGEND)
     page_item = '<span class="gl-item"><span class="gl-dot gl-dot-page"></span>page (no board entry)</span>'
+    # Two DIFFERENT direction semantics, each stated on its own legend entry
+    # (owner-asked 2026-08-14: the old wording claimed one universal rule
+    # that only the solid arrows obey): solid arrows are temporal/causal
+    # (motivator first), dashed arrows read as the labeled sentence ("A
+    # supersedes B" points newer -> older, following the words, not time).
+    arrow_item = ('<span class="gl-item"><span class="gl-arrow"></span>'
+                  'solid arrow: motivator &rarr; motivated (earlier work first)</span>')
     typed_item = ('<span class="gl-item"><span class="gl-dash"></span>'
-                  'curated relationship (labeled on the edge)</span>')
-    arrow_item = '<span class="gl-item"><span class="gl-arrow"></span>arrow points motivator &rarr; motivated</span>'
-    return f'<div class="graph-legend" id="graph-legend">{items}{page_item}{typed_item}{arrow_item}</div>'
+                  'dashed arrow: curated relationship, read along the arrow '
+                  '(&ldquo;A supersedes&nbsp;&rarr; B&rdquo;)</span>')
+    return f'<div class="graph-legend" id="graph-legend">{items}{page_item}{arrow_item}{typed_item}</div>'
 
 
 def _asset_hash8(path):
