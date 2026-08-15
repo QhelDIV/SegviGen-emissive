@@ -439,6 +439,22 @@ def build_graph_data():
                 out.append({"source": a, "target": b, "type": e["type"]})
         return out
     typed_edges = rekey_edges(typed_edges)
+    # Display transform (owner-ratified 2026-08-14): one direction rule for
+    # the whole graph -- every arrow reads earlier/feeding -> later/current,
+    # dashed words still read along the arrow as a sentence. Authors keep
+    # writing the natural active vocabulary in graph_edges.yaml ("A
+    # supersedes B"); the build flips supersedes into "replaced by"
+    # (old -> new, along time) and renames the rest to plain reading words.
+    TYPED_DISPLAY = {"supersedes": ("replaced by", True),   # (label, flip)
+                     "evidence-for": ("supports", False),
+                     "part-of": ("part of", False),
+                     "same-page": ("same page", False)}
+    disp = []
+    for e in typed_edges:
+        label, flip = TYPED_DISPLAY.get(e["type"], (e["type"], False))
+        a, b = (e["target"], e["source"]) if flip else (e["source"], e["target"])
+        disp.append({"source": a, "target": b, "type": label})
+    typed_edges = disp
     upstream_edges = job_upstream_edges + rekey_edges(page_upstream_edges)
     # Crawled links are FLIPPED to cited -> citing (owner-caught on
     # render_doc/render_sweep, 2026-08-14): a citation means the cited work
@@ -558,16 +574,16 @@ def legend_html():
         f'<span class="gl-item"><span class="gl-dot" style="background:{color}"></span>{html.escape(label)}</span>'
         for _, label, color in TRACK_LEGEND)
     page_item = '<span class="gl-item"><span class="gl-dot gl-dot-page"></span>page (no board entry)</span>'
-    # Two DIFFERENT direction semantics, each stated on its own legend entry
-    # (owner-asked 2026-08-14: the old wording claimed one universal rule
-    # that only the solid arrows obey): solid arrows are temporal/causal
-    # (motivator first), dashed arrows read as the labeled sentence ("A
-    # supersedes B" points newer -> older, following the words, not time).
+    # ONE direction rule for the whole graph (owner-ratified 2026-08-14,
+    # after two rounds of legend confusion): every arrow reads earlier or
+    # feeding work -> later or current work; dashed words are chosen so the
+    # sentence also reads along the arrow ("supersedes" became "replaced
+    # by", flipped at build time -- see build_graph_data()'s TYPED_DISPLAY).
     arrow_item = ('<span class="gl-item"><span class="gl-arrow"></span>'
-                  'solid arrow: motivator &rarr; motivated (earlier work first)</span>')
+                  'every arrow: earlier work &rarr; what followed from it</span>')
     typed_item = ('<span class="gl-item"><span class="gl-dash"></span>'
-                  'dashed arrow: curated relationship, read along the arrow '
-                  '(&ldquo;A supersedes&nbsp;&rarr; B&rdquo;)</span>')
+                  'dashed: curated relationship, read along the arrow '
+                  '(&ldquo;A replaced by&nbsp;&rarr; B&rdquo;)</span>')
     return f'<div class="graph-legend" id="graph-legend">{items}{page_item}{arrow_item}{typed_item}</div>'
 
 
@@ -616,7 +632,9 @@ def build_graph_tab(out_dir, graph_src=None):
       motivation is written), <code>web/pages.yaml</code> covers the legacy pages, plain arrows are
       content links crawled from the pages' rendered HTML (drawn from the cited work to the page
       citing it, so every arrow reads earlier &rarr; later), and dashed labeled arrows are curated
-      relationships (supersedes, evidence-for, part-of, same-page) checked by hand. Click a node
+      relationships checked by hand (&ldquo;replaced by&rdquo;, &ldquo;supports&rdquo;,
+      &ldquo;part of&rdquo;, &ldquo;same page&rdquo;), worded so the sentence also reads along
+      the arrow in the same earlier-first direction. Click a node
       for its full record in the side card &mdash; motivation, status, outcome, latest log &mdash;
       straight from the board entry; click empty space or press Escape to clear. Double-click opens
       the page (or the board for a job without one). Map positions persist across rebuilds;

@@ -100,3 +100,11 @@
 - from: paper_v3
   to: workspace/paper_skeleton
   type: same-page
+
+# DISPLAY vocabulary note (2026-08-14): this file keeps the active
+# authoring voice ("A supersedes B" -- natural to write and verify). The
+# build (tools/build_graph.py TYPED_DISPLAY) renders supersedes FLIPPED as
+# "replaced by" (old -> new, along time) and the rest as plain reading
+# words (supports / part of / same page), so every arrow on the live graph
+# reads earlier-first. Author here in active voice; never write
+# "replaced-by" entries in this file.
