@@ -794,7 +794,27 @@
         if (n.status) badge(n.status, "gd-status-" + n.status);
         if (n.track) badge(n.track);
       } else {
-        badge("page" + (n.tier ? " · " + (TIER_LABEL[n.tier] || n.tier) : ""));
+        badge((TIER_LABEL[n.tier] || n.tier || "legacy"));
+      }
+      // page-or-not, up front (owner-asked 2026-08-14): a linked "page"
+      // chip when there is one (hover names it), a muted "no page" chip
+      // otherwise -- the answer is visible before any scrolling.
+      if (n.kind === "job" && n.page_name) {
+        var pa = document.createElement("a");
+        pa.className = "gd-badge gd-page-chip";
+        pa.href = n.url; pa.target = "_blank"; pa.rel = "noopener";
+        pa.textContent = "page ↗";
+        pa.title = n.page_name;
+        kick.appendChild(pa);
+      } else if (n.kind === "job") {
+        badge("no page", "gd-nopage");
+      } else {
+        var pa2 = document.createElement("a");
+        pa2.className = "gd-badge gd-page-chip";
+        pa2.href = n.url; pa2.target = "_blank"; pa2.rel = "noopener";
+        pa2.textContent = "page ↗";
+        pa2.title = n.id;
+        kick.appendChild(pa2);
       }
       var h = document.createElement("h3");
       h.className = "gd-title";
@@ -808,9 +828,6 @@
         if (d.outcome) {
           div("gd-label", "Outcome");
           div("gd-text gd-outcome", d.outcome);
-        } else if (d.log_tail && d.log_tail.length) {
-          div("gd-label", "Latest log");
-          d.log_tail.forEach(function (l) { div("gd-log", l); });
         }
       } else if (d.blurb) {
         // curated pages.yaml blurbs are authored HTML from this repo
@@ -844,19 +861,19 @@
       }
       chips("Motivated by", ups);
       chips("Motivated", downs);
-      var links = div("gd-links");
-      function link(href, text) {
-        if (!href) return;
-        var a = document.createElement("a");
-        a.href = href; a.target = "_blank"; a.rel = "noopener";
-        a.textContent = text;
-        links.appendChild(a);
+      if (n.kind === "job" && n.board_url) {
+        var links = div("gd-links");
+        var ba = document.createElement("a");
+        ba.href = n.board_url; ba.target = "_blank"; ba.rel = "noopener";
+        ba.textContent = "Board entry";
+        links.appendChild(ba);
       }
-      if (n.kind === "job") {
-        if (n.page_name) link(n.url, "Open page: " + n.page_name);
-        link(n.board_url, "Board entry");
-      } else {
-        link(n.url, "Open page");
+      // Latest log LAST (owner-asked 2026-08-14): identity and substance
+      // first, the raw trail at the bottom -- and always shown now, not
+      // only for outcome-less jobs.
+      if (n.kind === "job" && d.log_tail && d.log_tail.length) {
+        div("gd-label", "Latest log");
+        d.log_tail.forEach(function (l) { div("gd-log", l); });
       }
       detailEl.hidden = false;
       rootsEl.hidden = true;

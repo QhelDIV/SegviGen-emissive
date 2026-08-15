@@ -281,3 +281,8 @@
   content: ""; position: absolute; inset: 3px; border-radius: 50%;
   background: var(--paper, #f4f1ea);
 }
+
+/* the page-or-not chip in the card's badge row */
+a.gd-page-chip { color: var(--accent-ink); border-color: var(--accent-ink); text-decoration: none; }
+a.gd-page-chip:hover { background: var(--panel); }
+.gd-nopage { opacity: .65; }
