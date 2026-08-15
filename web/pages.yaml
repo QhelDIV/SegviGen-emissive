@@ -258,7 +258,6 @@ pages:
 
   - name: time_cost
     tags: [results]
-    upstreams: [ckpt8_eval]
     blurb: >
       Where the segvigen-emissive pipeline spends its time: every stage (data processing,
       model inference, mask-to-mesh conversion, Blender rendering) measured from Solar's

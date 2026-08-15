@@ -58,8 +58,12 @@
   pointer-events: none; letter-spacing: .01em;
 }
 
-.graph-orphans {
-  flex: 0 0 260px; max-width: 260px;
+/* The side rail (job-graph round): ONE flex slot with two exclusive
+ * occupants -- the detail card while a node is selected, the no-upstream
+ * list otherwise. Sizing lives on the wrapper so swapping occupants can
+ * never change the canvas width. */
+.graph-side { flex: 0 0 300px; max-width: 300px; }
+.graph-orphans, .graph-detail {
   border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
   padding: 14px 16px; max-height: 62vh; min-height: 420px; overflow-y: auto;
 }
@@ -169,7 +173,10 @@
  * arrangement; hiding by default and revealing only what is actually
  * being looked at is the same fix that already solved this for node
  * labels, applied to the other kind of always-on label this graph draws. */
-.graph-svg.labels-visible .gn-typed-label,
+/* Job-graph round: typed-edge words no longer reveal with the general
+ * zoom threshold -- measured on the binned timeline, the words landed on
+ * node labels the moment both revealed together. They are hover/selection
+ * detail (.lit), the card names the relationship anyway. */
 .gn-typed-label.lit { opacity: 1; }
 /* Upstream edges (round-3, the primary motivation-edge store) get a
  * touch more visual weight than a plain crawled content link -- they are
@@ -203,7 +210,8 @@
 
 @media (max-width: 900px) {
   .graph-layout { flex-direction: column; }
-  .graph-orphans { flex: 1 1 auto; max-width: none; max-height: 260px; min-height: 0; }
+  .graph-side { flex: 1 1 auto; max-width: none; width: 100%; }
+  .graph-orphans, .graph-detail { max-height: 320px; min-height: 0; }
   .graph-svg { height: 52vh; min-height: 340px; }
 }
 @media (max-width: 480px) {
@@ -211,3 +219,56 @@
   .graph-page #graph-search { min-width: 0; width: 100%; }
   .graph-svg { height: 46vh; min-height: 300px; }
 }
+
+/* ------------------------------------------------------- detail card --
+ * (job-graph round, 2026-08-14): the click-through record for one node.
+ * Same panel chrome as the no-upstream list it swaps with; content
+ * typography mirrors the jobs tab's own hierarchy (mono kicker, serifed
+ * title, quiet labels) so the card reads as the board seen from the map. */
+.gd-kicker { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 0 0 6px; }
+.gd-slug {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .8rem;
+  color: var(--accent-ink); letter-spacing: .02em;
+}
+.gd-badge {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+  padding: 1px 7px; border-radius: 9px; border: 1px solid var(--border);
+  color: var(--muted); background: var(--panel2);
+}
+.gd-status-ongoing { color: #fff; background: var(--good); border-color: var(--good); }
+.gd-status-done { background: var(--panel2); }
+.gd-status-frozen { border-color: var(--accent); color: var(--accent-ink); }
+.gd-title { margin: 0 0 4px; font-size: 1.02rem; line-height: 1.3; }
+.gd-dates { font-size: .74rem; color: var(--muted); margin: 0 0 10px; }
+.gd-label {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin: 10px 0 3px;
+}
+.gd-text { font-size: .82rem; line-height: 1.5; }
+.gd-outcome { color: var(--accent-ink); }
+.gd-blurb { color: var(--ink); }
+.gd-blurb code { font-size: .76rem; }
+.gd-log {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .72rem;
+  line-height: 1.45; color: var(--muted); margin: 0 0 4px;
+}
+.gd-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.gd-chip {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .72rem;
+  padding: 2px 8px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--panel2); color: var(--accent-ink); cursor: pointer;
+}
+.gd-chip:hover { background: var(--panel); border-color: var(--accent-ink); }
+.gd-links { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
+.gd-links a { font-size: .8rem; color: var(--accent-ink); text-decoration: none; }
+.gd-links a:hover { text-decoration: underline; }
+
+/* legend dot for the hollow artifact-page node style */
+.graph-legend .gl-dot-page {
+  background: transparent; border: 1.6px solid var(--muted); width: 8px; height: 8px;
+}
+/* job-graph v2 (2026-08-14) */
+
+/* timeline labels: a step smaller than map's (centered under circles in
+ * fixed-width bins, so width is the scarce resource there) */
+.graph-svg.mode-timeline .gn-label { font-size: 9.5px; }

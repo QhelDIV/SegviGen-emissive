@@ -230,6 +230,59 @@ const JOURNEYS = [
       return { pass, detail: { before, duringDrag, after } };
     },
   },
+
+  {
+    name: "J8 detail card: select fills the card from the board record and swaps the rail; every exit restores the roots list",
+    async run(page) {
+      const cardState = () => page.evaluate(() => ({
+        cardHidden: document.querySelector("#graph-detail").hidden,
+        rootsHidden: document.querySelector("#graph-roots").hidden,
+        slug: (document.querySelector("#graph-detail .gd-slug") || {}).textContent || "",
+        hasMotivation: !!document.querySelector("#graph-detail .gd-text"),
+      }));
+      const box = await nodeBox(page, "ckpt8_eval");
+      await page.mouse.click(box.x, box.y);
+      await page.waitForTimeout(150);
+      const during = await cardState();
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(150);
+      const afterEsc = await cardState();
+      // exit 2: background click after re-selecting
+      await page.mouse.click(box.x, box.y);
+      await page.waitForTimeout(150);
+      const bg = await bgPoint(page, "tl");
+      await page.mouse.click(bg.x, bg.y);
+      await page.waitForTimeout(150);
+      const afterBg = await cardState();
+      const pass = during.cardHidden === false && during.rootsHidden === true &&
+        during.slug === "ckpt8_eval" && during.hasMotivation &&
+        afterEsc.cardHidden === true && afterEsc.rootsHidden === false &&
+        afterBg.cardHidden === true && afterBg.rootsHidden === false;
+      return { pass, detail: { during, afterEsc, afterBg } };
+    },
+  },
+
+  {
+    name: "J9 detail card chips navigate: an upstream chip moves the selection to that node, card follows",
+    async run(page) {
+      const box = await nodeBox(page, "ckpt8_eval");
+      await page.mouse.click(box.x, box.y);
+      await page.waitForTimeout(150);
+      const chip = await page.$("#graph-detail .gd-chip");
+      if (!chip) return { pass: false, detail: "no chip rendered on ckpt8_eval (expected upstream chips)" };
+      const chipSlug = await chip.evaluate((el) => el.textContent);
+      await chip.click();
+      await page.waitForTimeout(200);
+      const after = await page.evaluate(() => ({
+        selected: [...document.querySelectorAll(".gn-node.selected")].map((e) => e.dataset.id),
+        cardSlug: (document.querySelector("#graph-detail .gd-slug") || {}).textContent || "",
+        cardHidden: document.querySelector("#graph-detail").hidden,
+      }));
+      const pass = after.cardHidden === false && after.cardSlug === chipSlug &&
+        after.selected.length === 1 && after.selected[0] === chipSlug;
+      return { pass, detail: { chipSlug, after } };
+    },
+  },
 ];
 
 async function main() {

@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""build_graph.py — the Lightgen page-relationship graph (graph.json + graph.html).
+"""build_graph.py — the Lightgen JOB graph (graph.json + graph.html).
 
-An Obsidian-style graph of the project's published pages: nodes are pages,
-directed edges are content links between them ("builds on / cites"), read
-straight out of each page's own rendered HTML. The point is orientation —
-seeing how the project's pages connect and grew — for the owner and for
+An Obsidian-style graph of the project's WORK: nodes are board jobs
+(owner-ratified 2026-08-14: causality is a property of work items; pages
+are the jobs' artifacts), plus the published pages no job claims (legacy
+artifacts, drawn hollow). A job's `page:` field absorbs that page — the
+job node carries its URL, the page stops being its own node. Directed
+edges: the board's `upstreams:` field (primary; declared at dispatch),
+pages.yaml `upstreams:` for legacy pages, crawled content links, and
+hand-verified typed relations. Click-through: every node carries a
+`detail` payload (motivation/outcome/log tail for jobs, blurb for pages)
+that graph_view.js renders as the side card. The point is orientation —
+seeing how the project's work connects and grew — for the owner and for
 future agents, not a demo.
 
 Usage:
@@ -20,10 +27,21 @@ CONTRACT (graph.json, the renderer-agnostic output — read this before writing
 another renderer against it):
     {
       "generated_at": "<iso8601>",
-      "nodes": [{"id", "title", "label", "tier", "url", "created", "modified",
-                 "x", "y", "in_degree", "out_degree", "has_upstream"}, ...],
+      "nodes": [  # kind "job":
+                 {"id", "kind", "title", "label", "track", "status", "url",
+                  "page_name", "board_url", "created", "modified", "x", "y",
+                  "in_degree", "out_degree", "has_upstream",
+                  "detail": {"executor", "motivation", "outcome",
+                              "log_tail", "n_log"}},
+                  # kind "page" (legacy, no board entry):
+                 {"id", "kind", "title", "label", "tier", "url", "created",
+                  "modified", "x", "y", "in_degree", "out_degree",
+                  "has_upstream", "detail": {"blurb"}}, ...],
       "edges": [{"source", "target", "type": "link"}, ...]
     }
+"id" is the board slug for a job (already the short unique name), the
+inventory name for a legacy page; a job slug may never collide with a
+surviving page id (build-failing guard).
 "id" is the same page identity inventory_pages.py already uses (its "name"
 column — bare for root/preview tiers, "updates/<date>" / "workspace/<slug>"
 for the two nested tiers). "title" is the page's full rendered title (shown
@@ -156,11 +174,14 @@ import sys
 from urllib.parse import urlsplit
 
 from xgpage import graph as xg
+from xgpage import jobs as xjobs
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 import build_console as bc  # noqa: E402
 import inventory_pages as ip  # noqa: E402
+
+JOBS_DIR = REPO / "jobs"
 
 PUBLISH_DEST = bc.PUBLISH_DEST
 BASE_URL = bc.BASE_URL
@@ -172,6 +193,12 @@ GRAPH_EDGES_YAML = REPO / "web" / "graph_edges.yaml"
 GRAPH_CONFIG = xg.GraphConfig(
     site_root=SITE_ROOT,
     site_host=SITE_HOST,
+    # Job-graph compaction (2026-08-14): the default spring_k=340 left
+    # repulsion (k^2/dist) flinging peripheral degree-1 nodes ~3000 world
+    # units out, and the fit-everything overview zoom collapsed to 0.057.
+    # 170 shrinks repulsion-dominated spacing (~1/4 of stock) while the declutter
+    # pass still enforces min_sep; re-minted once on adoption.
+    spring_k=170.0,
     positions_file=REPO / ".console_build" / "graph_positions.json",
     typed_edges_path=GRAPH_EDGES_YAML,
     # "same-page" added round-3: two published URLs that are really the
@@ -208,7 +235,7 @@ GRAPH_CONFIG = xg.GraphConfig(
 # node/edge count changes enough to meaningfully shift the fit zoom (a QA
 # overlap check catching zero violations after a rebuild is the signal
 # it's still good).
-FIT_ZOOM = 0.155
+FIT_ZOOM = 0.106
 LABEL_PX_PER_CHAR = 4.85
 BASELINE_CHARS = 30
 BASELINE_RADIUS = 9.0
@@ -272,6 +299,48 @@ def load_upstream_edges(nodes, curation):
     return out
 
 
+# ----------------------------------------------------------- job node scan --
+def _iso(ts):
+    """Board timestamps are 'YYYY-MM-DD HH:MM'; the renderer's date parsing
+    (and JSON consumers generally) want ISO8601."""
+    return ts.replace(" ", "T") if ts else ""
+
+
+def scan_job_nodes():
+    """Every board entry becomes a graph node (the job-graph conversion,
+    owner-ratified 2026-08-14: causality is a property of work items; pages
+    are the jobs' artifacts). Node id = the board slug, which is already the
+    short unique name the owner asked for. A job's `page:` field ABSORBS
+    that page: the page stops being its own node and the job node carries
+    its URL and name instead (double-click opens the page, the card links
+    both page and board). The full job record the card needs (motivation,
+    outcome, log tail) rides along in `detail` -- the same parsed fields the
+    jobs tab renders, no second bookkeeping surface."""
+    out = []
+    for p in sorted(JOBS_DIR.glob("*.md")):
+        e = xjobs.parse(p)
+        pg = (e.get("page") or "").strip()
+        page_name = "" if (not pg or pg.lower().startswith("none")) else pg
+        ups = [s.strip() for s in (e.get("upstreams") or "").split(",") if s.strip()]
+        log = e.get("log", [])
+        out.append({
+            "id": p.stem, "kind": "job", "label": p.stem,
+            "title": e.get("title") or p.stem,
+            "track": e.get("track", ""), "status": e.get("status", ""),
+            "created": _iso(e.get("started", "")), "modified": _iso(e.get("updated", "")),
+            "page_name": page_name,
+            "upstreams": ups,
+            "detail": {
+                "executor": e.get("executor", ""),
+                "motivation": e.get("motivation", ""),
+                "outcome": e.get("outcome", ""),
+                "log_tail": [f"{ts} {txt}" for ts, _a, txt in log[-3:]],
+                "n_log": len(log),
+            },
+        })
+    return out
+
+
 # --------------------------------------------------------------- node scan --
 def node_dir(url):
     """URL -> the page's directory path relative to PUBLISH_DEST, e.g.
@@ -303,28 +372,104 @@ def _read_node_html(node):
 
 # ------------------------------------------------------------------ build --
 def build_graph_data():
-    nodes = scan_nodes()
+    """JOB-GRAPH model (2026-08-14, owner-ratified): nodes are board JOBS
+    plus the published pages no job claims (legacy artifacts); a job's
+    `page:` absorbs that page, so every edge endpoint that referenced the
+    page (crawled link, typed relation, pages.yaml upstream) is RE-KEYED to
+    the owning job's slug. Job causality (`upstreams:` on the board entry)
+    is the primary directed-edge store; pages.yaml `upstreams:` covers only
+    the jobless legacy pages."""
+    pages = scan_nodes()
+    jobs = scan_job_nodes()
     curation = ip.load_curation()
-    edges = xg.scan_edges(nodes, _read_node_html, GRAPH_CONFIG)  # crawled; plain (a, b) tuples
-    node_ids = sorted(n["id"] for n in nodes)
-    typed_edges = xg.load_typed_edges(node_ids, GRAPH_CONFIG)  # curated; [{"source","target","type"}, ...]
-    upstream_edges = load_upstream_edges(nodes, curation)  # pages.yaml `upstreams:`; [{"source","target","type":"upstream"}, ...]
+
+    page_ids = sorted(p["id"] for p in pages)
+    claimed = {}  # page name -> owning job slug (first claimant wins)
+    for j in jobs:
+        pn = j["page_name"]
+        if pn and pn in set(page_ids) and pn not in claimed:
+            claimed[pn] = j["id"]
+        elif pn and pn not in set(page_ids):
+            print(f"[jobs] {j['id']}: page {pn!r} not in the inventory, kept as job-only node", file=sys.stderr)
+    page_by_id = {p["id"]: p for p in pages}
+    for pn, slug in claimed.items():
+        # a job absorbing a page inherits its URL; the page node disappears
+        j = next(j for j in jobs if j["id"] == slug)
+        j["url"] = page_by_id[pn]["url"]
+        # a page's publish date can predate board adoption; keep the JOB's
+        # own started date for the timeline (work order, not publish order)
+    artifact_pages = [p for p in pages if p["id"] not in claimed]
+
+    # id collision guard: a job slug must not equal a surviving page id
+    art_ids = {p["id"] for p in artifact_pages}
+    for j in jobs:
+        if j["id"] in art_ids:
+            sys.exit(f"error: job slug {j['id']!r} collides with an unclaimed page id; "
+                     f"claim the page (set-page) or rename one")
+
+    # --- edges are DISCOVERED on pages, then re-keyed to job endpoints ---
+    rekey = {pn: slug for pn, slug in claimed.items()}
+    rk = lambda nid: rekey.get(nid, nid)
+    crawled = xg.scan_edges(pages, _read_node_html, GRAPH_CONFIG)  # plain (a, b) page tuples
+    typed_edges = xg.load_typed_edges(page_ids, GRAPH_CONFIG)
+    page_upstream_edges = load_upstream_edges(pages, curation)
+    job_upstream_edges = []
+    job_ids = {j["id"] for j in jobs}
+    for j in jobs:
+        for up in j["upstreams"]:
+            if up in job_ids and up != j["id"]:
+                job_upstream_edges.append({"source": up, "target": j["id"], "type": "upstream"})
+            else:
+                print(f"[jobs] {j['id']}: dropping upstream {up!r}", file=sys.stderr)
+
+    def rekey_edges(es):
+        out = []
+        for e in es:
+            a, b = rk(e["source"]), rk(e["target"])
+            if a != b:  # re-keying can fold a page->page edge into a self-loop
+                out.append({"source": a, "target": b, "type": e["type"]})
+        return out
+    typed_edges = rekey_edges(typed_edges)
+    upstream_edges = job_upstream_edges + rekey_edges(page_upstream_edges)
+    crawled = sorted({(rk(a), rk(b)) for a, b in crawled if rk(a) != rk(b)})
+
+    node_ids = sorted(job_ids | art_ids)
 
     # LAYOUT and degree counting treat a typed OR upstream edge as a real
-    # connection too (pulls nodes together and counts against orphan status
-    # exactly like a content link does) -- combined as plain (a, b) pairs,
-    # type-blind, for compute_layout() and the position-persistence
-    # neighbor-set diff.
+    # connection too -- combined as plain (a, b) pairs, type-blind, for
+    # compute_layout() and the position-persistence neighbor-set diff.
     typed_pairs = [(e["source"], e["target"]) for e in typed_edges]
     upstream_pairs = [(e["source"], e["target"]) for e in upstream_edges]
-    all_pairs = sorted(set(edges) | set(typed_pairs) | set(upstream_pairs))
+    all_pairs = sorted(set(crawled) | set(typed_pairs) | set(upstream_pairs))
     in_deg_pre = {nid: 0 for nid in node_ids}
     for _a, b in all_pairs:
         in_deg_pre[b] += 1
-    by_id = {n["id"]: n for n in nodes}
-    labels = {nid: (curation.get(nid, {}).get("shortname") or nid) for nid in node_ids}
+    labels = {}
+    for j in jobs:
+        labels[j["id"]] = j["label"]
+    for p in artifact_pages:
+        labels[p["id"]] = curation.get(p["id"], {}).get("shortname") or p["id"]
     node_reach = {nid: node_reach_excess(labels[nid], in_deg_pre[nid]) for nid in node_ids}
     positions = xg.compute_layout(node_ids, all_pairs, GRAPH_CONFIG, node_reach=node_reach)
+
+    # Corral the isolated nodes (job-graph round): the FR pass has nothing
+    # tethering a degree-0 node, so repulsion flings it thousands of world
+    # units out -- measured 7000x7600 bbox for a graph whose connected mass
+    # spans a third of that, which drove the fit-everything zoom to 0.057
+    # and overlapped the constant-screen-size circles. Isolated nodes park
+    # instead on a deterministic shelf (id-sorted grid) under the connected
+    # mass: honest ("not yet connected" reads as exactly that), compact,
+    # and stable across rebuilds.
+    connected = {a for a, _b in all_pairs} | {b for _a, b in all_pairs}
+    isolated = sorted(nid for nid in node_ids if nid not in connected)
+    if isolated:
+        cxs = [positions[nid][0] for nid in connected] or [0.0]
+        cys = [positions[nid][1] for nid in connected] or [0.0]
+        x0, x1 = min(cxs), max(cxs)
+        shelf_y = max(cys) + 300
+        cols = max(1, int((x1 - x0) // 220) + 1)
+        for i, nid in enumerate(isolated):
+            positions[nid] = (x0 + (i % cols) * 220.0, shelf_y + (i // cols) * 240.0)
     xg.save_positions(GRAPH_CONFIG, positions, all_pairs)
 
     in_deg = {nid: 0 for nid in node_ids}
@@ -337,24 +482,41 @@ def build_graph_data():
         has_upstream[b] = True
 
     out_nodes = []
-    for nid in node_ids:
-        n = by_id[nid]
+    for j in jobs:
+        nid = j["id"]
         x, y = positions[nid]
-        out_nodes.append({"id": nid, "title": n["title"], "label": labels[nid], "tier": n["tier"],
-                           "url": n["url"], "created": n["created"], "modified": n["modified"],
-                           "x": x, "y": y, "in_degree": in_deg[nid], "out_degree": out_deg[nid],
-                           "has_upstream": has_upstream[nid]})
+        out_nodes.append({
+            "id": nid, "kind": "job", "title": j["title"], "label": labels[nid],
+            "track": j["track"], "status": j["status"],
+            "url": j.get("url", ""), "page_name": j["page_name"],
+            "board_url": f"{BASE_URL}/jobs.html",
+            "created": j["created"], "modified": j["modified"],
+            "x": x, "y": y, "in_degree": in_deg[nid], "out_degree": out_deg[nid],
+            "has_upstream": has_upstream[nid], "detail": j["detail"]})
+    for p in artifact_pages:
+        nid = p["id"]
+        x, y = positions[nid]
+        blurb = curation.get(nid, {}).get("blurb") or ""
+        out_nodes.append({
+            "id": nid, "kind": "page", "title": p["title"], "label": labels[nid],
+            "tier": p["tier"], "url": p["url"],
+            "created": p["created"], "modified": p["modified"],
+            "x": x, "y": y, "in_degree": in_deg[nid], "out_degree": out_deg[nid],
+            "has_upstream": has_upstream[nid],
+            "detail": {"blurb": blurb}})
+    out_nodes.sort(key=lambda n: n["id"])
+
     # A pair covered by a curated typed OR upstream edge is strictly more
     # informative than the generic crawled "link" between the same two
-    # pages (found live, round 2: glb_direct_pilot_v1 already had a
-    # content-link citation to pipeline_glb_direct, and the SAME pair is
-    # also the one verified evidence-for relationship, which would
-    # otherwise draw two overlapping edges for one relationship) --
-    # suppress the plain link edge for any ordered pair a typed or
-    # upstream edge already covers.
+    # nodes -- suppress the plain link edge for any ordered pair a typed
+    # or upstream edge already covers.
     covered_pairs = set(typed_pairs) | set(upstream_pairs)
-    out_edges = ([{"source": a, "target": b, "type": "link"} for a, b in edges if (a, b) not in covered_pairs]
+    out_edges = ([{"source": a, "target": b, "type": "link"} for a, b in crawled if (a, b) not in covered_pairs]
                  + typed_edges + upstream_edges)
+    # dedupe (job upstreams and re-keyed page upstreams can coincide)
+    seen = set()
+    out_edges = [e for e in out_edges
+                 if (k := (e["source"], e["target"], e["type"])) not in seen and not seen.add(k)]
     return {"generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
             "nodes": out_nodes, "edges": out_edges}
 
@@ -367,20 +529,24 @@ def write_graph_json(out_dir=None):
 
 
 # -------------------------------------------------------------- the page --
-TIER_LEGEND = [("root", "root", "var(--good)"),
-               ("workspace", "workspace", "var(--accent-ink)"),
-               ("preview", "preview", "var(--blue-ink)"),
-               ("update", "daily update", "var(--violet-ink, var(--blue-ink))")]
+# Job nodes color by TRACK (the stable identity of the work); artifact
+# pages -- published pages no board entry claims, mostly pre-board history
+# -- are one muted hollow style, secondary by design. The old four-tier
+# page palette died with the page-graph model.
+TRACK_LEGEND = [("research", "research job", "var(--good)"),
+                ("tooling", "tooling job", "var(--blue-ink)"),
+                ("paper", "paper job", "var(--violet-ink, var(--blue-ink))")]
 
 
 def legend_html():
     items = "".join(
         f'<span class="gl-item"><span class="gl-dot" style="background:{color}"></span>{html.escape(label)}</span>'
-        for _, label, color in TIER_LEGEND)
+        for _, label, color in TRACK_LEGEND)
+    page_item = '<span class="gl-item"><span class="gl-dot gl-dot-page"></span>page (no board entry)</span>'
     typed_item = ('<span class="gl-item"><span class="gl-dash"></span>'
                   'curated relationship (labeled on the edge)</span>')
-    arrow_item = '<span class="gl-item"><span class="gl-arrow"></span>arrow points motivator &rarr; motivated page</span>'
-    return f'<div class="graph-legend" id="graph-legend">{items}{typed_item}{arrow_item}</div>'
+    arrow_item = '<span class="gl-item"><span class="gl-arrow"></span>arrow points motivator &rarr; motivated</span>'
+    return f'<div class="graph-legend" id="graph-legend">{items}{page_item}{typed_item}{arrow_item}</div>'
 
 
 def _asset_hash8(path):
@@ -408,31 +574,30 @@ def graph_scripts(base, data):
             f'data-graph-src="{SITE_ROOT}/graph.json"></script>')
 
 
-def build_graph_tab(out_dir):
+def build_graph_tab(out_dir, graph_src=None):
     data = write_graph_json(out_dir)
-    n_nodes = len(data["nodes"])
+    n_jobs = sum(1 for n in data["nodes"] if n["kind"] == "job")
+    n_pages = len(data["nodes"]) - n_jobs
     n_edges = len(data["edges"])
-    n_no_upstream = sum(1 for n in data["nodes"] if not n["has_upstream"])
+    n_roots = sum(1 for n in data["nodes"] if n["kind"] == "job" and not n["has_upstream"])
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     base = bc.xc.console_base(bc.CONFIG, out_dir)
+    src = graph_src or f"{SITE_ROOT}/graph.json"
 
     body = f'''
-    <section class="graph-page" data-graph-src="{SITE_ROOT}/graph.json">
-      <p class="sub">built {now} &middot; {n_nodes} pages, {n_edges} edges, {n_no_upstream} with no known upstream</p>
-      <p>Every published page is a node; every edge is a directed arrow, tail at the page that
-      motivated it, head at the page it motivated. <code>web/pages.yaml</code>'s <code>upstreams:</code>
-      list is the primary source for that (a page states what motivated its own creation); plain
-      arrows are content links crawled straight out of each page's rendered HTML (page-tree links,
-      outlines, and the theme toggle excluded); dashed, labeled arrows are curated relationships
-      (supersedes, evidence-for, part-of, same-page) checked by hand against the pages, for anything
-      that isn't a motivation link. Built by <code>tools/build_graph.py</code>, which reads the same
-      page inventory as the Pages tab; Map-mode positions persist in
-      <code>.console_build/graph_positions.json</code> so a rebuild never reshuffles pages you
-      already know the layout of, and Timeline mode recomputes its own bin/stack layout from the
-      data fresh each load. Node labels are each page's short id (or its registered
-      <code>shortname:</code>); hover a node for its full title. Click a node to select it (its
-      neighborhood stays lit, everything else dims); click empty space or press Escape to clear the
-      selection. Double-click a node to open its page.</p>
+    <section class="graph-page" data-graph-src="{src}">
+      <p class="sub">built {now} &middot; {n_jobs} jobs, {n_pages} legacy pages, {n_edges} edges, {n_roots} root jobs</p>
+      <p>Every board job is a node; a job that produced a page carries it (double-click opens the
+      page), and published pages predating the board appear as smaller hollow nodes. Every edge is
+      a directed arrow, tail at the work that motivated, head at the work it motivated: the board's
+      own <code>upstreams:</code> field is the primary source (declared at dispatch, when the
+      motivation is written), <code>web/pages.yaml</code> covers the legacy pages, plain arrows are
+      content links crawled from the pages' rendered HTML, and dashed labeled arrows are curated
+      relationships (supersedes, evidence-for, part-of, same-page) checked by hand. Click a node
+      for its full record in the side card &mdash; motivation, status, outcome, latest log &mdash;
+      straight from the board entry; click empty space or press Escape to clear. Double-click opens
+      the page (or the board for a job without one). Map positions persist across rebuilds;
+      Timeline bins by date, busier days finer.</p>
       <div class="graph-toolbar">
         <input type="search" id="graph-search" placeholder="Search pages&hellip;" aria-label="Search pages">
         <div class="graph-modes" role="group" aria-label="Layout mode">
@@ -446,12 +611,16 @@ def build_graph_tab(out_dir):
           <svg id="graph-svg" class="graph-svg" role="img" aria-label="Page relationship graph"></svg>
           <div class="graph-hint">scroll to zoom &middot; drag to pan &middot; click selects, double-click opens &middot; Esc clears</div>
         </div>
-        <aside class="graph-orphans">
-          <h3>No known upstream</h3>
-          <p class="sub">Pages with no <code>upstreams:</code> arrow pointing in: should only be genuine
-          starting points. Anything else here is missing its <code>upstreams:</code> entry in
-          <code>web/pages.yaml</code>.</p>
-          <ul id="graph-orphan-list"></ul>
+        <aside class="graph-side">
+          <div id="graph-detail" class="graph-detail" hidden></div>
+          <div id="graph-roots" class="graph-orphans">
+            <h3>No known upstream</h3>
+            <p class="sub">Nothing points in with an <code>upstreams:</code> arrow: should only be
+            genuine starting points (a fresh owner ask, a first attempt). Any other job here is
+            missing its board <code>upstreams:</code>; any other page, its
+            <code>web/pages.yaml</code> entry.</p>
+            <ul id="graph-orphan-list"></ul>
+          </div>
         </aside>
       </div>
     </section>
@@ -468,14 +637,23 @@ def build_graph_tab(out_dir):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="rebuild graph.json only, print counts, skip the page")
+    ap.add_argument("--stage", action="store_true",
+                    help="build into PUBLISH_DEST/_preview/graph_v2/ instead of the live root "
+                         "(live-URL iteration without touching the shipped tab)")
     args = ap.parse_args()
     if args.check:
         data = write_graph_json()
+        url = f"{bc.BASE_URL}/graph.json"
+    elif args.stage:
+        stage = pathlib.Path(PUBLISH_DEST) / "_preview" / "graph_v2"
+        stage.mkdir(parents=True, exist_ok=True)
+        data = build_graph_tab(stage, graph_src=f"{SITE_ROOT}/_preview/graph_v2/graph.json")
+        url = f"{bc.BASE_URL}/_preview/graph_v2/graph.html"
     else:
         data = build_graph_tab(PUBLISH_DEST)
+        url = f"{bc.BASE_URL}/graph.html"
     n_no_upstream = sum(1 for n in data["nodes"] if not n["has_upstream"])
-    print(f"graph: {len(data['nodes'])} nodes, {len(data['edges'])} edges, {n_no_upstream} with no upstream "
-          f"-> {bc.BASE_URL}/graph.json" + ("" if args.check else f" + {bc.BASE_URL}/graph.html"))
+    print(f"graph: {len(data['nodes'])} nodes, {len(data['edges'])} edges, {n_no_upstream} with no upstream -> {url}")
 
 
 if __name__ == "__main__":

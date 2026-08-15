@@ -12,20 +12,29 @@
 (function () {
   "use strict";
 
-  var TIER_COLOR = {
-    root: "var(--good)",
-    preview: "var(--blue-ink)",
-    update: "var(--violet-ink, var(--blue-ink))",
-    workspace: "var(--accent-ink)"
+  // JOB-graph model (2026-08-14): nodes are board jobs (filled, colored by
+  // track) plus legacy pages no job claims (smaller, hollow, one muted
+  // style -- artifacts, secondary by design). The old four-tier page
+  // palette died with the page-graph model.
+  var TRACK_COLOR = {
+    research: "var(--good)",
+    tooling: "var(--blue-ink)",
+    paper: "var(--violet-ink, var(--blue-ink))"
   };
   var TIER_LABEL = { root: "root", workspace: "workspace", preview: "preview", update: "update" };
+
+  function colorFor(n) {
+    if (n.kind === "job") return TRACK_COLOR[n.track] || "var(--muted)";
+    return "var(--muted)";
+  }
 
   var REFRESH_MS = 120000;
   var SVG_NS = "http://www.w3.org/2000/svg";
 
-  function radiusFor(inDeg) {
+  function radiusFor(inDeg, kind) {
     var r = 6 + Math.min(inDeg, 12) * 1.4;
-    return Math.max(6, Math.min(22, r));
+    if (kind === "page") r = 4.5 + Math.min(inDeg, 12) * 1.0;  // artifacts read smaller
+    return Math.max(4.5, Math.min(22, r));
   }
 
   function el(tag, attrs) {
@@ -38,6 +47,8 @@
     var svgEl = root.querySelector("#graph-svg");
     var orphanList = root.querySelector("#graph-orphan-list");
     var searchInput = root.querySelector("#graph-search");
+    var detailEl = root.querySelector("#graph-detail");
+    var rootsEl = root.querySelector("#graph-roots");
     var src = svgEl.getAttribute("data-graph-src") || root.getAttribute("data-graph-src");
 
     var state = {
@@ -72,7 +83,15 @@
     function applyTransform() {
       var t = state.transform;
       gViewport.setAttribute("transform", "translate(" + t.x + "," + t.y + ") scale(" + t.k + ")");
-      svgEl.classList.toggle("labels-visible", t.k >= LABEL_REVEAL_K);
+      // Timeline reveals names much earlier than Map (its bins and stacks
+      // guarantee spacing once zoomed slightly), but NOT at the overview
+      // fit: 69 constant-size labels in one viewport overlap by geometry,
+      // no tuning escapes that (tried 0.16 = always-on, measured a text
+      // smear). 0.32 is where an 18-char label clears the 260-unit bin
+      // gap; one-two scroll steps from the fit, and hover still reveals
+      // any single label at any zoom.
+      var revealK = state.mode === "timeline" ? 0.32 : LABEL_REVEAL_K;
+      svgEl.classList.toggle("labels-visible", t.k >= revealK);
       updateNodeScale();
     }
 
@@ -101,8 +120,8 @@
     // vertically... arcs curving into them" sketch. A year band and a
     // month band sit above the bin row (round-3b, composed with this:
     // "show year, month on the top... only show day at the column").
-    var TIMELINE_STACK_GAP = 96;   // vertical gap between two stacked circles in the same bin
-    var TIMELINE_BIN_GAP = 250;    // horizontal gap between bin x-positions
+    var TIMELINE_STACK_GAP = 110;  // vertical gap between two stacked circles in the same bin
+    var TIMELINE_BIN_GAP = 260;    // horizontal gap between bin x-positions
     // Bin cap (round-3c, owner: "The bin can be a day, or can be several
     // days, depending smartly (need an algorithm... you decide)"): 7 is
     // the master's pick, tuned by eye against this project's own busiest
@@ -349,8 +368,14 @@
         b.minX -= 60; b.maxX += 60;
         pad = 40;
       } else {
-        var core = largestComponent();
-        b = boundsOf(core.length > 1 ? core : state.nodes);
+        // Job-graph round: fit ALL nodes, not the largest component. The
+        // component trick predates the conversion; on the job graph the
+        // work splits into a few real clusters (the June legacy pages, the
+        // August job wave), and fitting one of them cropped live jobs
+        // clean off the canvas edge (measured: ckpt8_eval rendered at
+        // x=926 in a 918px-wide viewport, unclickable). An overview that
+        // silently hides nodes is worse than a slightly wider fit.
+        b = boundsOf(state.nodes);
         pad = 60;
       }
       var gw = Math.max(b.maxX - b.minX, 1), gh = Math.max(b.maxY - b.minY, 1);
@@ -464,7 +489,7 @@
           labelG = constScaleText("edge", "gn-typed-label", cx, cy, e.type);
           gEdges.appendChild(labelG);
         }
-        var arrow = buildArrow(gEdges, pb, cx, cy, radiusFor(b.in_degree || 0), isTyped);
+        var arrow = buildArrow(gEdges, pb, cx, cy, radiusFor(b.in_degree || 0, b.kind), isTyped);
         edgeEls.push({ source: e.source, target: e.target, path: path, gradient: grad, a: a, b: b, label: labelG, arrow: arrow });
       });
 
@@ -477,7 +502,7 @@
         var p = posOf(n);
         var isOrphan = !n.has_upstream;
         var g = el("g", {
-          "class": "gn-node" + (isOrphan ? " gn-orphan" : ""),
+          "class": "gn-node gn-kind-" + (n.kind || "page") + (isOrphan ? " gn-orphan" : ""),
           transform: "translate(" + p.x + "," + p.y + ")"
         });
         g.dataset.id = n.id;
@@ -500,9 +525,18 @@
         // screenshot, not by any DOM metric. updateNodeScale() re-sets this
         // group's scale on every pan/zoom.
         var inner = el("g", { "class": "gn-inner", transform: "scale(" + invK + ")" });
-        var r = radiusFor(n.in_degree || 0);
+        var r = radiusFor(n.in_degree || 0, n.kind);
         var selRing = el("circle", { "class": "gn-sel-ring", r: r + 4 });
-        var circle = el("circle", { "class": "gn-circle", r: r, fill: TIER_COLOR[n.tier] || "var(--muted)" });
+        var circle = el("circle", { "class": "gn-circle", r: r });
+        if (n.kind === "page") {
+          // hollow artifact: stroke carries the muted color, fill stays
+          // the page background so edges read as passing BEHIND it
+          circle.setAttribute("fill", "var(--paper, #f4f1ea)");
+          circle.setAttribute("stroke", colorFor(n));
+          circle.setAttribute("stroke-width", "1.6");
+        } else {
+          circle.setAttribute("fill", colorFor(n));
+        }
         // Label text = the page's short id or registered shortname (round-3,
         // owner: "a unique shortname for the job, like an id, not a full
         // name which is very long"); the full title moved to the <title>
@@ -512,7 +546,16 @@
         // vertical-stack layout, which only reads correctly with a
         // centered, below-anchored label.
         var labelText = n.label || n.id;
-        if (labelText.length > 46) labelText = labelText.slice(0, 44) + "…";
+        // Display the basename only: zone prefixes (workspace/, updates/)
+        // are chrome that eats the label budget; the full id lives in the
+        // tooltip and the detail card. Then truncate: timeline stacks
+        // center labels under circles in adjacent fixed-width bins, so
+        // anything past ~18 chars overlaps its neighbor at the reveal zoom
+        // (measured); map labels extend rightward and afford more.
+        var slash = labelText.lastIndexOf("/");
+        if (slash !== -1 && slash < labelText.length - 1) labelText = labelText.slice(slash + 1);
+        var maxChars = isTimeline ? 18 : 46;
+        if (labelText.length > maxChars) labelText = labelText.slice(0, maxChars - 1) + "…";
         var label = el("text", {
           "class": "gn-label",
           x: isTimeline ? 0 : r + 5,
@@ -673,11 +716,135 @@
       if (searchInput && searchInput.value) searchInput.value = "";
       applyEmphasis();
       applySearchHighlight();
+      renderDetail();
     }
 
     function selectNode(id) {
       ui.selectedId = ui.selectedId === id ? null : id;
       applyEmphasis();
+      renderDetail();
+    }
+
+    // ------------------------------------------------------- detail card
+    // Click a node -> its full record in the side rail, straight from
+    // graph.json's `detail` payload (the same parsed board fields the jobs
+    // tab renders; no second fetch, no second bookkeeping surface). The
+    // card REPLACES the no-upstream list while a selection is active --
+    // one rail, two exclusive occupants -- and every path that clears the
+    // selection (Escape, background click, toggling the same node) also
+    // restores the list, so the rail can never end up empty or doubled.
+    function fmtDate(s) { return s ? String(s).slice(0, 10) : ""; }
+
+    function centerOn(id) {
+      var n = state.nodeById[id];
+      if (!n) return;
+      var rect = svgEl.getBoundingClientRect();
+      var p = posOf(n);
+      var k = Math.max(state.transform.k, 0.8);
+      state.transform = { k: k, x: rect.width / 2 - p.x * k, y: rect.height / 2 - p.y * k };
+      applyTransform();
+    }
+
+    function renderDetail() {
+      if (!detailEl || !rootsEl) return;
+      var id = ui.selectedId;
+      if (!id || !state.nodeById[id]) {
+        detailEl.hidden = true;
+        detailEl.innerHTML = "";
+        rootsEl.hidden = false;
+        return;
+      }
+      var n = state.nodeById[id];
+      var d = n.detail || {};
+      detailEl.innerHTML = "";
+      function div(cls, text) {
+        var e = document.createElement("div");
+        e.className = cls;
+        if (text) e.textContent = text;
+        detailEl.appendChild(e);
+        return e;
+      }
+      var kick = div("gd-kicker");
+      var slug = document.createElement("span");
+      slug.className = "gd-slug";
+      slug.textContent = n.label || n.id;
+      kick.appendChild(slug);
+      function badge(text, extraCls) {
+        var b = document.createElement("span");
+        b.className = "gd-badge" + (extraCls ? " " + extraCls : "");
+        b.textContent = text;
+        kick.appendChild(b);
+      }
+      if (n.kind === "job") {
+        if (n.status) badge(n.status, "gd-status-" + n.status);
+        if (n.track) badge(n.track);
+      } else {
+        badge("page" + (n.tier ? " · " + (TIER_LABEL[n.tier] || n.tier) : ""));
+      }
+      var h = document.createElement("h3");
+      h.className = "gd-title";
+      h.textContent = n.title || n.id;
+      detailEl.appendChild(h);
+      div("gd-dates", n.kind === "job"
+        ? ("started " + fmtDate(n.created) + (n.modified ? " · updated " + fmtDate(n.modified) : ""))
+        : ("published " + fmtDate(n.created)));
+      if (n.kind === "job") {
+        if (d.motivation) { div("gd-label", "Motivation"); div("gd-text", d.motivation); }
+        if (d.outcome) {
+          div("gd-label", "Outcome");
+          div("gd-text gd-outcome", d.outcome);
+        } else if (d.log_tail && d.log_tail.length) {
+          div("gd-label", "Latest log");
+          d.log_tail.forEach(function (l) { div("gd-log", l); });
+        }
+      } else if (d.blurb) {
+        // curated pages.yaml blurbs are authored HTML from this repo
+        div("gd-text gd-blurb").innerHTML = d.blurb;
+      }
+      var ups = [], downs = [];
+      state.edges.forEach(function (e) {
+        if (e.type !== "upstream") return;
+        if (e.target === id) ups.push(e.source);
+        if (e.source === id) downs.push(e.target);
+      });
+      function chips(labelText, ids) {
+        if (!ids.length) return;
+        div("gd-label", labelText);
+        var wrap = div("gd-chips");
+        ids.forEach(function (cid) {
+          var c = document.createElement("button");
+          c.type = "button";
+          c.className = "gd-chip";
+          var cn = state.nodeById[cid];
+          c.textContent = (cn && cn.label) || cid;
+          c.title = (cn && cn.title) || cid;
+          c.addEventListener("click", function () {
+            ui.selectedId = cid;  // direct set, not toggle: a chip always navigates TO its node
+            applyEmphasis();
+            renderDetail();
+            centerOn(cid);
+          });
+          wrap.appendChild(c);
+        });
+      }
+      chips("Motivated by", ups);
+      chips("Motivated", downs);
+      var links = div("gd-links");
+      function link(href, text) {
+        if (!href) return;
+        var a = document.createElement("a");
+        a.href = href; a.target = "_blank"; a.rel = "noopener";
+        a.textContent = text;
+        links.appendChild(a);
+      }
+      if (n.kind === "job") {
+        if (n.page_name) link(n.url, "Open page: " + n.page_name);
+        link(n.board_url, "Board entry");
+      } else {
+        link(n.url, "Open page");
+      }
+      detailEl.hidden = false;
+      rootsEl.hidden = true;
     }
 
     // window/tab losing focus is exactly the failure mode that used to
@@ -932,16 +1099,29 @@
         orphanList.appendChild(li);
         return;
       }
-      orphans.sort(function (a, b) { return (a.title || a.id).localeCompare(b.title || b.id); });
+      // jobs first (their gap is actionable on the board today), then
+      // legacy pages; alphabetical within each group
+      orphans.sort(function (a, b) {
+        var ka = a.kind === "job" ? 0 : 1, kb = b.kind === "job" ? 0 : 1;
+        if (ka !== kb) return ka - kb;
+        return (a.label || a.id).localeCompare(b.label || b.id);
+      });
       orphans.forEach(function (n) {
         var li = document.createElement("li");
         var a = document.createElement("a");
-        a.href = n.url; a.target = "_blank"; a.rel = "noopener";
-        a.textContent = n.title || n.id;
-        var tier = document.createElement("span");
-        tier.className = "go-tier";
-        tier.textContent = TIER_LABEL[n.tier] || n.tier;
-        a.appendChild(tier);
+        a.href = "#"; a.className = "go-node";
+        a.addEventListener("click", function (ev) {
+          ev.preventDefault();
+          ui.selectedId = n.id;
+          applyEmphasis();
+          renderDetail();
+          centerOn(n.id);
+        });
+        a.textContent = n.label || n.id;
+        var chip = document.createElement("span");
+        chip.className = "go-tier";
+        chip.textContent = n.kind === "job" ? (n.track || "job") : "page";
+        a.appendChild(chip);
         li.appendChild(a);
         orphanList.appendChild(li);
       });
@@ -1025,3 +1205,4 @@
     if (root) init(root);
   });
 })();
+/* job-graph v2 (2026-08-14) */
