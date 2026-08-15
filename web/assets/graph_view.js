@@ -58,7 +58,10 @@
       manualPos: {},       // id -> {x,y} session-local drag override (map mode only)
       transform: { x: 0, y: 0, k: 1 },
       viewInited: false,
-      mode: "map",         // "map" | "timeline" (round-2 addition)
+      mode: "timeline",    // "map" | "timeline"; timeline is the DEFAULT
+                           // (owner-ratified 2026-08-14: "much easier to
+                           // navigate"); keep in sync with the baked
+                           // .active button in build_graph.py's toolbar
       timelinePos: {}      // id -> {x,y}, recomputed whenever data loads; see computeTimelineBins()
     };
 
@@ -70,6 +73,7 @@
     gViewport.appendChild(gEdges);
     gViewport.appendChild(gNodes);
     svgEl.appendChild(gViewport);
+    svgEl.classList.toggle("mode-timeline", state.mode === "timeline");
 
     // Zoom level past which labels reveal generally instead of needing a
     // per-node hover (round-3): the fit-to-view zoom for a real graph this
@@ -537,6 +541,16 @@
         } else {
           circle.setAttribute("fill", colorFor(n));
         }
+        // A job that produced a page renders as a donut: a small hole in
+        // the page style's own fill, so "hollow = page" reads as one
+        // system (a page sits inside the job). Owner-asked hint,
+        // 2026-08-14. pointer-events stay on the group; the hole is
+        // decoration.
+        var pageHole = null;
+        if (n.kind === "job" && n.page_name) {
+          pageHole = el("circle", { "class": "gn-page-hole",
+                                     r: Math.max(2.6, r * 0.42) });
+        }
         // Label text = the page's short id or registered shortname (round-3,
         // owner: "a unique shortname for the job, like an id, not a full
         // name which is very long"); the full title moved to the <title>
@@ -565,6 +579,7 @@
         label.textContent = labelText;
         inner.appendChild(selRing);
         inner.appendChild(circle);
+        if (pageHole) inner.appendChild(pageHole);
         inner.appendChild(label);
         g.appendChild(inner);
         wireNode(g, n);

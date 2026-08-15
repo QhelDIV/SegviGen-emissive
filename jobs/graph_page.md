@@ -3,7 +3,7 @@ executor: xgpage-designer
 track: tooling
 status: ongoing
 started: 2026-08-09 16:30
-updated: 2026-08-14 20:43
+updated: 2026-08-14 20:53
 slurm: 
 link: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/graph.html
 page: none (console surface, not in the pages inventory; direct link below)
@@ -42,4 +42,6 @@ log:
 - 2026-08-14 20:27 [xgpage-designer] Owner caught a backwards arrow (render_doc pointed at render_sweep): crawled citation links drew citer to cited, opposite of the motivator-to-motivated convention. All link arrows now draw cited to citing so every arrow reads earlier to later, six citations deduped into their matching upstream edges, and render_doc's board entry records workspace/render_sweep as its upstream (upstreams now accept page names for jobs motivated by pre-board work).
 - 2026-08-14 20:43 [owner] We can keep the dashed one, but flipped order (more intuitive), and then 'supersedes' can be 'replaced by'
 - 2026-08-14 20:43 [xgpage-designer] One direction rule now holds graph-wide: every arrow reads earlier work toward what followed. Dashed labels became reading words at build time (replaced by / supports / part of / same page), with supersedes flipped old-to-new; graph_edges.yaml keeps the active authoring voice and documents the mapping.
+- 2026-08-14 20:53 [owner] Let's set the timeline as the default view since I find it is much easier to navigate. Also, we should find a way to hint if a job has a page or not
+- 2026-08-14 20:53 [xgpage-designer] Timeline is now the default view, and a job that produced a page renders as a donut: a hollow center in the page style's own fill, so the hollow-equals-page symbolism stays one system. Legend updated; nine journeys pass with drag correctly scoped to Map mode.
 outcome: Round 2 shipped: the click/hover/search interaction model now has a guaranteed reset (background click or Escape) after fixing the exact bug the owner reported, backed by a permanent 7-journey regression test (tools/qa_graph_journeys.js); a Timeline view lays the same pages out by creation date so development flow reads left to right; and one hand-verified curated relationship (glb_direct_pilot_v1 evidence-for pipeline_glb_direct) is live as a dashed, labeled edge, with the four relationships that did not hold recorded and dropped rather than added speculatively.

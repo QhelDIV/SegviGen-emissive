@@ -213,6 +213,11 @@ const JOURNEYS = [
   {
     name: "J7 drag never latches a mode: dragging a node changes only its position, not selection/dim state",
     async run(page) {
+      // Drag semantics are Map-mode only (Timeline positions are
+      // data-determined and deliberately immovable); Timeline is the
+      // default view now, so switch first.
+      await page.click('[data-graph-mode="map"]');
+      await page.waitForTimeout(200);
       const before = await snapshot(page);
       const c = await nodeBox(page, "workspace");
       await page.mouse.move(c.x, c.y);

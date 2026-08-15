@@ -574,6 +574,8 @@ def legend_html():
         f'<span class="gl-item"><span class="gl-dot" style="background:{color}"></span>{html.escape(label)}</span>'
         for _, label, color in TRACK_LEGEND)
     page_item = '<span class="gl-item"><span class="gl-dot gl-dot-page"></span>page (no board entry)</span>'
+    haspage_item = ('<span class="gl-item"><span class="gl-dot gl-dot-haspage" '
+                    'style="background:var(--good)"></span>job with a page (hollow center)</span>')
     # ONE direction rule for the whole graph (owner-ratified 2026-08-14,
     # after two rounds of legend confusion): every arrow reads earlier or
     # feeding work -> later or current work; dashed words are chosen so the
@@ -584,7 +586,7 @@ def legend_html():
     typed_item = ('<span class="gl-item"><span class="gl-dash"></span>'
                   'dashed: curated relationship, read along the arrow '
                   '(&ldquo;A replaced by&nbsp;&rarr; B&rdquo;)</span>')
-    return f'<div class="graph-legend" id="graph-legend">{items}{page_item}{arrow_item}{typed_item}</div>'
+    return f'<div class="graph-legend" id="graph-legend">{items}{haspage_item}{page_item}{arrow_item}{typed_item}</div>'
 
 
 def _asset_hash8(path):
@@ -642,8 +644,8 @@ def build_graph_tab(out_dir, graph_src=None):
       <div class="graph-toolbar">
         <input type="search" id="graph-search" placeholder="Search pages&hellip;" aria-label="Search pages">
         <div class="graph-modes" role="group" aria-label="Layout mode">
-          <button type="button" data-graph-mode="map" class="active">Map</button>
-          <button type="button" data-graph-mode="timeline">Timeline</button>
+          <button type="button" data-graph-mode="timeline" class="active">Timeline</button>
+          <button type="button" data-graph-mode="map">Map</button>
         </div>
         {legend_html()}
       </div>

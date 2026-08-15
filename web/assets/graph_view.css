@@ -272,3 +272,12 @@
 /* timeline labels: a step smaller than map's (centered under circles in
  * fixed-width bins, so width is the scarce resource there) */
 .graph-svg.mode-timeline .gn-label { font-size: 9.5px; }
+
+/* the page-hole marker on a job that produced a page (same fill as the
+ * hollow page-node style, so "hollow = page" is one visual system) */
+.gn-page-hole { fill: var(--paper, #f4f1ea); pointer-events: none; }
+.graph-legend .gl-dot-haspage { position: relative; }
+.graph-legend .gl-dot-haspage::after {
+  content: ""; position: absolute; inset: 3px; border-radius: 50%;
+  background: var(--paper, #f4f1ea);
+}
