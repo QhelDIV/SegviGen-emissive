@@ -415,12 +415,21 @@ def build_graph_data():
     page_upstream_edges = load_upstream_edges(pages, curation)
     job_upstream_edges = []
     job_ids = {j["id"] for j in jobs}
+    page_id_set = set(page_ids)
     for j in jobs:
         for up in j["upstreams"]:
-            if up in job_ids and up != j["id"]:
-                job_upstream_edges.append({"source": up, "target": j["id"], "type": "upstream"})
+            # an upstream may be a board slug OR a page name (a job motivated
+            # by pre-board work, e.g. render_doc <- workspace/render_sweep);
+            # a claimed page folds to its owning job like any other endpoint
+            if up in job_ids:
+                src = up
+            elif up in page_id_set:
+                src = rk(up)
             else:
                 print(f"[jobs] {j['id']}: dropping upstream {up!r}", file=sys.stderr)
+                continue
+            if src != j["id"]:
+                job_upstream_edges.append({"source": src, "target": j["id"], "type": "upstream"})
 
     def rekey_edges(es):
         out = []
@@ -431,7 +440,13 @@ def build_graph_data():
         return out
     typed_edges = rekey_edges(typed_edges)
     upstream_edges = job_upstream_edges + rekey_edges(page_upstream_edges)
-    crawled = sorted({(rk(a), rk(b)) for a, b in crawled if rk(a) != rk(b)})
+    # Crawled links are FLIPPED to cited -> citing (owner-caught on
+    # render_doc/render_sweep, 2026-08-14): a citation means the cited work
+    # fed the page citing it, so drawing the arrow from the cited work makes
+    # every arrow on the graph read earlier -> later, consistent with the
+    # upstream arrows. Citation direction (who links whom) stays recoverable
+    # from the page HTML; the graph shows flow, not hyperlink direction.
+    crawled = sorted({(rk(b), rk(a)) for a, b in crawled if rk(a) != rk(b)})
 
     node_ids = sorted(job_ids | art_ids)
 
@@ -592,7 +607,8 @@ def build_graph_tab(out_dir, graph_src=None):
       a directed arrow, tail at the work that motivated, head at the work it motivated: the board's
       own <code>upstreams:</code> field is the primary source (declared at dispatch, when the
       motivation is written), <code>web/pages.yaml</code> covers the legacy pages, plain arrows are
-      content links crawled from the pages' rendered HTML, and dashed labeled arrows are curated
+      content links crawled from the pages' rendered HTML (drawn from the cited work to the page
+      citing it, so every arrow reads earlier &rarr; later), and dashed labeled arrows are curated
       relationships (supersedes, evidence-for, part-of, same-page) checked by hand. Click a node
       for its full record in the side card &mdash; motivation, status, outcome, latest log &mdash;
       straight from the board entry; click empty space or press Escape to clear. Double-click opens
