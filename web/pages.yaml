@@ -25,6 +25,7 @@ pages:
       symptom is downstream (model behavior or an eval/viz attribution issue).
 
   - name: _preview/data_compare
+    upstreams: [_preview/data_pipeline]
     tags: [reference, workspace]
     important: true
     blurb: >
@@ -81,6 +82,7 @@ pages:
       independent compressions (16x spatial vs the 6->32 channel width).
 
   - name: _preview/ovoxel_construction
+    upstreams: [_preview/ovoxel_explained]
     tags: [reference, workspace]
     important: true
     blurb: >
@@ -100,6 +102,7 @@ pages:
       not SVD truncation). All paper quotes fetched verbatim from arXiv:2512.14692.
 
   - name: workspace
+    upstreams: [pipeline_glb_direct, glb_direct_pilot_v1, results_2k_v1]
     tags: [workspace]
     blurb: >
       Research workspace landing page (advisor/collaborator-facing zone, added 2026-07-19,
@@ -107,6 +110,7 @@ pages:
       console (internal notes, to-dos, experiment logs) lives at the site root instead.
 
   - name: updates/2026-07-19
+    upstreams: [results_2k_v1, pipeline_glb_direct, glb_direct_pilot_v1]
     tags: [update]
     important: true
     blurb: >
@@ -116,6 +120,7 @@ pages:
       carry-overs and two facts from yesterday's work.
 
   - name: updates/2026-07-07_2k_results
+    upstreams: [results_2k_v1]
     tags: [update]
     blurb: >
       Draft team update on the 2k emission-filtered fine-tune result (page + PDF) — the
@@ -123,6 +128,7 @@ pages:
       Feedback pending.
 
   - name: pipeline_glb_direct
+    upstreams: [results_2k_v1]
     tags: [proposal, workspace]
     important: true
     blurb: >
@@ -136,6 +142,7 @@ pages:
       released weights), caveats, and a 50-shape diagnostic to decide.
 
   - name: glb_direct_pilot_v1
+    upstreams: [pipeline_glb_direct]
     tags: [results, workspace]
     important: true
     blurb: >
@@ -151,6 +158,7 @@ pages:
       KHR_materials_emissive_strength materials).
 
   - name: results_2k_v1
+    upstreams: [finetune_binary_v1, training_curves_v1]
     tags: [results, workspace]
     important: true
     blurb: >
@@ -177,6 +185,7 @@ pages:
       4-checkpoint results table.
 
   - name: dataset_gallery_v1
+    upstreams: [finetune_binary_v1]
     tags: [data]
     blurb: >
       Full-population statistics for train_1k (1123) and val_96 (111): emissive_frac
@@ -184,6 +193,7 @@ pages:
       bucket, seeded random). Companion to finetune_binary_v1.
 
   - name: pbr_filter_v1
+    upstreams: [dataset_gallery_v1]
     tags: [data]
     blurb: >
       What the train split's --pbr_only filter keeps vs drops: pbrType is a tooling
@@ -200,6 +210,7 @@ pages:
       env, and inference are correct.
 
   - name: gt_vs_pred_canon10
+    upstreams: [fullseg_canon10_mesh, official_repro]
     tags: [baseline]
     blurb: >
       Side-by-side on the original GT mesh: input appearance | GT parts (artist submeshes)
@@ -207,18 +218,21 @@ pages:
       Click any thumbnail for an interactive 3D orbit view.
 
   - name: fullseg_canon10_mesh
+    upstreams: [fullseg_canon10]
     tags: [baseline]
     blurb: >
       Pretrained full_seg part-segmentation on the res-512 decoded mesh (paper-style,
       no voxel coarsening). Canonical overfit_split_10. Predicted parts only.
 
   - name: fullseg_canon10
+    upstreams: [fullseg_overfit10_adhoc]
     tags: [archive]
     blurb: >
       Raw per-voxel decode + palette-recolored parts (32^3 latent → 512^3 voxels).
       Superseded by the mesh view above.
 
   - name: fullseg_overfit10_adhoc
+    shortname: fullseg_adhoc10
     tags: [archive]
     blurb: >
       Arbitrary 10-shape set picked during an autonomous run — NOT the team's

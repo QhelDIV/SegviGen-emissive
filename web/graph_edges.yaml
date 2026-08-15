@@ -35,3 +35,53 @@
 - from: glb_direct_pilot_v1
   to: pipeline_glb_direct
   type: evidence-for
+
+# VERIFICATION RECORD (round-3, 2026-08-14; content-verified sweep, every
+# entry confirmed against the rendered page bodies, not board narrative;
+# five candidates checked and dropped in the same sweep are recorded in the
+# board log for graph_page):
+
+- from: ckpt8_eval
+  to: ckpt4_eval
+  type: supersedes
+- from: workspace/mask_debug
+  to: workspace/fixedbake_galleries
+  type: part-of
+- from: target_check
+  to: ckpt8_eval
+  type: evidence-for
+- from: experiment_overview
+  to: finetune_binary_v1
+  type: supersedes
+- from: experiment_overview
+  to: results_2k_v1
+  type: supersedes
+- from: experiment_overview
+  to: training_curves_v1
+  type: supersedes
+- from: experiment_overview
+  to: fullseg_canon10
+  type: supersedes
+- from: experiment_overview
+  to: gt_vs_pred_canon10
+  type: supersedes
+- from: experiment_overview
+  to: official_repro
+  type: supersedes
+- from: data_pipeline
+  to: experiment_overview
+  type: evidence-for
+- from: data_compare
+  to: experiment_overview
+  type: evidence-for
+- from: pipeline_design
+  to: training_inputs
+  type: evidence-for
+
+# workspace/paper_skeleton succession (resolved 2026-08-14): paper_v3
+# version-minted INTO workspace/paper_skeleton as the living paper page
+# (paper_v3/build.py lines 74-79); the old prose skeleton at
+# _preview/paper_skeleton is its superseded predecessor.
+- from: workspace/paper_skeleton
+  to: _preview/paper_skeleton
+  type: supersedes
