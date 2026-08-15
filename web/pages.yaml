@@ -1,14 +1,32 @@
 # lightgen web/pages.yaml — curated page registry (v11 convention, migrated
 # 2026-07-19 from the old top-level `groups:` list format).
 #
-# Per-page entries only: {name, tags, important?, blurb}. tools/build_console.py
-# joins this onto an auto-scan of the published directory (PUBLISH_DEST) for the
-# Pages tab (grouped by each entry's first tag; unregistered scanned pages fall
-# into "New / uncurated" so nothing hides) and for the Overview's "Current
-# highlights" list (pages with important: true). A page present here but no
-# longer found in the scan is silently dropped (no dangling links); a page found
-# in the scan but missing here surfaces as uncurated — add an entry at every
-# promotion.
+# Per-page entries only: {name, tags, important?, blurb, upstreams?,
+# shortname?}. tools/build_console.py joins this onto an auto-scan of the
+# published directory (PUBLISH_DEST) for the Pages tab (grouped by each
+# entry's first tag; unregistered scanned pages fall into "New / uncurated"
+# so nothing hides) and for the Overview's "Current highlights" list (pages
+# with important: true). A page present here but no longer found in the scan
+# is silently dropped (no dangling links); a page found in the scan but
+# missing here surfaces as uncurated — add an entry at every promotion.
+#
+# UPSTREAMS LAW (round-3): every registered page states `upstreams:`, the
+# id(s) of the page(s) whose existence motivated this one's creation (the
+# graph's directed arrows, tail at the upstream, head at this page); only a
+# genuine starting point legitimately has none. `shortname:` overrides the
+# graph's displayed node label for a `name:` too long to read as a label
+# (the id stays the identity; shortname is display-only). GOTCHA (bit this
+# file once already, for tags/blurb, and again for upstreams -- watch for a
+# third time): this entry's own `name:` may carry a `_preview/` prefix (kept
+# unique against a root-tier page of the same bare name), but every OTHER
+# page's graph node id is ALWAYS bare, with no tier prefix -- an
+# `upstreams:` entry (or a graph_edges.yaml from/to) must reference the BARE
+# id even when pointing at a `_preview/`-prefixed page, e.g. `upstreams:
+# [data_pipeline]`, never `[_preview/data_pipeline]`. tools/build_graph.py's
+# loaders validate against the real node id set and drop (with a stderr
+# warning, not a crash) anything that doesn't match -- a silent drop reads
+# as "no upstream", so double-check the build's warning output after
+# editing this file.
 pages:
   - name: _preview/target_check
     tags: [diagnostic, workspace]
@@ -25,7 +43,7 @@ pages:
       symptom is downstream (model behavior or an eval/viz attribution issue).
 
   - name: _preview/data_compare
-    upstreams: [_preview/data_pipeline]
+    upstreams: [data_pipeline]
     tags: [reference, workspace]
     important: true
     blurb: >
@@ -82,7 +100,7 @@ pages:
       independent compressions (16x spatial vs the 6->32 channel width).
 
   - name: _preview/ovoxel_construction
-    upstreams: [_preview/ovoxel_explained]
+    upstreams: [ovoxel_explained]
     tags: [reference, workspace]
     important: true
     blurb: >
@@ -237,3 +255,15 @@ pages:
     blurb: >
       Arbitrary 10-shape set picked during an autonomous run — NOT the team's
       overfit_split_10. Kept for reference only.
+
+  - name: time_cost
+    tags: [results]
+    upstreams: [ckpt8_eval]
+    blurb: >
+      Where the segvigen-emissive pipeline spends its time: every stage (data processing,
+      model inference, mask-to-mesh conversion, Blender rendering) measured from Solar's
+      own job accounting and logs, covering the chain run 2026-08-10 through 2026-08-11 —
+      the epoch-8 checkpoint evaluation's own job window (see ckpt8_eval; jobs 242924/242950/
+      242877 are this page's own named case studies). Rendering is the largest cost by far,
+      with three specific, fixable causes behind most of the waste elsewhere. Owner reviewed:
+      the measured statistics stand; the three proposed fixes were not adopted.

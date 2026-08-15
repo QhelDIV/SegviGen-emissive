@@ -33,6 +33,16 @@
 .graph-legend .gl-dash {
   width: 18px; height: 0; border-top: 2px dashed var(--accent-ink); display: inline-block; flex: none;
 }
+/* Directed-graph legend entry (round-3): a short line with an arrowhead,
+ * built from a CSS triangle (no SVG needed for a static legend swatch). */
+.graph-legend .gl-arrow {
+  width: 18px; height: 0; border-top: 2px solid var(--accent-ink); display: inline-block; flex: none;
+  position: relative;
+}
+.graph-legend .gl-arrow::after {
+  content: ""; position: absolute; right: -1px; top: -3px;
+  border-top: 3px solid transparent; border-bottom: 3px solid transparent; border-left: 5px solid var(--accent-ink);
+}
 
 .graph-layout { display: flex; gap: 20px; align-items: flex-start; }
 .graph-canvas-wrap {
@@ -76,24 +86,34 @@
 .gn-edge { fill: none; stroke-width: 1.4; transition: opacity .12s ease, stroke-width .12s ease; }
 .gn-edge.lit { stroke-width: 2.4; }
 
-/* Orphan labels (23 of 41 nodes here) are hidden by default -- at overview
- * zoom, 41 constant-size labels on a real sparse layout collide badly, and
- * an unconnected page's title is already one click away in the "not yet
- * connected" panel. The dot (colored by tier) still marks its position and
- * still hovers/searches/clicks normally; only the label text is deferred. */
-.gn-orphan .gn-label { opacity: 0; }
-.gn-orphan.hi .gn-label, .gn-orphan.search-hit .gn-label,
-.gn-orphan:hover .gn-label { opacity: 1; }
+/* ALL labels are hidden by default, in EITHER mode (round-3: generalizes
+ * what round-1 shipped for orphans only and round-2 shipped for all of
+ * Timeline mode -- the same underlying problem, a constant-screen-size
+ * label on a graph with real content, shows up for regular Map-mode nodes
+ * too once enough of them are connected: no positional-distance tuning
+ * can guarantee every simultaneous label clears every other one at once,
+ * because a label's rendered footprint extends rightward from its node in
+ * a way sum-of-reach layout math cannot fully capture (tried, round-3 --
+ * see tools/build_graph.py's node_reach_excess comment for the specific
+ * dead end). Hiding by default and revealing only what's actually being
+ * looked at (hover/select/search) sidesteps the geometry problem entirely
+ * instead of fighting it: at most a hovered node's own small neighborhood
+ * is ever showing labels at once, never all of them simultaneously). The
+ * dot (colored by tier, positioned by the declutter-guaranteed layout)
+ * still marks every node's place and still hovers/searches/clicks
+ * normally; only the label TEXT is deferred. */
+.gn-label { opacity: 0; }
+.gn-node.hi .gn-label, .gn-node.search-hit .gn-label,
+.gn-node:hover .gn-label { opacity: 1; }
 
-/* Timeline mode: EVERY label starts hidden (not just orphans), same reveal
- * triggers as above. A date-packed layout collides labels regardless of
- * connectivity (found live: a busy week of root pages rendered as one
- * unreadable smear); the dots' position/color/lane already carry the
- * pattern this view exists to show. */
-.graph-svg.mode-timeline .gn-label { opacity: 0; }
-.graph-svg.mode-timeline .gn-node.hi .gn-label,
-.graph-svg.mode-timeline .gn-node.search-hit .gn-label,
-.graph-svg.mode-timeline .gn-node:hover .gn-label { opacity: 1; }
+/* Zoomed-in exploration: once the view is zoomed past a threshold (see
+ * graph_view.js's updateNodeScale(), which toggles this class), there is
+ * plainly more on-screen room per node than the crowded overview had, so
+ * labels reveal generally instead of requiring a hover per node -- reading
+ * a zoomed-in neighborhood one hover at a time would be needless friction
+ * once the underlying crowding problem this rule exists for no longer
+ * applies at that zoom level. */
+.graph-svg.labels-visible .gn-label { opacity: 1; }
 
 /* Found in the round-2 audit: an earlier ", .gn-label:not(.hi)" clause here
  * matched every label unconditionally (.hi is only ever set on the parent
@@ -104,23 +124,27 @@
 .graph-svg.dimmed .gn-node:not(.hi) { opacity: .16; }
 .graph-svg.dimmed .gn-edge:not(.lit) { opacity: .07; }
 
-/* Timeline mode chrome: lane guide lines/labels + date ticks. Rendered in
- * WORLD space (inside .viewport, same as edges/nodes) so it pans/zooms with
- * the content, not fixed to the viewport. */
-.tl-lane-line { stroke: var(--border); stroke-width: 1px; vector-effect: non-scaling-stroke; }
-.tl-lane-label {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px;
-  fill: var(--muted); text-anchor: end;
+/* Timeline mode chrome (round-3c rewrite): a year band, a month band below
+ * it, and a bare day-number label per bin -- no more tier lanes (tier is
+ * color + legend only now, same as map mode). Rendered in WORLD space
+ * (inside .viewport, same as edges/nodes) so it pans/zooms with the
+ * content; the text itself stays screen-constant via the same
+ * counter-scale technique as node labels (see updateNodeScale()). */
+.tl-year-band, .tl-month-band { fill: var(--accent-ink); opacity: .05; }
+.tl-year-band.alt, .tl-month-band.alt { opacity: .1; }
+.tl-year-band-label {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; font-weight: 600;
+  fill: var(--text); text-anchor: middle;
 }
-.tl-tick-line { stroke: var(--border); stroke-width: 1px; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; opacity: .6; }
-.tl-tick-label {
+.tl-month-band-label {
   font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px;
   fill: var(--muted); text-anchor: middle;
 }
-/* Timeline chrome text should stay screen-constant like node labels, not
- * shrink/grow with zoom -- it is rendered inside .viewport (for panning)
- * but graph_view.js counter-scales it the same way it counter-scales node
- * markers (see updateNodeScale()). */
+.tl-day-label {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px;
+  fill: var(--muted); text-anchor: middle;
+}
+.tl-day-tick { stroke: var(--border); stroke-width: 1px; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; opacity: .5; }
 
 /* Curated typed edges (round-2, web/graph_edges.yaml): dashed, with the
  * relationship word labeled directly on the edge rather than adding a
@@ -134,7 +158,37 @@
   letter-spacing: .04em; text-transform: uppercase;
   fill: var(--accent-ink); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round;
   text-anchor: middle; pointer-events: none;
+  opacity: 0; transition: opacity .12s ease;
 }
+/* Hidden by default, same principle and same triggers as node labels
+ * (round-3): a typed-edge label sits at its curve's midpoint, which in a
+ * real layout (especially Timeline's bin/arc arrangement, arcs routinely
+ * passing near OTHER nodes' circles) can land on top of an unrelated
+ * node -- measured live, round-3, several real collisions this way. No
+ * positional tuning generalizes across every possible arc/node
+ * arrangement; hiding by default and revealing only what is actually
+ * being looked at is the same fix that already solved this for node
+ * labels, applied to the other kind of always-on label this graph draws. */
+.graph-svg.labels-visible .gn-typed-label,
+.gn-typed-label.lit { opacity: 1; }
+/* Upstream edges (round-3, the primary motivation-edge store) get a
+ * touch more visual weight than a plain crawled content link -- they are
+ * the edges the owner asked to be able to read as "what motivated what"
+ * at a glance -- without the dashed treatment reserved for graph_edges.yaml
+ * curated relations. */
+.gn-edge.upstream { stroke-width: 1.8; opacity: .8; }
+
+/* Directed-graph arrowheads (round-3, every edge in every mode): a small
+ * solid triangle at the edge's target end, same accent-ink family as the
+ * edge gradient's own end color so it reads as part of the same line, not
+ * a separate decoration. Typed (curated) edges' arrowheads pick up a touch
+ * more opacity to match their heavier dashed stroke. */
+.gn-arrowhead { fill: var(--accent-ink); opacity: .55; transition: opacity .12s ease; }
+.gn-arrowhead.typed { opacity: .75; }
+/* Dimming (graph_view.js toggles .lit on the arrow's own outer <g>, the
+ * same element it toggles .lit on for the edge path it belongs to, so one
+ * selector covers both). */
+.graph-svg.dimmed .gn-arrow:not(.lit) .gn-arrowhead { opacity: .07; }
 
 .gn-node.search-hit .gn-circle { stroke: var(--accent); stroke-width: 3px; }
 .gn-node.search-hit .gn-label { fill: var(--accent-ink); font-weight: 600; }

@@ -48,7 +48,7 @@
       transform: { x: 0, y: 0, k: 1 },
       viewInited: false,
       mode: "map",         // "map" | "timeline" (round-2 addition)
-      timelinePos: {}      // id -> {x,y}, recomputed whenever data loads; see computeTimelineLayout()
+      timelinePos: {}      // id -> {x,y}, recomputed whenever data loads; see computeTimelineBins()
     };
 
     var gViewport = el("g", { "class": "viewport" });
@@ -60,9 +60,19 @@
     gViewport.appendChild(gNodes);
     svgEl.appendChild(gViewport);
 
+    // Zoom level past which labels reveal generally instead of needing a
+    // per-node hover (round-3): the fit-to-view zoom for a real graph this
+    // size lands well under 1 (fitting everything into the viewport at
+    // once is exactly the crowded case labels-hidden-by-default exists
+    // for), so a threshold a bit above that default -- reached by a couple
+    // of scroll-zoom steps -- reads as "the user zoomed in to look at
+    // something", not the initial overview.
+    var LABEL_REVEAL_K = 0.55;
+
     function applyTransform() {
       var t = state.transform;
       gViewport.setAttribute("transform", "translate(" + t.x + "," + t.y + ") scale(" + t.k + ")");
+      svgEl.classList.toggle("labels-visible", t.k >= LABEL_REVEAL_K);
       updateNodeScale();
     }
 
@@ -83,56 +93,145 @@
     }
 
     // -------------------------------------------------------- timeline --
-    var TIMELINE_LANES = ["root", "workspace", "preview", "update"]; // fixed vertical order, matches the legend
-    var TIMELINE_LANE_H = 150;
-    var TIMELINE_W = 2800; // world-unit span for the full date range
-    var TIMELINE_MIN_GAP = 100; // minimum x gap between two nodes sharing a lane
+    // Round-3c rewrite (owner sketch, superseding round-3's per-day-width
+    // scheme entirely): NO tier lanes (tier is color + legend only, same
+    // as map mode); pages bin by date -- ALGORITHMICALLY, not one slot per
+    // calendar day -- and stack VERTICALLY within a bin, a column of
+    // circles with short labels under them, exactly the "circles stacked
+    // vertically... arcs curving into them" sketch. A year band and a
+    // month band sit above the bin row (round-3b, composed with this:
+    // "show year, month on the top... only show day at the column").
+    var TIMELINE_STACK_GAP = 96;   // vertical gap between two stacked circles in the same bin
+    var TIMELINE_BIN_GAP = 250;    // horizontal gap between bin x-positions
+    // Bin cap (round-3c, owner: "The bin can be a day, or can be several
+    // days, depending smartly (need an algorithm... you decide)"): 7 is
+    // the master's pick, tuned by eye against this project's own busiest
+    // day (8 pages on one real day) so that day still gets its own tall
+    // bin rather than needing to split unnaturally, while a run of quiet
+    // 1-2-page days merges into one bin instead of eight nearly-empty
+    // columns in a row.
+    var TIMELINE_BIN_CAP = 7;
+    var DAY_MS = 86400000;
+    var MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     function parseCreated(s) {
       var t = Date.parse((s || "").replace(" ", "T"));
       return isNaN(t) ? null : t;
     }
+    function dayKey(t) { return new Date(t).toISOString().slice(0, 10); }
 
-    function laneFor(tier) {
-      var i = TIMELINE_LANES.indexOf(tier);
-      return i === -1 ? TIMELINE_LANES.length - 1 : i;
-    }
-
-    function computeTimelineLayout() {
-      // Deterministic positions from date + lane ONLY, no physics (round-2
-      // spec: "keep it simple"). x is a linear scale of `created` across
-      // the full observed range; within a lane, nodes are sorted by date
-      // and pushed apart by a minimum gap where two dates would otherwise
-      // collide (a same-day publishing burst is common here) -- a
-      // sequential one-pass sweep, not an iterative solver.
-      var times = state.nodes.map(function (n) { return parseCreated(n.created); }).filter(function (t) { return t !== null; });
-      var minT = times.length ? Math.min.apply(null, times) : 0;
-      var maxT = times.length ? Math.max.apply(null, times) : minT + 1;
-      var span = Math.max(maxT - minT, 1);
-      var byLane = {};
+    function computeTimelineBins() {
+      var UNKNOWN = "unknown";
+      var byDay = {}; // dayKey -> [{n, t}], UNKNOWN holds unparseable dates
       state.nodes.forEach(function (n) {
-        var lane = laneFor(n.tier);
-        (byLane[lane] = byLane[lane] || []).push(n);
+        var t = parseCreated(n.created);
+        var key = t === null ? UNKNOWN : dayKey(t);
+        (byDay[key] = byDay[key] || []).push({ n: n, t: t });
       });
+      var activeDays = Object.keys(byDay).filter(function (k) { return k !== UNKNOWN; }).sort();
+
+      // ALGORITHMIC, DETERMINISTIC binning: walk days chronologically,
+      // merging a day into the current bin as long as doing so keeps the
+      // bin's running page count at or under TIMELINE_BIN_CAP; a single
+      // day whose OWN count already exceeds the cap still gets its own bin
+      // (taller, never split across two bins) rather than being forced to
+      // fit. Pure function of the sorted per-day counts already in the
+      // data -- no randomness, so a content-unchanged rebuild reproduces
+      // the identical bin set (and therefore the identical layout) every
+      // time, same invariant Map mode's persisted positions guarantee a
+      // different way.
+      var bins = [];
+      var cur = null;
+      activeDays.forEach(function (day) {
+        var count = byDay[day].length;
+        if (cur && cur.count + count <= TIMELINE_BIN_CAP) {
+          cur.days.push(day);
+          cur.count += count;
+        } else {
+          cur = { days: [day], count: count };
+          bins.push(cur);
+        }
+      });
+
       var pos = {};
-      Object.keys(byLane).forEach(function (laneKey) {
-        var laneIdx = +laneKey;
-        var nodes = byLane[laneKey].slice().sort(function (a, b) {
-          return (parseCreated(a.created) || minT) - (parseCreated(b.created) || minT);
-        });
-        var lastX = -Infinity;
-        nodes.forEach(function (n) {
-          var t = parseCreated(n.created);
-          var x = t === null ? 0 : ((t - minT) / span) * TIMELINE_W;
-          if (x < lastX + TIMELINE_MIN_GAP) x = lastX + TIMELINE_MIN_GAP;
-          lastX = x;
-          pos[n.id] = { x: x, y: laneIdx * TIMELINE_LANE_H };
-        });
+      var binMeta = [];
+      bins.forEach(function (bin, i) {
+        var x = i * TIMELINE_BIN_GAP;
+        var recs = [];
+        bin.days.forEach(function (day) { recs = recs.concat(byDay[day]); });
+        recs.sort(function (a, b) { return (a.t || 0) - (b.t || 0); });
+        var n = recs.length;
+        var top = -((n - 1) * TIMELINE_STACK_GAP) / 2; // stack centered on y=0
+        recs.forEach(function (r, j) { pos[r.n.id] = { x: x, y: top + j * TIMELINE_STACK_GAP }; });
+        binMeta.push({ x: x, days: bin.days, count: n, top: top });
       });
-      return { pos: pos, minT: minT, maxT: maxT };
+
+      // Unknown-date nodes (should not occur in practice -- every page's
+      // `created` comes from a real file mtime -- but stay renderable
+      // rather than silently vanishing if it ever does): their own bin,
+      // one gap to the left of the first real bin.
+      if (byDay[UNKNOWN]) {
+        var uRecs = byDay[UNKNOWN].slice().sort(function (a, b) { return (a.t || 0) - (b.t || 0); });
+        var ux = -TIMELINE_BIN_GAP;
+        var un = uRecs.length;
+        var utop = -((un - 1) * TIMELINE_STACK_GAP) / 2;
+        uRecs.forEach(function (r, j) { pos[r.n.id] = { x: ux, y: utop + j * TIMELINE_STACK_GAP }; });
+      }
+
+      return { pos: pos, bins: binMeta };
     }
 
-    var timelineRange = { minT: 0, maxT: 1 };
+    function binDayLabel(bin) {
+      // Bare day number(s) only (round-3b: "only show day at the column
+      // to avoid cluttering" -- the year/month bands above already say
+      // which year/month). A merged bin shows a day-number range; the
+      // month-crossing case is rare (would need >TIMELINE_BIN_CAP pages'
+      // worth of quiet days spanning a month boundary) but still renders
+      // sensibly with an explicit month abbreviation on each side.
+      var days = bin.days;
+      var first = days[0], last = days[days.length - 1];
+      var d0 = +first.slice(8, 10), d1 = +last.slice(8, 10);
+      if (days.length === 1) return String(d0);
+      if (first.slice(0, 7) === last.slice(0, 7)) return d0 + "–" + d1;
+      return MONTH_ABBR[+first.slice(5, 7) - 1] + " " + d0 + " – " + MONTH_ABBR[+last.slice(5, 7) - 1] + " " + d1;
+    }
+
+    function computeHeaderGroups(binMeta) {
+      // Month/year bands span the x-range of the consecutive bins that
+      // fall inside them (bins are already chronological by construction,
+      // so a simple run-length grouping is correct, no re-sorting needed).
+      var months = [], years = [];
+      var curMonth = null, curYear = null;
+      var halfGap = TIMELINE_BIN_GAP / 2;
+      binMeta.forEach(function (bin) {
+        var d0 = bin.days[0];
+        var y = +d0.slice(0, 4), m = +d0.slice(5, 7);
+        if (!curMonth || curMonth.year !== y || curMonth.month !== m) {
+          curMonth = { year: y, month: m, x0: bin.x - halfGap, x1: bin.x + halfGap };
+          months.push(curMonth);
+        } else {
+          curMonth.x1 = bin.x + halfGap;
+        }
+        if (!curYear || curYear.year !== y) {
+          curYear = { year: y, x0: bin.x - halfGap, x1: bin.x + halfGap };
+          years.push(curYear);
+        } else {
+          curYear.x1 = bin.x + halfGap;
+        }
+      });
+      // stackTop: the highest (most negative y) any bin's own stack
+      // reaches, across every bin -- the header rows anchor above THIS,
+      // not above any one bin, so a tall bin never collides with the
+      // header no matter where it sits in the sequence.
+      var stackTop = 0;
+      binMeta.forEach(function (bin) { stackTop = Math.min(stackTop, bin.top); });
+      var dayRowY = stackTop - 56;
+      var monthRowY = dayRowY - 34;
+      var yearRowY = monthRowY - 30;
+      return { months: months, years: years, stackTop: stackTop, dayRowY: dayRowY, monthRowY: monthRowY, yearRowY: yearRowY };
+    }
+
+    var timelineRange = { bins: [], months: [], years: [], stackTop: 0, dayRowY: -56, monthRowY: -90, yearRowY: -120 };
 
     // {g, x, y, kind: "chrome"|"edge"} -- world anchor point; counter-scaled
     // in updateNodeScale(). Two independent owners (renderTimelineChrome()
@@ -160,23 +259,45 @@
       gTimeChrome.innerHTML = "";
       scaledTextEls = scaledTextEls.filter(function (s) { return s.kind !== "chrome"; });
       if (state.mode !== "timeline") return;
-      var leftX = -160;
-      TIMELINE_LANES.forEach(function (tier, i) {
-        gTimeChrome.appendChild(constScaleText("chrome", "tl-lane-label", leftX, i * TIMELINE_LANE_H + 4, TIER_LABEL[tier] || tier));
-        var line = el("line", {
-          "class": "tl-lane-line", x1: leftX + 20, y1: i * TIMELINE_LANE_H, x2: TIMELINE_W + 60, y2: i * TIMELINE_LANE_H
+      var bins = timelineRange.bins;
+      if (!bins.length) return;
+      var lastX = bins[bins.length - 1].x;
+      var halfGap = TIMELINE_BIN_GAP / 2;
+
+      // Year band (top), month band (below it), bin day-label row (just
+      // above the tallest stack) -- round-3b's "show year, month on the
+      // top... only show day at the column", composed with round-3c's
+      // bins replacing individual day columns. Each band is a translucent
+      // rect spanning its own x-range plus a centered, constant-screen-size
+      // label; consecutive bands alternate a hair of opacity so adjacent
+      // months/years are visually separable even when a label is long
+      // enough to slightly crowd its neighbor's.
+      function band(rowY, rowH, groups, cls, fmt) {
+        groups.forEach(function (g, i) {
+          var rect = el("rect", {
+            "class": cls + (i % 2 ? " alt" : ""), x: g.x0, y: rowY - rowH / 2,
+            width: Math.max(g.x1 - g.x0, 1), height: rowH
+          });
+          gTimeChrome.appendChild(rect);
+          gTimeChrome.appendChild(constScaleText("chrome", cls + "-label", (g.x0 + g.x1) / 2, rowY + 4, fmt(g)));
         });
-        gTimeChrome.appendChild(line);
-      });
-      var ticks = 5;
-      var bottomY = TIMELINE_LANES.length * TIMELINE_LANE_H - TIMELINE_LANE_H + 60;
-      for (var i = 0; i <= ticks; i++) {
-        var t = timelineRange.minT + (timelineRange.maxT - timelineRange.minT) * (i / ticks);
-        var x = (i / ticks) * TIMELINE_W;
-        var vline = el("line", { "class": "tl-tick-line", x1: x, y1: -30, x2: x, y2: bottomY });
-        gTimeChrome.appendChild(vline);
-        gTimeChrome.appendChild(constScaleText("chrome", "tl-tick-label", x, bottomY + 22, new Date(t).toISOString().slice(0, 10)));
       }
+      band(timelineRange.yearRowY, 30, timelineRange.years, "tl-year-band", function (g) { return String(g.year); });
+      band(timelineRange.monthRowY, 30, timelineRange.months, "tl-month-band",
+        function (g) { return MONTH_ABBR[g.month - 1]; });
+
+      // Bin day-label row: bare day number(s), one per bin, plus a thin
+      // guide line from the label down to that bin's own topmost circle
+      // (not a shared axis line -- bins don't share a row height the way
+      // the old tier lanes did, each bin's stack top is wherever its own
+      // page count put it).
+      bins.forEach(function (bin) {
+        gTimeChrome.appendChild(constScaleText("chrome", "tl-day-label", bin.x, timelineRange.dayRowY + 4, binDayLabel(bin)));
+        var vline = el("line", {
+          "class": "tl-day-tick", x1: bin.x, y1: timelineRange.dayRowY + 14, x2: bin.x, y2: bin.top - 20
+        });
+        gTimeChrome.appendChild(vline);
+      });
       updateNodeScale();
     }
 
@@ -217,21 +338,15 @@
       var b, pad;
       if (state.mode === "timeline") {
         // Timeline has no clutter problem to dodge (deterministic,
-        // non-overlapping by construction) -- fit EVERY node, plus the lane
-        // labels/date-tick chrome's own extent (fixed offsets, see
-        // renderTimelineChrome()).
+        // non-overlapping by construction) -- fit EVERY node, plus the
+        // year/month/day header's own extent above the stacks (fixed
+        // offsets, see renderTimelineChrome()/computeHeaderGroups()) and a
+        // margin below for the shortname labels that now render UNDER each
+        // circle (round-3c) rather than beside it.
         b = boundsOf(state.nodes);
-        // Extra left margin: lane labels ("workspace") are counter-scaled
-        // to a CONSTANT SCREEN width, so how much WORLD space they actually
-        // need depends on k, which isn't known until after this division --
-        // found live, clipped at the canvas edge with a plain -170 world-
-        // unit guess. -320 is a generous fixed margin sized for
-        // "workspace" (the longest lane label) at the zoom levels this
-        // graph's node count produces; revisit if a much longer label or a
-        // much larger point count changes that zoom a lot.
-        b.minX = Math.min(b.minX, -320);
-        b.minY = Math.min(b.minY, -40);
-        b.maxY = Math.max(b.maxY, (TIMELINE_LANES.length - 1) * TIMELINE_LANE_H + 90);
+        b.minY = Math.min(b.minY, timelineRange.yearRowY - 30);
+        b.maxY = Math.max(b.maxY, -timelineRange.stackTop + 40); // symmetric stack + label clearance below
+        b.minX -= 60; b.maxX += 60;
         pad = 40;
       } else {
         var core = largestComponent();
@@ -259,6 +374,46 @@
       return s;
     }
 
+    // Directed-graph arrowheads (round-3, owner: "we want directed graph,
+    // instead of undirected graph. show arrows instead" -- EVERY edge, of
+    // every type, in both modes). Same constant-screen-size convention as
+    // node markers and labels: an outer group does the WORLD-space
+    // translate+rotate (so the arrow pans/zooms with its edge and points
+    // the right way regardless of zoom, since uniform scale never changes
+    // an angle), an inner group does the pure counter-scale. The tip sits
+    // pulled back from the target's CENTER by that node's own screen
+    // radius plus a small gap, so it touches the circle's boundary instead
+    // of overlapping it -- radius is already a screen-constant number
+    // (radiusFor()), so this offset can be applied directly in the same
+    // counter-scaled local space with no zoom-dependent conversion needed.
+    var ARROW_LEN = 9, ARROW_WID = 3.2, ARROW_GAP = 2;
+    function arrowPathD(radius) {
+      var tipX = -(radius + ARROW_GAP), baseX = tipX - ARROW_LEN;
+      return "M" + tipX + ",0 L" + baseX + "," + (-ARROW_WID) + " L" + baseX + "," + ARROW_WID + " Z";
+    }
+    function arrowAngleDeg(pb, cx, cy) { return Math.atan2(pb.y - cy, pb.x - cx) * 180 / Math.PI; }
+    function buildArrow(container, pb, cx, cy, radius, isTyped) {
+      var outer = el("g", { "class": "gn-arrow", transform: "translate(" + pb.x + "," + pb.y + ") rotate(" + arrowAngleDeg(pb, cx, cy) + ")" });
+      var inner = el("g", { transform: "scale(" + (1 / (state.transform.k || 1)) + ")" });
+      inner.appendChild(el("path", { "class": "gn-arrowhead" + (isTyped ? " typed" : ""), d: arrowPathD(radius) }));
+      outer.appendChild(inner);
+      container.appendChild(outer);
+      return { outer: outer, inner: inner, radius: radius };
+    }
+    function updateArrow(rec, pb, cx, cy) {
+      rec.outer.setAttribute("transform", "translate(" + pb.x + "," + pb.y + ") rotate(" + arrowAngleDeg(pb, cx, cy) + ")");
+    }
+
+    // Edge curvature: both modes use a perpendicular offset from the
+    // straight line's midpoint, only the magnitude differs. Timeline's
+    // bin/stack layout needs a visibly bigger arc to read as "curving
+    // into" a column the way the owner's sketch draws it than map mode's
+    // subtle declutter-only nudge does.
+    function edgeBow(dx, dy) {
+      var dist = Math.hypot(dx, dy);
+      return state.mode === "timeline" ? Math.min(70, dist * 0.22) : Math.min(24, dist * 0.08);
+    }
+
     function render() {
       // edges
       gEdges.innerHTML = "";
@@ -280,13 +435,13 @@
         defs.appendChild(grad);
         var mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
         var dx = pb.x - pa.x, dy = pb.y - pa.y;
-        var bow = Math.min(24, Math.hypot(dx, dy) * 0.08);
+        var bow = edgeBow(dx, dy);
         var nx = -dy, ny = dx;
         var nl = Math.hypot(nx, ny) || 1;
         var cx = mx + (nx / nl) * bow, cy = my + (ny / nl) * bow;
-        var isTyped = e.type && e.type !== "link";
+        var isTyped = e.type && e.type !== "link" && e.type !== "upstream";
         var path = el("path", {
-          "class": "gn-edge" + (isTyped ? " typed" : ""),
+          "class": "gn-edge" + (isTyped ? " typed" : "") + (e.type === "upstream" ? " upstream" : ""),
           d: "M" + pa.x + "," + pa.y + " Q" + cx + "," + cy + " " + pb.x + "," + pb.y,
           stroke: "url(#" + gradId + ")",
           // same reasoning as the node inner-group counter-scale above: an
@@ -309,21 +464,30 @@
           labelG = constScaleText("edge", "gn-typed-label", cx, cy, e.type);
           gEdges.appendChild(labelG);
         }
-        edgeEls.push({ source: e.source, target: e.target, path: path, gradient: grad, a: a, b: b, label: labelG });
+        var arrow = buildArrow(gEdges, pb, cx, cy, radiusFor(b.in_degree || 0), isTyped);
+        edgeEls.push({ source: e.source, target: e.target, path: path, gradient: grad, a: a, b: b, label: labelG, arrow: arrow });
       });
 
       // nodes
       gNodes.innerHTML = "";
       nodeEls = {};
       var invK = 1 / (state.transform.k || 1);
+      var isTimeline = state.mode === "timeline";
       state.nodes.forEach(function (n) {
         var p = posOf(n);
-        var isOrphan = !(n.in_degree || n.out_degree);
+        var isOrphan = !n.has_upstream;
         var g = el("g", {
           "class": "gn-node" + (isOrphan ? " gn-orphan" : ""),
           transform: "translate(" + p.x + "," + p.y + ")"
         });
         g.dataset.id = n.id;
+        // Full title on hover (round-3: node labels switched from title to
+        // a short slug/shortname, so the full title needs a home) --
+        // native SVG <title> is the plain-HTML-equivalent tooltip, no
+        // custom positioning/z-index code to maintain.
+        var titleEl = el("title", {});
+        titleEl.textContent = n.title || n.id;
+        g.appendChild(titleEl);
         // Node MARKERS (circle + label) render at a constant SCREEN size
         // regardless of zoom, via this inner counter-scale group -- the
         // usual node-link-diagram convention (Obsidian included): edges are
@@ -339,8 +503,23 @@
         var r = radiusFor(n.in_degree || 0);
         var selRing = el("circle", { "class": "gn-sel-ring", r: r + 4 });
         var circle = el("circle", { "class": "gn-circle", r: r, fill: TIER_COLOR[n.tier] || "var(--muted)" });
-        var label = el("text", { "class": "gn-label", x: r + 5, y: 4 });
-        label.textContent = n.title && n.title.length <= 46 ? n.title : (n.title || n.id).slice(0, 44) + "…";
+        // Label text = the page's short id or registered shortname (round-3,
+        // owner: "a unique shortname for the job, like an id, not a full
+        // name which is very long"); the full title moved to the <title>
+        // tooltip above. Position: to the right of the circle in Map mode
+        // (unchanged), CENTERED BELOW it in Timeline mode -- the owner's
+        // sketch draws "page short names under the circle" for the
+        // vertical-stack layout, which only reads correctly with a
+        // centered, below-anchored label.
+        var labelText = n.label || n.id;
+        if (labelText.length > 46) labelText = labelText.slice(0, 44) + "…";
+        var label = el("text", {
+          "class": "gn-label",
+          x: isTimeline ? 0 : r + 5,
+          y: isTimeline ? r + 16 : 4,
+          "text-anchor": isTimeline ? "middle" : "start"
+        });
+        label.textContent = labelText;
         inner.appendChild(selRing);
         inner.appendChild(circle);
         inner.appendChild(label);
@@ -362,6 +541,13 @@
       scaledTextEls.forEach(function (s) {
         s.g.setAttribute("transform", "translate(" + s.x + "," + s.y + ") scale(" + invK + ")");
       });
+      // Arrowheads: same counter-scale convention, but their OWN inner
+      // group (built per-edge in buildArrow(), not tracked in
+      // scaledTextEls since they also need a rotation the text-label path
+      // doesn't).
+      edgeEls.forEach(function (e) {
+        if (e.arrow) e.arrow.inner.setAttribute("transform", "scale(" + invK + ")");
+      });
     }
 
     function moveNode(id) {
@@ -369,7 +555,6 @@
       var p = posOf(n);
       var rec = nodeEls[id];
       if (rec) rec.g.setAttribute("transform", "translate(" + p.x + "," + p.y + ")");
-      var invK = 1 / (state.transform.k || 1);
       edgeEls.forEach(function (e) {
         if (e.source !== id && e.target !== id) return;
         var pa = posOf(e.a), pb = posOf(e.b);
@@ -377,11 +562,12 @@
         e.gradient.setAttribute("x2", pb.x); e.gradient.setAttribute("y2", pb.y);
         var mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
         var dx = pb.x - pa.x, dy = pb.y - pa.y;
-        var bow = Math.min(24, Math.hypot(dx, dy) * 0.08);
+        var bow = edgeBow(dx, dy);
         var nx = -dy, ny = dx;
         var nl = Math.hypot(nx, ny) || 1;
         var cx = mx + (nx / nl) * bow, cy = my + (ny / nl) * bow;
         e.path.setAttribute("d", "M" + pa.x + "," + pa.y + " Q" + cx + "," + cy + " " + pb.x + "," + pb.y);
+        if (e.arrow) updateArrow(e.arrow, pb, cx, cy);
         if (e.label) {
           // Keep the typed-edge label's world anchor (and the parallel
           // bookkeeping entry updateNodeScale() reads) in sync with the
@@ -390,7 +576,7 @@
           // else.
           var entry = scaledTextEls.filter(function (s) { return s.g === e.label; })[0];
           if (entry) { entry.x = cx; entry.y = cy; }
-          e.label.setAttribute("transform", "translate(" + cx + "," + cy + ") scale(" + invK + ")");
+          e.label.setAttribute("transform", "translate(" + cx + "," + cy + ") scale(" + (1 / (state.transform.k || 1)) + ")");
         }
       });
     }
@@ -446,12 +632,26 @@
           nodeEls[nid].g.classList.toggle("hi", !!neigh[nid]);
         });
         edgeEls.forEach(function (e) {
-          e.path.classList.toggle("lit", e.source === focus || e.target === focus);
+          var lit = e.source === focus || e.target === focus;
+          e.path.classList.toggle("lit", lit);
+          if (e.arrow) e.arrow.outer.classList.toggle("lit", lit);
+          // Typed-edge labels are hidden by default now (round-3, same
+          // collision reason node labels are) -- revealing one when ITS
+          // OWN edge lights up needs a direct class on the label itself,
+          // not a CSS sibling selector: `~` matches every later sibling
+          // matching the selector, not just the one paired label, so it
+          // would reveal OTHER edges' labels too in a shared <g> (found
+          // live trying exactly that before switching to this).
+          if (e.label) e.label.classList.toggle("lit", lit);
         });
       } else {
         svgEl.classList.remove("dimmed");
         Object.keys(nodeEls).forEach(function (nid) { nodeEls[nid].g.classList.remove("hi"); });
-        edgeEls.forEach(function (e) { e.path.classList.remove("lit"); });
+        edgeEls.forEach(function (e) {
+          e.path.classList.remove("lit");
+          if (e.arrow) e.arrow.outer.classList.remove("lit");
+          if (e.label) e.label.classList.remove("lit");
+        });
       }
       Object.keys(nodeEls).forEach(function (nid) {
         nodeEls[nid].g.classList.toggle("selected", nid === ui.selectedId);
@@ -695,9 +895,10 @@
       var hits = [];
       var best = null;
       state.nodes.forEach(function (n) {
-        var hay = (n.title + " " + n.id).toLowerCase();
+        var hay = (n.title + " " + n.id + " " + (n.label || "")).toLowerCase();
         if (hay.indexOf(q) === -1) return;
-        var score = n.id.toLowerCase() === q ? 3 : (n.title.toLowerCase().indexOf(q) === 0 ? 2 : 1);
+        var score = n.id.toLowerCase() === q || (n.label || "").toLowerCase() === q ? 3
+          : (n.title.toLowerCase().indexOf(q) === 0 ? 2 : 1);
         if (!best || score > best.score) best = { n: n, score: score };
         hits.push(n.id);
       });
@@ -713,14 +914,21 @@
     }
     if (searchInput) searchInput.addEventListener("input", function () { doSearch(searchInput.value); });
 
-    // ------------------------------------------------------------ orphans
+    // ------------------------------------------------------- completeness
+    // Round-3: replaces the old zero-DEGREE "orphan" list with a
+    // zero-UPSTREAM list (has_upstream, computed server-side from
+    // web/pages.yaml's `upstreams:` field) -- a page can have plenty of
+    // content-link/typed edges and still be missing the one thing this
+    // panel now tracks: a stated motivation. Per the brief, this list
+    // "should only be genuine roots"; anything else here is a registered
+    // page still missing its upstreams: entry.
     function renderOrphans() {
-      var orphans = state.nodes.filter(function (n) { return (n.in_degree || 0) === 0 && (n.out_degree || 0) === 0; });
+      var orphans = state.nodes.filter(function (n) { return !n.has_upstream; });
       orphanList.innerHTML = "";
       if (!orphans.length) {
         var li = document.createElement("li");
         li.className = "go-empty";
-        li.textContent = "None: every page has at least one content link.";
+        li.textContent = "None: every page states an upstream.";
         orphanList.appendChild(li);
         return;
       }
@@ -752,9 +960,11 @@
       state.nodeById = {};
       data.nodes.forEach(function (n) { state.nodeById[n.id] = n; });
       state.edges = data.edges;
-      var tl = computeTimelineLayout();
+      var tl = computeTimelineBins();
       state.timelinePos = tl.pos;
-      timelineRange = { minT: tl.minT, maxT: tl.maxT };
+      var hdr = computeHeaderGroups(tl.bins);
+      timelineRange = { bins: tl.bins, months: hdr.months, years: hdr.years, stackTop: hdr.stackTop,
+                         dayRowY: hdr.dayRowY, monthRowY: hdr.monthRowY, yearRowY: hdr.yearRowY };
       render();
       renderTimelineChrome();
       renderOrphans();
@@ -771,7 +981,13 @@
       fetch(src, { cache: "no-cache" }).then(function (r) { return r.json(); }).then(function (data) {
         applyData(data);
       }).catch(function (err) {
-        if (first) orphanList.innerHTML = '<li class="go-empty">Could not load graph.json.</li>';
+        // Log to the console (found live, round-3: this used to swallow a
+        // RENDER-time exception silently, showing the identical "could not
+        // load" message a genuine fetch failure would, which sent a real
+        // JS bug on a bad trail as a network problem) -- the message below
+        // is only the network-level fallback UI, not the whole story.
+        console.error("graph.html: load/render failed", err);
+        if (first) orphanList.innerHTML = '<li class="go-empty">Could not load or render graph.json (see console).</li>';
       });
     }
 

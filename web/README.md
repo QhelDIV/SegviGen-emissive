@@ -17,6 +17,16 @@ sit alongside it. In-progress pages live under _preview/ until promoted.
 - fullseg_canon10/       — full-seg as voxels (superseded)
 - fullseg_overfit10_adhoc/ — ad-hoc 10-shape set (deprecated)
 
+## pages.yaml
+
+The curated page registry (blurbs, tags, and since round-3 of the graph
+rework: `upstreams:` — which page(s) motivated this one's creation, the
+page-relationship graph's directed arrows — and an optional `shortname:`
+display override for a long id). See pages.yaml's own header comment for
+the full field contract and the `_preview/`-prefix gotcha (a registry
+entry's own `name:` may carry the prefix; every `upstreams:`/graph_edges.yaml
+reference to ANY page must use the bare id regardless).
+
 ## Rebuild console
 
     python tools/build_console.py --publish

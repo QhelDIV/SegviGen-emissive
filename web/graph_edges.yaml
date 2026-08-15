@@ -3,11 +3,15 @@
 #
 # Each entry is a relationship the CONTENT-LINK crawler cannot see (a
 # citation link is the only thing scan_edges() finds): {from, to, type},
-# type one of supersedes / evidence-for / part-of. Every entry here must be
-# verified by actually reading both pages, not inferred from names or
-# titles alone; a candidate that does not hold on inspection is left out,
-# not added speculatively. Unknown node ids or types are dropped at build
-# time with a warning, never a hard failure.
+# type one of supersedes / evidence-for / part-of / same-page (round-3).
+# Every entry here must be verified by actually reading both pages, not
+# inferred from names or titles alone; a candidate that does not hold on
+# inspection is left out, not added speculatively. Unknown node ids or
+# types are dropped at build time with a warning, never a hard failure --
+# ALWAYS use the BARE node id, even for a page whose own pages.yaml `name:`
+# carries a `_preview/` prefix (that prefix exists only to keep pages.yaml
+# keys unique, every graph node id is bare regardless of tier; bit this
+# file once already, see web/pages.yaml's own header for the fuller note).
 #
 # VERIFICATION RECORD (round-2, 2026-08-10; five candidates checked against
 # the actual page content, one held):
@@ -83,5 +87,16 @@
 # (paper_v3/build.py lines 74-79); the old prose skeleton at
 # _preview/paper_skeleton is its superseded predecessor.
 - from: workspace/paper_skeleton
-  to: _preview/paper_skeleton
+  to: paper_skeleton
   type: supersedes
+
+# paper_v3 / workspace/paper_skeleton identity (completes the paper_skeleton
+# resolution above -- verified directly, paper_v3/build.py's own comment:
+# "This page is the workspace zone's living 'paper_skeleton' page; the
+# preview directory is only where it is built"): paper_v3 is the SAME page
+# as workspace/paper_skeleton under its preview-build URL, not a distinct
+# document -- neither supersedes/evidence-for/part-of claims identity, so
+# this uses the same-page type (added round-3 for exactly this case).
+- from: paper_v3
+  to: workspace/paper_skeleton
+  type: same-page
