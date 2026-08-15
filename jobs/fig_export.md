@@ -3,7 +3,7 @@ executor: fig-ref
 track: tooling
 status: done
 started: 2026-08-10 18:12
-updated: 2026-08-11 13:37
+updated: 2026-08-14 17:29
 slurm: 
 link: 
 page: none (judged on the rendering page's thumbnail strip)
@@ -30,4 +30,5 @@ log:
 - 2026-08-11 13:36 [owner] tall/square thumbnails render too large in the full-width list, so the strip needs scrolling, defeating its at-a-glance purpose. Fix: cap each tile's rendered size, height-driven since vertical space is what scrolling costs: max-height around 72-84px per tile (pick what makes the rendering page's 9-figure strip fit the rail viewport at 1440 with the outline above it), aspect preserved, no cropping, width also bounded by the rail; squares render small, landscapes wide and short; center tiles horizontally.
 - 2026-08-11 13:37 [fig-ref] Capped each thumbnail's height instead of its width, since height is what was forcing the scroll. A thumbnail now shrinks to fit inside a short height limit while keeping its natural shape, so a wide figure still shows nice and wide, but a tall or square one now renders small and centered instead of tall. Picked the actual height limit by measuring the real rendering page rather than guessing: with that page's own list of section links above the thumbnails also taking up room, the whole thumbnail strip now fits in a normal browser window with nothing needing to scroll.
 - 2026-08-11 13:37 [fig-ref] Capped each thumbnail's height so the strip stops needing its own scroll: a thumbnail now shrinks to fit a short height limit while keeping its natural shape and staying centered, so wide figures still show wide and tall or square ones show small instead of oversized. Measured the real rendering page (with its own section list above the thumbnails also taking up room) to pick a height that actually clears the goal rather than guessing, and confirmed on the live page after publishing that the whole nine-thumbnail strip is now fully visible with no scrolling at both screen widths asked for, in both light and dark reading modes.
+- 2026-08-14 17:29 [owner] yes it works for the rendering setups page, but not properly for the fixedbake_galleries page (only single / first sub-image shows up) call an agent to check why, if it fixed we can close it
 outcome: Capped each thumbnail's height so the strip stops needing its own scroll: a thumbnail now shrinks to fit a short height limit while keeping its natural shape and staying centered, so wide figures still show wide and tall or square ones show small instead of oversized. Measured the real rendering page (with its own section list above the thumbnails also taking up room) to pick a height that actually clears the goal rather than guessing, and confirmed on the live page after publishing that the whole nine-thumbnail strip is now fully visible with no scrolling at both screen widths asked for, in both light and dark reading modes.

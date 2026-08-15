@@ -1,9 +1,9 @@
 title: Page-relationship graph console view
 executor: xgpage-designer
 track: tooling
-status: done
+status: ongoing
 started: 2026-08-09 16:30
-updated: 2026-08-09 19:20
+updated: 2026-08-14 17:29
 slurm: 
 link: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/graph.html
 page: none (console surface, not in the pages inventory; direct link below)
@@ -26,4 +26,6 @@ log:
 - 2026-08-09 19:15 [xgpage-designer] Round 2 shipped: the click/hover/search interaction model now has a guaranteed reset (background click or Escape) after fixing the exact bug the owner reported, backed by a permanent 7-journey regression test (tools/qa_graph_journeys.js); a Timeline view lays the same pages out by creation date so development flow reads left to right; and one hand-verified curated relationship (glb_direct_pilot_v1 evidence-for pipeline_glb_direct) is live as a dashed, labeled edge, with the four relationships that did not hold recorded and dropped rather than added speculatively.
 - 2026-08-09 19:19 [xgpage-designer] Fixed the journey harness so anyone can actually run it: it needed a Node 20+ binary and the isolated Playwright install (this workstation's default node is v12, too old for Playwright), and the raw invocation I'd only documented in a comment was not something another agent could discover on their own -- the master hit MODULE_NOT_FOUND running it fresh. Added tools/qa_graph_journeys.sh, a wrapper that finds a working node and the Playwright install on its own and fails with a clear message if it can't, instead of a cryptic module error. The one-liner to run it is: tools/qa_graph_journeys.sh (optionally with a URL argument to test a staging page instead of the live one). Verified with a truly clean environment (PATH stripped to just /usr/bin:/bin, no nvm or npm dirs visible) and it still found everything and ran all 7 journeys clean.
 - 2026-08-09 19:20 [master] For your review: Round 2 answers your two criticisms. Click a node (selects now; double-click opens), then click the background or press Escape: everything resets, no refresh needed. Try the Timeline toggle: pages left to right by creation date in tier lanes. Is the interaction clean and does the timeline show the development flow you wanted?
+- 2026-08-14 17:29 [owner] I think the attracting behaviour will still cause cluttering, there is no mechanism for pushing out. I like the idea of timeline view, I would say try not to put timeline in a uniform way: more page is produced in a day, the finer the time scale, in such way the pages would have their space. And mostly importantly is that I think the current logical connection is incomplete: there are many pages' relationship not mentioned.
+- 2026-08-14 17:29 [xgpage-designer] Owner review round 3: attraction still clutters (no push-out mechanism), timeline should use a density-adaptive time scale (busier days get finer scale), and the logical edge set is incomplete (many page relationships missing).
 outcome: Round 2 shipped: the click/hover/search interaction model now has a guaranteed reset (background click or Escape) after fixing the exact bug the owner reported, backed by a permanent 7-journey regression test (tools/qa_graph_journeys.js); a Timeline view lays the same pages out by creation date so development flow reads left to right; and one hand-verified curated relationship (glb_direct_pilot_v1 evidence-for pipeline_glb_direct) is live as a dashed, labeled edge, with the four relationships that did not hold recorded and dropped rather than added speculatively.
