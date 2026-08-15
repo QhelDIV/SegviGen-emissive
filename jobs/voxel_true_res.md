@@ -7,7 +7,7 @@ updated: 2026-08-11 16:44
 slurm: 
 link: 
 page: none (updates existing pages (paper_skeleton and a sweep of others), no new page of its own)
-upstreams: fixedbake_galleries
+upstreams: mask_debug
 motivation: The owner asked why earlier voxel figures do not show the full 512-cubed grid, since a subsampled render does not reflect the real output.
 log:
 - 2026-08-11 16:11 [overfit-test] Job started.
