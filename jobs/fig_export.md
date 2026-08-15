@@ -1,9 +1,9 @@
 title: Figure export tool: rasterize page figures to real PNGs
 executor: fig-ref
 track: tooling
-status: ongoing
+status: done
 started: 2026-08-10 18:12
-updated: 2026-08-14 17:35
+updated: 2026-08-14 17:38
 slurm: 
 link: 
 page: none (judged on the rendering page's thumbnail strip)
@@ -31,4 +31,6 @@ log:
 - 2026-08-11 13:37 [fig-ref] Capped each thumbnail's height so the strip stops needing its own scroll: a thumbnail now shrinks to fit a short height limit while keeping its natural shape and staying centered, so wide figures still show wide and tall or square ones show small instead of oversized. Measured the real rendering page (with its own section list above the thumbnails also taking up room) to pick a height that actually clears the goal rather than guessing, and confirmed on the live page after publishing that the whole nine-thumbnail strip is now fully visible with no scrolling at both screen widths asked for, in both light and dark reading modes.
 - 2026-08-14 17:29 [owner] yes it works for the rendering setups page, but not properly for the fixedbake_galleries page (only single / first sub-image shows up) call an agent to check why, if it fixed we can close it
 - 2026-08-14 17:35 [fig-ref] Owner review: export works on the rendering setups page but on fixedbake_galleries only the first sub-image shows; fig-export-fix agent is diagnosing.
-outcome: Capped each thumbnail's height so the strip stops needing its own scroll: a thumbnail now shrinks to fit a short height limit while keeping its natural shape and staying centered, so wide figures still show wide and tall or square ones show small instead of oversized. Measured the real rendering page (with its own section list above the thumbnails also taking up room) to pick a height that actually clears the goal rather than guessing, and confirmed on the live page after publishing that the whole nine-thumbnail strip is now fully visible with no scrolling at both screen widths asked for, in both light and dark reading modes.
+- 2026-08-14 17:37 [fig-ref] Diagnosed: fixedbake_galleries had never run the figure-export step at all (no img/figs directory in staging), so every one of its 24 numbered figures fell back to the strip's first-<img> rule; for a ground-truth-vs-prediction pair figure that shows only the ground truth image, matching the owner's symptom exactly. Not a size/timeout problem: the page's figures are small (2 to 4 panels each), the hundreds-of-thumbnail draw strips live outside any numbered figure element and were never in scope for this tool. Fix: ran export_figs.js against the live page (no engine changes needed) and copied the stamped HTML plus the new img/figs composites into the published directory, in the documented build-then-export-then-copy order. Verified live: all 24 figures now carry a data-thumb composite (checked fig-1's GT-plus-prediction pair and fig-24's four-panel fallback figure by eye, both show every sub-image, not just the first), qa_widths.js passes with 0 issues at 1275 and 390 on both fixedbake_galleries and the rendering setups page, and the rendering page's own strip is unchanged.
+- 2026-08-14 17:38 [fig-ref] Verified live: all 24 figures on fixedbake_galleries now carry whole-figure composites in the strip (fig-1 shows ground truth and prediction side by side); the rendering setups page is unchanged. Cause was operational, not an engine bug: the export step had never been run on this page, so the strip fell back to each figure's first image.
+outcome: Verified live: all 24 figures on fixedbake_galleries now carry whole-figure composites in the strip (fig-1 shows ground truth and prediction side by side); the rendering setups page is unchanged. Cause was operational, not an engine bug: the export step had never been run on this page, so the strip fell back to each figure's first image.
