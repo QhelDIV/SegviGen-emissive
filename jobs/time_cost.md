@@ -7,7 +7,7 @@ updated: 2026-08-14 17:29
 slurm: 
 link: 
 page: time_cost
-needs: evaluation: The page names three concrete optimization candidates (double model load in inference jobs, conversion time limits that ignore material-slot count, a non-checkpointed render job that lost 27 core-hours); which do you want pursued first?
+needs: 
 motivation: Owner request: a page showing the time cost of each pipeline step, from data processing to model inference to conversion to Blender rendering. The owner suspects some steps take excessive time that we can optimize; the page should show measured durations, not impressions, and point at the dominant costs.
 log:
 - 2026-08-11 16:37 [master] Registered at dispatch. A worker will mine the cluster accounting records and job logs for real per-step durations and build the page.
