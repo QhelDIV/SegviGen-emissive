@@ -7,6 +7,7 @@ updated: 2026-08-14 16:53
 slurm: 
 link: 
 page: none (the survey report and the migrated repo are the deliverables)
+upstreams: mask_debug,code_sync
 motivation: Owner call: the code is scattered over five locations with drifted duplicates and no stage structure, which is what let render bugs hide in parallel reimplementations. Target: SegviGen-emissive becomes the single project repo with the research code staged under emissive and the project console under xgconsole, each package with its own dependencies. First step is a read-only survey mapping every script to its location, pipeline stage, and duplicate set, resolving drift newest-wins with diffs shown, so the migration is safe rather than hopeful.
 log:
 - 2026-08-14 16:36 [master] Registered at dispatch. A fresh worker inventories all code locations and produces the migration map for owner ratification; no files move in this pass.

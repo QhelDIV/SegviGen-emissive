@@ -7,6 +7,7 @@ updated: 2026-08-10 19:27
 slurm: 
 link: 
 page: target_check
+upstreams: overfit_ct10
 motivation: The owner noticed overfit predictions glow in each shape's own albedo colors while matching nothing in the emission ground truth, which points at the dataset builder feeding the wrong target; if true, the entire multi-shape training failure is a data bug, not a capacity limit.
 log:
 - 2026-08-10 16:50 [overfit-test] Job started.

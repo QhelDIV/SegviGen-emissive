@@ -7,6 +7,7 @@ updated: 2026-08-10 17:34
 slurm: 
 link: 
 page: none (refactor; the unchanged live surfaces are the proof)
+upstreams: job_cli,graph_page
 motivation: The board, graph, and version tool are generic mechanisms living as lightgen-local scripts; the console's extraction into the package proved the pattern, and the versioning tool's hand-port drift proved the cost of skipping it. In the package, every project gets them and improvements land once.
 log:
 - 2026-08-10 16:57 [jobs-redesign] Job started.

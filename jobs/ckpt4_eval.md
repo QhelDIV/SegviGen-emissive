@@ -7,6 +7,7 @@ updated: 2026-08-10 19:02
 slurm: 
 link: 
 page: ckpt4_eval
+upstreams: train_pw1_capped
 motivation: The capped 72k run finally produced a checkpoint; the project needs to know whether conditioned training on the full dataset beats the zero-shot oracle and the old runs, measured with the averaged protocol so single-draw luck cannot mislead again.
 log:
 - 2026-08-10 01:38 [overfit-test] Job started.

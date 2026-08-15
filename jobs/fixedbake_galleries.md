@@ -7,6 +7,7 @@ updated: 2026-08-13 17:53
 slurm: 
 link: 
 page: workspace/fixedbake_galleries
+upstreams: mask_debug
 needs: evaluation: The full-sample extension is live: every one of the 422 draws shown per shape with fractions badged, the displayed draw outlined in context, and a per-shape distribution chart. Does this meet the transparency bar, and does the page read as an article now?
 motivation: Owner request after the render-path fix landed: prediction visualizations for all shapes of both example sets (Dongchen's eleven figure picks and our twelve showcase picks) through the fixed bake, box render. The three paper shapes proved the path; this extends it to full qualitative coverage, with the per-draw measurement and the documented draw-selection rule applied to every shape.
 log:

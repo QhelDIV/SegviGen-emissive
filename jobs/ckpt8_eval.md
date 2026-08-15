@@ -7,6 +7,7 @@ updated: 2026-08-11 14:12
 slurm: 
 link: 
 page: ckpt8_eval
+upstreams: train_pw1_capped,ckpt4_eval
 needs: evaluation: The final honest page: held-out IoU 0.198 is real, but the checkpoint buys it by predicting emissive broadly, with confident false positives even on its own training shapes (raw error 0.31 vs EMA 0.54; EMA is wronger but calmer). Your gallery challenge drove this whole finding. Decision: continue training from the epoch 7 seed as-is, attack the calibration problem first (loss reweighting, threshold study, or training-signal balance), or hold 72k spend until a fix is designed?
 motivation: The run's final checkpoint improved sixfold on the trainer's tiny probe; the project needs the same averaged held-out evaluation as epoch 4 to know whether the jump is real and whether continuing training is worth the compute.
 log:

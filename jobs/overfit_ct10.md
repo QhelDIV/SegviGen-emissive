@@ -7,6 +7,7 @@ updated: 2026-08-10 18:18
 slurm: 242210 (single-shape run), 242211 (400-epoch run); earlier: 240857, 240858, 242172, 242142, 242178 all completed
 link: https://aspis.cmpt.sfu.ca/projects/omages/yanxg/lightgen/_preview/overfit_condtest/
 page: overfit_condtest
+upstreams: train_pw1_uncapped,train_pw5_24h
 motivation: If the model cannot even memorize 10 training shapes, no 72k run can succeed; this isolates why training fails before spending more compute.
 log:
 - 2026-08-09 17:15 The model fails to memorize the 10 training shapes at either pos_weight setting (best IoU 0.42 and 0.28, against a 0.96 ceiling). So pos_weight 5 is not the sole cause of the training failures; something else in the current setup blocks memorization, or 10 shapes need far more epochs.

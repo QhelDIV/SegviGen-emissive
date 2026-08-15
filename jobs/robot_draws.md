@@ -7,6 +7,7 @@ updated: 2026-08-11 17:23
 slurm: 
 link: 
 page: none (feeds panels into the existing mask-bake debug page rather than a page of its own)
+upstreams: ckpt8_eval
 motivation: The robot is one of the three paper figure shapes, and every existing prediction dump for it is degenerate: the model output is essentially zero at every voxel, in raw and averaged weights alike. The paper panel needs at least one usable draw, so we sample the model again with new random seeds and keep each draw separately instead of averaging.
 log:
 - 2026-08-11 16:17 [master] Registered at dispatch. A dedicated runner will sample new draws for the robot on the cluster and report how much of the surface each draw marks as emissive.
