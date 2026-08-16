@@ -90,3 +90,4 @@ xgconsole/web/assets/katex/
 *.credentials.json
 xgconsole/jobs/.locks/
 captures/
+*.egg-info/
