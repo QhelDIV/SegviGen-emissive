@@ -7,6 +7,7 @@ updated: 2026-08-13 16:37
 slurm: 
 link: 
 page: none (engine work; the proof is the test suite, the QA matrix, and existing pages rebuilding unchanged)
+upstreams: pkg_bibcite
 motivation: Owner-ratified redesign: v3 is the completed language and becomes the only style for new pages, working standalone with its full right rail, while the left page tree appears exactly when a project's manifest registers the page. v2 demotes to legacy beside v1, kept byte-stable for existing pages. This makes every page independent, makes console membership a one-line registry decision instead of a rebuild, and keeps one URL per page so annotations never split.
 log:
 - 2026-08-13 16:06 [master] Registered at dispatch. The design-system agent implements the standalone shell mode, the runtime tree mount, the legacy demotion, and the documentation collapse, with the width-matrix QA over both modes.

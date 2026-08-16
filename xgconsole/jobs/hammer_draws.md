@@ -7,6 +7,7 @@ updated: 2026-08-11 17:23
 slurm: 
 link: 
 page: none (feeds panels into the existing mask-bake debug page rather than a page of its own)
+upstreams: robot_draws
 motivation: Every saved draw for the warhammer is empty or nearly so, with at most 0.6 percent of voxels marked emissive against a ground truth of 8.5 percent. Fresh random seeds rescued the robot, whose first draws looked just as hopeless, so the same resampling is worth trying for the hammer before we accept a near-black paper panel.
 log:
 - 2026-08-11 16:23 [master] Registered at dispatch. The same runner that resampled the robot will sample fresh draws for the warhammer with the identical protocol.

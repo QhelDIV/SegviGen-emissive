@@ -39,9 +39,13 @@ Modes:
                           NEEDS .venv_itables for the offline DT bundle)
 The manifest path needs only stdlib + PyYAML (runs under .venv_console).
 
-Curation layer: web/pages.yaml ({name, tags, important, blurb} — the same
-v11 per-page convention lightgen's console already used) joins onto the scan.
-Pages absent render honestly (no tags, no star).
+Curation layer: web/pages.yaml ({name, tags, important, blurb, upstreams?,
+shortname?} — the same v11 per-page convention lightgen's console already
+used, plus two fields the page graph reads (round-3): `upstreams` names the
+page(s) that motivated this one's creation (the directed-edge source data
+for the graph's arrows), `shortname` overrides the displayed node label for
+a name too long to read as a graph label, see build_graph.py) joins onto
+the scan. Pages absent render honestly (no tags, no star).
 
 OFFLINE BUNDLE CONSTRAINTS: identical to the somages original — see that
 file's docstring if modifying render_table_fragment(); unchanged here.
@@ -292,7 +296,13 @@ def load_curation():
     for p in data.get("pages", []):
         meta = {"tags": p.get("tags") or [],
                 "important": bool(p.get("important")),
-                "blurb": p.get("blurb") or ""}
+                "blurb": p.get("blurb") or "",
+                # upstreams/shortname (round-3, graph directed-edges rework):
+                # which page(s) motivated this one, and an optional short
+                # display id for a long name -- see build_graph.py, the
+                # only current reader of these two fields.
+                "upstreams": p.get("upstreams") or [],
+                "shortname": p.get("shortname") or ""}
         name = p["name"]
         out[name] = meta
         # Preview pages are keyed path-like in pages.yaml ("_preview/foo",

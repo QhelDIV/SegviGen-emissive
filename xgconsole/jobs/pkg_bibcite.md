@@ -7,6 +7,7 @@ updated: 2026-08-12 14:54
 slurm: 
 link: 
 page: none (package work; the proof is the somages pages rebuilding unchanged plus the package tests)
+upstreams: pkg_extract
 motivation: Owner call: the package should be self-contained, and the bib citation system (one BibTeX file rendering to both web reference cards and the paper's natbib citations, with build-failing gates) lives only in somages tools. Lightgen is the second consumer. The extraction also sweeps somages tools for any other genre-level machinery the package is missing.
 log:
 - 2026-08-12 14:33 [master] Registered at dispatch. The design-system agent will extract the citation module following the established config-plus-driver pattern and survey the remaining somages tools for other candidates.

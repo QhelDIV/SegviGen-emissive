@@ -7,6 +7,7 @@ updated: 2026-08-11 20:00
 slurm: 
 link: 
 page: none (a feasibility test; results go into the time-cost page and the board rather than a page of its own)
+upstreams: mask_debug
 motivation: Owner request: test the same box rendering on the Vulcan cluster, which may have a large CPU pool. If Vulcan renders as fast or faster than Solar's 64-core jobs, we gain a second queue for the render fan-out and cut wall-clock further.
 log:
 - 2026-08-11 19:34 [master] Registered at dispatch. A dedicated runner will check Vulcan's partitions, storage reachability, and Blender availability, then time the same box render against Solar's numbers.

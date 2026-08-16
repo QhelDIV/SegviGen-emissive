@@ -7,6 +7,7 @@ updated: 2026-08-12 17:31
 slurm: 
 link: 
 page: none (dataset build; results land on the training and evaluation pages)
+upstreams: ckpt8_eval
 motivation: The direct-ovoxel dataset had no cond.pth for any shape, so every run on it had trained with zero conditioning while every baseline received the TexVerse thumbnail. That left conditioning as an uncontrolled difference in the comparison. This workstream builds the missing conditioning from the same thumbnail the baselines get, so the difference can be measured instead of assumed.
 log:
 - 2026-08-12 17:30 [cond-train] Registered late, after the build had already shipped: the workstream ran on 2026-08-07 with SendMessage as its reporting channel and predates this board reaching it.
