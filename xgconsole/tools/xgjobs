@@ -1,4 +1,4 @@
-#!/local-scratch2/xya120/studio/misc/lightgen/.venv_console/bin/python
+#!/cs/3dlg-falas/project/omages/lightgen/segvigen_emissive/xgconsole/.venv_console/bin/python
 """xgjobs -- lightgen's thin driver over xgpage.jobs's CLI (extracted
 2026-08-10, mirroring the console precedent). Agents express intent (start a
 job, log an update, mark it done); the package owns every mechanical detail
