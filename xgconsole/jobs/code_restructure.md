@@ -3,7 +3,7 @@ executor: code-survey
 track: tooling
 status: done
 started: 2026-08-14 16:36
-updated: 2026-08-14 20:59
+updated: 2026-08-17 15:24
 slurm: 
 link: 
 page: none (the survey report and the migrated repo are the deliverables)
@@ -15,4 +15,6 @@ log:
 - 2026-08-14 16:42 [code-survey] Read-only survey done across the ops repo, the fork, the cluster working copy, and the two debug scratch trees; migration map written, two real content drifts found and resolved in favor of the cluster debug copy.
 - 2026-08-14 16:53 [code-survey] Consolidation done and pushed: ops history merged into SegviGen-emissive (QhelDIV/SegviGen-emissive main 1842e3b), tree sorted into emissive/ + xgconsole/ + attic/, mask_debug continuous-render fixes ported into emissive/render/, per-package pyproject files separate the torch stack from the console stack. This repo stays the live console until cutover.
 - 2026-08-14 20:59 [code-survey] SegviGen-emissive is the single project repo: ops history merged with full log continuity, tree sorted into emissive plus xgconsole plus attic, the two drifted mask_debug render fixes ported, per-package pyproject files separating the research and console stacks, all verified (editable installs, tools resolving from the new root, compile sweep) and pushed. Deliberately out of scope, pending the owner: cutting the live console over from the ops working directory, and deploying the fork tree to the cluster so the old flat code directory retires.
+- 2026-08-17 15:23 [code-survey] Console cutover done: canonical checkout now lives at /cs/3dlg-falas/project/omages/lightgen/segvigen_emissive (falas NFS, 19T free; the omages share stayed over quota). Both cron sweeps, the board CLI, the graph, and the full console publish run from the new root; graph positions carried over; the old local folder carries a RETIRED marker.
+- 2026-08-17 15:24 [code-survey] Console cutover done: canonical checkout now lives at /cs/3dlg-falas/project/omages/lightgen/segvigen_emissive (falas NFS, 19T free; the omages share stayed over quota). Both cron sweeps, the board CLI, the graph, and the full console publish run from the new root; graph positions carried over; the old local folder carries a RETIRED marker.
 outcome: SegviGen-emissive is the single project repo: ops history merged with full log continuity, tree sorted into emissive plus xgconsole plus attic, the two drifted mask_debug render fixes ported, per-package pyproject files separating the research and console stacks, all verified (editable installs, tools resolving from the new root, compile sweep) and pushed. Deliberately out of scope, pending the owner: cutting the live console over from the ops working directory, and deploying the fork tree to the cluster so the old flat code directory retires.
