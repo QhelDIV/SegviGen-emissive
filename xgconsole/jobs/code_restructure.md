@@ -3,7 +3,7 @@ executor: code-survey
 track: tooling
 status: done
 started: 2026-08-14 16:36
-updated: 2026-08-17 15:24
+updated: 2026-08-19 11:02
 slurm: 
 link: 
 page: none (the survey report and the migrated repo are the deliverables)
@@ -17,4 +17,5 @@ log:
 - 2026-08-14 20:59 [code-survey] SegviGen-emissive is the single project repo: ops history merged with full log continuity, tree sorted into emissive plus xgconsole plus attic, the two drifted mask_debug render fixes ported, per-package pyproject files separating the research and console stacks, all verified (editable installs, tools resolving from the new root, compile sweep) and pushed. Deliberately out of scope, pending the owner: cutting the live console over from the ops working directory, and deploying the fork tree to the cluster so the old flat code directory retires.
 - 2026-08-17 15:23 [code-survey] Console cutover done: canonical checkout now lives at /cs/3dlg-falas/project/omages/lightgen/segvigen_emissive (falas NFS, 19T free; the omages share stayed over quota). Both cron sweeps, the board CLI, the graph, and the full console publish run from the new root; graph positions carried over; the old local folder carries a RETIRED marker.
 - 2026-08-17 15:24 [code-survey] Console cutover done: canonical checkout now lives at /cs/3dlg-falas/project/omages/lightgen/segvigen_emissive (falas NFS, 19T free; the omages share stayed over quota). Both cron sweeps, the board CLI, the graph, and the full console publish run from the new root; graph positions carried over; the old local folder carries a RETIRED marker.
+- 2026-08-19 11:02 [master] Cluster deploy done: the consolidated tree now lives at the jupiter root (emissive/ + xgconsole/ + the fork's own inference_full.py anchor), the old flat code/ retired to code_retired_20260819, smoke check passed in the trellis2 env. The two-day solar outage that delayed this never existed: solar's SSH listens on port 24 and the probes tested 22.
 outcome: SegviGen-emissive is the single project repo: ops history merged with full log continuity, tree sorted into emissive plus xgconsole plus attic, the two drifted mask_debug render fixes ported, per-package pyproject files separating the research and console stacks, all verified (editable installs, tools resolving from the new root, compile sweep) and pushed. Deliberately out of scope, pending the owner: cutting the live console over from the ops working directory, and deploying the fork tree to the cluster so the old flat code directory retires.
