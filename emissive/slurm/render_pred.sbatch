@@ -7,7 +7,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=4:00:00
 #SBATCH --exclude=cs-venus-05,cs-venus-09,cs-venus-19
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/render_pred_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/render_pred__%j.log
 set -euo pipefail
 #
 # Render a model's PREDICTED emissive mask on the pristine asset, key-lit, matched to the

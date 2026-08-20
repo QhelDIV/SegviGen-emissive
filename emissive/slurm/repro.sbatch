@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=2:00:00
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/repro_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/repro__%j.log
 source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh; conda activate trellis2
 export HF_HOME=/3dlg-jupiter-project/lightgen/hf_cache
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True

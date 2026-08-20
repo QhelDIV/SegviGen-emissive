@@ -7,7 +7,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=0:30:00
 #SBATCH --exclude=cs-venus-05,cs-venus-09,cs-venus-19
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/diag_smoke_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/diag_smoke__%j.log
 set -euo pipefail
 
 source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh

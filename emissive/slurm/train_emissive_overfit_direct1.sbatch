@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
 #SBATCH --time=1:00:00
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/train_overfit1_direct_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/train_overfit1_direct__%j.log
 # Overfit-1 memorization check on the direct-ovoxel loader's dataset_direct/smoke1
 # (single shape 294095f9c38d48f39b6f9b7162b963d7). This is a MEMORIZATION check only:
 # loss should drive toward zero and per-voxel IoU on this same shape should approach

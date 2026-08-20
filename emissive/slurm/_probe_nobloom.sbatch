@@ -7,7 +7,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=1:00:00
 #SBATCH --exclude=cs-venus-05,cs-venus-09,cs-venus-19
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/nobloom_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/nobloom__%j.log
 set -euo pipefail
 PV3=/project/3dlg-hcvc/omages/yanxg_scratch/paper_v3
 sid=658ecf9f837246509b0b1c4aa81e9e5b

@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=2:00:00
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/eval_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/eval__%j.log
 # args: $1=ckpt $2=split $3=dump_vis dir (or '') $4=n (or '') $5(optional)="real"|"zero" (default zero)
 # NOTE (v4): eval_emissive.py now requires an explicit --cond {real,zero} — no silent
 # zero-cond fallback — and gained --otsu (pass $6=otsu to enable).

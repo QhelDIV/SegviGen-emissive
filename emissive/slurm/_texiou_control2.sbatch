@@ -6,7 +6,7 @@
 #SBATCH --mem=48G
 #SBATCH --time=4:00:00
 #SBATCH --exclude=cs-venus-05,cs-venus-09,cs-venus-19
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/texiou2_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/texiou2__%j.log
 set -euo pipefail
 # args: $1 = mask dir name under pred_masks/
 BASE=/3dlg-jupiter-project/lightgen/segvigen_emissive

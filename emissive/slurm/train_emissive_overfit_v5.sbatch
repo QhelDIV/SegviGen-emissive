@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
 #SBATCH --time=2:00:00
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/train_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/train__%j.log
 # Sanity gate for the v5 trainer (balanced_pos_weight + cosine lr_schedule + select_on):
 # can it still overfit a tiny set to ~1.0 IoU, same shape as train_emissive_overfit_v4.sbatch?
 # args: $1=split_name (e.g. train_1k_gate10) $2=out_subdir $3=epochs (default 60)

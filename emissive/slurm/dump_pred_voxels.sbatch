@@ -7,7 +7,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=2:00:00
 #SBATCH --exclude=cs-venus-05,cs-venus-09,cs-venus-19
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/pred_dump_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/pred_dump__%j.log
 set -euo pipefail
 #
 # Sample all three checkpoints on the 11 paper-figure sids and save the raw predicted

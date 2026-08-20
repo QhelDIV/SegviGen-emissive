@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=2:00:00
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/eval96_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/eval96__%j.log
 # Full val_96 eval for a Phase 4 ckpt: fixed threshold sweep + Otsu + stratified-by-
 # emissive_frac breakdown (0, (0,0.05], (0.05,0.3], >0.3), to separate the flat
 # DiffusionNet-comparable mean from the near-zero-emissive failure mode seen in the

@@ -6,7 +6,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=1:00:00
 #SBATCH --exclude=cs-venus-05,cs-venus-09,cs-venus-19
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/mask_xfer_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/mask_xfer__%j.log
 set -euo pipefail
 #
 # CPU-only: resample each model's predicted emissive field into the original asset's UV

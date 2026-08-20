@@ -6,7 +6,7 @@
 #SBATCH --mem=48G
 #SBATCH --time=2:00:00
 #SBATCH --exclude=cs-venus-05,cs-venus-09,cs-venus-19
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/texshare_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/texshare__%j.log
 set -euo pipefail
 BASE=/3dlg-jupiter-project/lightgen/segvigen_emissive
 PV3=/project/3dlg-hcvc/omages/yanxg_scratch/paper_v3

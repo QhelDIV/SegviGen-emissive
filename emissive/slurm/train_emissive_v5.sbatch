@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=8:00:00
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/train_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/train__%j.log
 # args: $1=epochs $2=dataset (full path, default the standard dataset root)
 #       $3=out_subdir $4=cond (real|zero, default real)
 #       $5=pos_weight (default 1.0 — only used when $6 (balanced_cap) is 0)

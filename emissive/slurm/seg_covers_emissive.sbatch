@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=2:00:00
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/segcov_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/segcov__%j.log
 # args: $1=split (default overfit_10) $2=dump_vis subdir (default seg_vis_$1)
 source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh
 conda activate trellis2

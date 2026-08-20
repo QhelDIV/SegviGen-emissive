@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=6:00:00
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/oracle_val96_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/oracle_val96__%j.log
 # Oracle-on-val_96 (all 111 shapes with output_tex_slat.pth+emis_mask.pth): pretrained
 # full_seg zero-shot -> parts -> label each part emissive iff >50% GT-emissive -> union
 # -> per-shape IoU. Same conventions as eval_emissive.py: zero-glow union==0 -> IoU=1.0,

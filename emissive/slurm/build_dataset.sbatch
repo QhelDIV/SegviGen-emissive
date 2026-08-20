@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=8:00:00
-#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/build_%j.log
+#SBATCH --output=/3dlg-jupiter-project/lightgen/segvigen_emissive/logs/build__%j.log
 # args: $1=split $2=n $3(optional)="real"|"" $4(optional)=out_split_name $5(optional)="pbr"|""
 source /3dlg-jupiter-project/lightgen/miniforge3/etc/profile.d/conda.sh
 conda activate trellis2
