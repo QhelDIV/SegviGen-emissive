@@ -23,6 +23,7 @@ while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
     ROOT = parent   # walk up: this script now lives nested under emissive/eval/, not repo root
 SEGVIGEN = ROOT
 sys.path.insert(0, SEGVIGEN)
+sys.path.insert(0, os.path.join(ROOT, "emissive"))   # pbr_conditioning.py (shared)
 os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 
 import torch
@@ -30,7 +31,8 @@ import numpy as np
 from collections import OrderedDict
 import trellis2.modules.sparse as sp
 from trellis2 import models
-from inference_full import Gen3DSeg, Sampler
+from inference_full import Sampler
+from pbr_conditioning import build_gen_from_sd   # mode auto-detected from the ckpt
 from huggingface_hub import hf_hub_download
 
 COND_T, COND_D = 1024, 1024
@@ -276,11 +278,10 @@ def main():
     args = ap.parse_args()
     device = "cuda"
 
-    flow = models.from_pretrained("microsoft/TRELLIS.2-4B/ckpts/slat_flow_imgshape2tex_dit_1_3B_512_bf16")
-    gen = Gen3DSeg(flow).to(device)
     sd = torch.load(args.ckpt, map_location=device)["state_dict"]
     sd = OrderedDict([(k.replace("gen3dseg.", ""), v) for k, v in sd.items()])
-    gen.load_state_dict(sd); gen.eval()
+    gen, _ = build_gen_from_sd(sd, device)   # token/channel auto-detected from the ckpt
+    gen.eval()
 
     models_d = load_eval_models(device)
     result = evaluate_split(gen, models_d, args.dataset, args.split, args.cond, device=device,

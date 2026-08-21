@@ -50,6 +50,7 @@ python emissive/train/train_emissive.py \
   --val_split condsmoke8 \
   --out_dir $ROOT/outputs/cond_smoke \
   --cond real \
+  --pbr_cond token \
   --init_ckpt full_seg \
   --epochs 1 \
   --n_per_epoch 2 \

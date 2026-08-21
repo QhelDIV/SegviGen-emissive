@@ -14,6 +14,7 @@
 #       $8=val_split (default val) $9=save_every (default 4) ${10}=val_quick (default 8)
 #       ${11}=select_on (all|nonzero, default nonzero) ${12}=train_split (default train)
 #       ${13}=n_per_epoch (default 0=all)
+#       ${14}=pbr_cond (channel|token, default token — the pre-2026-08 mechanism)
 # v5: per-shape balanced pos_weight (W_shape=min(CAP,(1-p)/p), p=sample's own emis_mask
 # coverage — fixes the flat-mean scheme's blind spot where a fixed --pos_weight
 # upweights emissive VOXELS within a shape but does nothing for shapes that are almost
@@ -32,6 +33,7 @@ python emissive/train/train_emissive.py \
   --epochs ${1:-100} --lr 1e-5 --train_split ${12:-train} --val_split ${8:-val} \
   --n_per_epoch ${13:-0} \
   --cond ${4:-real} --pos_weight ${5:-1.0} --balanced_pos_weight ${6:-50} \
+  --pbr_cond ${14:-token} \
   --lr_schedule ${7:-cosine} --select_on ${11:-nonzero} \
   --emis_oversample --ema 0.999 \
   --save_every ${9:-4} --val_quick ${10:-8}

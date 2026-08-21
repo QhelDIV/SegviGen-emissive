@@ -2,7 +2,9 @@
 Standalone fine-tune of Trellis.2's slat_flow_imgshape2tex flow for BINARY EMISSIVE
 segmentation, framed as colorization (white=emissive / black=non).
 
-Reuses SegviGen's Gen3DSeg wrapper + the inference flow-matching convention:
+Reuses SegviGen's Gen3DSeg wrapper (--pbr_cond token) or the lightgen-parity
+channel-concat variant (--pbr_cond channel, see emissive/pbr_conditioning.py)
++ the inference flow-matching convention:
     x_t = t*noise + (1-t)*data,   v_target = noise - data,   model sees t*1000
 (verified against inference_full.py Sampler). Inputs already carry appearance
 (input_tex_slat = PBR latent) + shape (shape_slat) + DINOv3 cond — so no architecture
@@ -14,7 +16,7 @@ text said interactive_seg but that was never true, see --init_ckpt help).
 
 Usage (GPU node, trellis2 env):
   python train_emissive.py --dataset .../dataset --out_dir .../outputs/emis_pilot \
-      --epochs 300 --lr 1e-5 --n_per_epoch 0 --cond zero
+      --epochs 300 --lr 1e-5 --n_per_epoch 0 --cond zero --pbr_cond token
 """
 import os, sys, json, argparse, glob
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +28,7 @@ while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
 SEGVIGEN = ROOT
 sys.path.insert(0, SEGVIGEN)
 sys.path.insert(0, os.path.join(ROOT, "emissive", "eval"))  # sibling dir holding eval_emissive.py
+sys.path.insert(0, os.path.join(ROOT, "emissive"))          # pbr_conditioning.py (shared)
 os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 
 import torch
@@ -33,8 +36,7 @@ import torch.nn as nn
 import numpy as np
 from collections import OrderedDict
 import trellis2.modules.sparse as sp
-from trellis2 import models
-from inference_full import Gen3DSeg            # reuse the exact wrapper
+from pbr_conditioning import build_flow, wrap_gen, load_warmstart  # token vs channel PBR cond
 from huggingface_hub import hf_hub_download
 from eval_emissive import load_eval_models, evaluate_split, THRS
 
@@ -136,6 +138,12 @@ def main():
                     help="weight per-epoch sampling by (emissive_frac+0.1)**oversample_pow to fight class imbalance")
     ap.add_argument("--oversample_pow", type=float, default=1.0,
                     help="sharpen --emis_oversample weights: (emissive_frac+0.1)**P; P>1 = sharper")
+    ap.add_argument("--pbr_cond", required=True, choices=["channel", "token"],
+                    help="how the input PBR tex latent conditions the flow — explicit, no "
+                         "silent default (same ethos as --cond). 'token' = upstream Gen3DSeg "
+                         "token doubling (all pre-2026-08 runs); 'channel' = lightgen/TRELLIS.2 "
+                         "per-token channel concat [x_t|shape|pbr]=96ch, input_layer re-init "
+                         "on warm start (see emissive/pbr_conditioning.py)")
     ap.add_argument("--cond", required=True, choices=["real", "zero"],
                     help="explicit — no silent zero-cond fallback")
     ap.add_argument("--pos_weight", type=float, default=5.0,
@@ -174,10 +182,10 @@ def main():
     device = "cuda"
     require_mask = args.pos_weight != 1.0 or args.balanced_pos_weight > 0
 
-    # model: flow + Gen3DSeg wrapper, warm-started from a SegviGen ckpt
+    # model: flow + Gen3DSeg / channel-concat wrapper, warm-started from a SegviGen ckpt
     init_ckpt = resolve_init_ckpt(args.init_ckpt)
-    print(f"[init] warm-starting from {init_ckpt}", flush=True)
-    flow = models.from_pretrained("microsoft/TRELLIS.2-4B/ckpts/slat_flow_imgshape2tex_dit_1_3B_512_bf16")
+    print(f"[init] warm-starting from {init_ckpt} (pbr_cond={args.pbr_cond})", flush=True)
+    flow = build_flow(args.pbr_cond)
     # gradient checkpointing — activations dominate memory for the 1.3B sparse DiT; this
     # lets the full fine-tune fit on a 44GB GPU (l40s/a40).
     n_ckpt = 0
@@ -185,10 +193,10 @@ def main():
         if hasattr(m, "use_checkpoint"):
             m.use_checkpoint = True; n_ckpt += 1
     print(f"[mem] enabled gradient checkpointing on {n_ckpt} modules", flush=True)
-    gen = Gen3DSeg(flow).to(device)
+    gen = wrap_gen(flow, args.pbr_cond).to(device)
     sd = torch.load(init_ckpt, map_location=device)["state_dict"]
     sd = OrderedDict([(k.replace("gen3dseg.", ""), v) for k, v in sd.items()])
-    gen.load_state_dict(sd)
+    load_warmstart(gen, sd, args.pbr_cond)
     gen.train()
 
     ema_state = None

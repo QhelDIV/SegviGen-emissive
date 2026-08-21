@@ -20,7 +20,7 @@ python emissive/train/train_emissive.py \
   --init_ckpt full_seg \
   --out_dir /3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/overfit1_direct \
   --epochs 200 --lr 1e-5 --train_split smoke1 --val_split smoke1 --n_per_epoch 1 \
-  --cond zero --pos_weight 5.0 \
+  --cond zero --pbr_cond token --pos_weight 5.0 \
   --lr_schedule const --select_on nonzero \
   --ema 0.999 \
   --save_every 20 --val_quick 1

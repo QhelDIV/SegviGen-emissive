@@ -14,6 +14,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 CKPT=/3dlg-jupiter-project/lightgen/hf_cache/hub/models--fenghora--SegviGen/snapshots/73326b77a17b5194bcc918dbf13d8d5cefb1cca5/full_seg.ckpt
 cd /3dlg-jupiter-project/lightgen/segvigen_emissive
 python emissive/train/train_emissive.py \
+  --pbr_cond token \
   --dataset /3dlg-jupiter-project/lightgen/segvigen_emissive/dataset \
   --segvigen_ckpt "$CKPT" \
   --out_dir /3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/${3:-emis_pilot} \

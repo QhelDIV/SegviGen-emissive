@@ -194,7 +194,12 @@ Training (`emissive/train/`):
   EMA, and best-checkpoint-by-eval-metric selection (`--select_on`). Reuses
   `emissive/eval/eval_emissive.py`'s `load_eval_models` / `evaluate_split` for
   periodic validation during training (cross-directory import — see
-  "Import-path fix" below).
+  "Import-path fix" below). Takes a required `--pbr_cond {channel,token}`:
+  `token` = upstream Gen3DSeg token-doubling, `channel` = lightgen/TRELLIS.2
+  per-token PBR concat (see `emissive/pbr_conditioning.py`; eval/predict
+  auto-detect the mode from the checkpoint).
+- `pbr_conditioning.py` (in `emissive/`) — token vs channel PBR-conditioning
+  wrappers/builders shared by train/eval/predict.
 
 Eval (`emissive/eval/`):
 - `eval_emissive.py` — evaluation: loads a checkpoint (baseline or
