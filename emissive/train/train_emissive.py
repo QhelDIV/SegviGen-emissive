@@ -15,8 +15,14 @@ text said interactive_seg but that was never true, see --init_ckpt help).
 Usage (GPU node, trellis2 env):
   python train_emissive.py --dataset .../dataset --out_dir .../outputs/emis_pilot \
       --epochs 300 --lr 1e-5 --n_per_epoch 0 --cond zero
+
+Multi-GPU (single node, PyTorch DDP) -- see emissive/slurm/README_DDP.md:
+  torchrun --standalone --nproc_per_node 4 train_emissive.py <same flags>
+Launched without torchrun, WORLD_SIZE is unset and the script takes the exact
+single-GPU path it always took: no process group, no DDP wrapper, no reseeding.
 """
-import os, sys, json, argparse, glob
+import os, sys, json, argparse, glob, time, contextlib
+from datetime import timedelta
 ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
     parent = os.path.dirname(ROOT)
@@ -30,6 +36,8 @@ os.environ.setdefault("HF_HOME", "/3dlg-jupiter-project/lightgen/hf_cache")
 
 import torch
 import torch.nn as nn
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 import numpy as np
 from collections import OrderedDict
 import trellis2.modules.sparse as sp
@@ -63,13 +71,65 @@ def resolve_init_ckpt(spec):
 COND_T, COND_D = 1024, 1024
 
 
+# ----------------------------------------------------------------------------- DDP
+def dist_setup():
+    """torchrun sets RANK/WORLD_SIZE/LOCAL_RANK. Without it WORLD_SIZE is unset, we
+    report world_size 1, and every dist branch below is skipped -- the single-GPU
+    path stays byte-for-byte what it was. Timeout is generous because rank 0 runs
+    quick-val alone while the other ranks sit in a barrier."""
+    world = int(os.environ.get("WORLD_SIZE", "1"))
+    if world <= 1:
+        return False, 0, 1, 0
+    rank = int(os.environ["RANK"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    torch.cuda.set_device(local_rank)   # makes plain "cuda" mean this rank's GPU
+    # device_id binds the group to this rank's GPU up front. Without it, torch warns
+    # that "devices used by this process are currently unknown" and guesses at
+    # barrier time, which is a documented way to deadlock if the guess is wrong.
+    dist.init_process_group("nccl", timeout=timedelta(minutes=180),
+                            device_id=torch.device(f"cuda:{local_rank}"))
+    return True, rank, world, local_rank
+
+
+def dist_barrier(is_dist):
+    if is_dist:
+        dist.barrier()
+
+
+class FlowStep(nn.Module):
+    """Thin adapter with a plain-tensor boundary: tensors in, one tensor out.
+
+    DDP inspects the module's output (to build the autograd graph entry point) and
+    SparseTensor is not something it can traverse, so the SparseTensor packing has
+    to live INSIDE the wrapped module. The op sequence is identical to what the
+    training loop used to do inline, so the single-GPU numbers are unchanged; the
+    single-GPU path calls this same adapter directly, without the DDP wrapper."""
+
+    def __init__(self, gen):
+        super().__init__()
+        self.gen = gen
+
+    def forward(self, x_t, itx_f, shp_f, coords, t_model, cond):
+        x_t_st = sp.SparseTensor(x_t, coords)
+        itx_st = sp.SparseTensor(itx_f, coords)
+        shp_st = sp.SparseTensor(shp_f, coords)
+        out = self.gen(x_t_st, itx_st, shp_st, t_model, cond, [coords.shape[0]])
+        return out.feats
+
+
 class EmisDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_root, split, cond_mode, require_mask=True):
+    def __init__(self, dataset_root, split, cond_mode, require_mask=True, prebuilt=None):
         assert cond_mode in ("real", "zero")
         self.cond_mode = cond_mode
         self.require_mask = require_mask
         self.dirs = []
         self.fracs = []   # per-sample emissive fraction (for class-imbalance oversampling)
+        if prebuilt is not None:
+            # ranks > 0 take rank 0's scan result. Scanning 60k+ sample dirs means
+            # ~250k NFS stat calls; doing that once per rank would hammer the share
+            # for no new information (every rank would build the identical list).
+            self.dirs, self.fracs = prebuilt
+            return
         sdir = os.path.join(dataset_root, split)
         core = ["shape_slat.pth", "input_tex_slat.pth", "output_tex_slat.pth"]
         for sid in sorted(os.listdir(sdir)):
@@ -128,7 +188,12 @@ def main():
     ap.add_argument("--out_dir", required=True)
     ap.add_argument("--epochs", type=int, default=300)
     ap.add_argument("--lr", type=float, default=1e-5)
-    ap.add_argument("--n_per_epoch", type=int, default=0, help="0 = all")
+    ap.add_argument("--n_per_epoch", type=int, default=0,
+                    help="Shapes drawn per epoch, counted GLOBALLY across all GPUs (0 = the "
+                         "whole training split). Each rank takes n_per_epoch/world_size of "
+                         "them, so an epoch covers the same shapes whether you run on 1 GPU "
+                         "or 4 and an existing --n_per_epoch stays comparable across run "
+                         "widths. A remainder of fewer than world_size shapes is dropped.")
     ap.add_argument("--save_every", type=int, default=25)
     ap.add_argument("--train_split", default="train")
     ap.add_argument("--val_split", default="val", help="split for --val_quick quick-val tracking")
@@ -169,14 +234,69 @@ def main():
                          "mean. 'all' = mean IoU over every quick-val shape (old behavior). Both "
                          "aggregates are always computed and logged regardless of which one gates "
                          "best.ckpt.")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="Fix the epoch sample draw AND the per-sample flow noise/timestep. "
+                         "Noise and t are drawn from a generator keyed by (seed, epoch, "
+                         "position in the global draw), so a given shape gets the SAME noise "
+                         "on 1 GPU and on N GPUs -- that is what makes the multi-GPU parity "
+                         "check meaningful. Default None = untouched global RNG, i.e. the "
+                         "original behavior; leave it unset for real runs.")
+    ap.add_argument("--grad_accum", type=int, default=1,
+                    help="Micro-steps accumulated per rank before one optimizer step. 1 "
+                         "(default) = the usual behavior. Raising it multiplies the effective "
+                         "batch (world_size * grad_accum shapes) and, via DDP's no_sync, cuts "
+                         "the gradient all-reduce rate by the same factor -- the lever to pull "
+                         "if inter-GPU communication is what limits scaling. Note it also "
+                         "reduces the number of EMA and LR-scheduler steps per epoch.")
+    ap.add_argument("--ddp_find_unused", action="store_true", default=False,
+                    help="Pass find_unused_parameters=True to DDP. Only needed if a run dies "
+                         "with 'expected to have finished reduction'; the flow model uses every "
+                         "parameter on every step, so the default False is both correct and "
+                         "faster.")
+    ap.add_argument("--log_step_loss", action="store_true", default=False,
+                    help="Print the loss of every optimizer step (all-reduced across ranks, so "
+                         "it is the loss of the whole effective batch). Off by default; it is "
+                         "what the multi-GPU parity check reads.")
+    ap.add_argument("--ddp_bf16_comm", action="store_true", default=False,
+                    help="Register DDP's bf16 gradient-compression hook: gradients are cast to "
+                         "bfloat16 for the all-reduce and back afterwards, halving the bytes on "
+                         "the wire at the cost of some reduction precision.")
     args = ap.parse_args()
-    os.makedirs(args.out_dir, exist_ok=True)
-    device = "cuda"
+    is_dist, rank, world_size, local_rank = dist_setup()
+
+    def p0(*a, **kw):
+        """Print on rank 0 only. Every log line in this script is a global fact
+        (identical weights, all-reduced loss), so N copies would just be noise."""
+        if rank == 0:
+            print(*a, **kw)
+
+    if rank == 0:
+        os.makedirs(args.out_dir, exist_ok=True)
+    dist_barrier(is_dist)
+    device = "cuda"     # torch.cuda.set_device(local_rank) already bound this to our GPU
+    if is_dist:
+        p0(f"[ddp] world_size={world_size} on {os.environ.get('SLURM_JOB_NODELIST', 'local')} "
+           f"| grad_accum={args.grad_accum} | effective batch "
+           f"{world_size * args.grad_accum} shapes/step", flush=True)
+    if args.seed is not None:
+        # per-rank offset so anything NOT covered by the keyed generator (dropout-like
+        # nondeterminism, if any is ever added) still differs across ranks
+        torch.manual_seed(args.seed + 1000 * rank)
+        np.random.seed(args.seed + 1000 * rank)
     require_mask = args.pos_weight != 1.0 or args.balanced_pos_weight > 0
+
+    if is_dist:
+        # let rank 0 touch the HF cache alone first: four processes racing to populate
+        # the same cache entry over NFS relies on hub file locks that are not reliable
+        # there. A warm cache (the normal case) makes this a no-op lookup.
+        if rank == 0:
+            resolve_init_ckpt(args.init_ckpt)
+            hf_hub_download(repo_id="microsoft/TRELLIS.2-4B", filename="pipeline.json")
+        dist_barrier(is_dist)
 
     # model: flow + Gen3DSeg wrapper, warm-started from a SegviGen ckpt
     init_ckpt = resolve_init_ckpt(args.init_ckpt)
-    print(f"[init] warm-starting from {init_ckpt}", flush=True)
+    p0(f"[init] warm-starting from {init_ckpt}", flush=True)
     flow = models.from_pretrained("microsoft/TRELLIS.2-4B/ckpts/slat_flow_imgshape2tex_dit_1_3B_512_bf16")
     # gradient checkpointing — activations dominate memory for the 1.3B sparse DiT; this
     # lets the full fine-tune fit on a 44GB GPU (l40s/a40).
@@ -184,37 +304,94 @@ def main():
     for m in flow.modules():
         if hasattr(m, "use_checkpoint"):
             m.use_checkpoint = True; n_ckpt += 1
-    print(f"[mem] enabled gradient checkpointing on {n_ckpt} modules", flush=True)
+    p0(f"[mem] enabled gradient checkpointing on {n_ckpt} modules", flush=True)
     gen = Gen3DSeg(flow).to(device)
     sd = torch.load(init_ckpt, map_location=device)["state_dict"]
     sd = OrderedDict([(k.replace("gen3dseg.", ""), v) for k, v in sd.items()])
     gen.load_state_dict(sd)
     gen.train()
 
+    n_par = sum(p.numel() for p in gen.parameters())
+    grad_bytes = sum(p.numel() * p.element_size() for p in gen.parameters() if p.requires_grad)
+    dtypes = sorted({str(p.dtype).replace("torch.", "") for p in gen.parameters()})
+    p0(f"[model] {n_par / 1e9:.3f}B parameters ({'/'.join(dtypes)}); one gradient sync "
+       f"moves {grad_bytes / 2 ** 30:.2f} GiB per rank", flush=True)
+
+    # Every rank warm-starts from the same file, so the replicas already agree;
+    # DDP broadcasts once more at construction, which also catches a partial read.
+    step_module = FlowStep(gen)
+    if is_dist:
+        model = DDP(step_module, device_ids=[local_rank], output_device=local_rank,
+                    find_unused_parameters=args.ddp_find_unused,
+                    gradient_as_bucket_view=True,       # buckets alias .grad, no second copy
+                    broadcast_buffers=False)            # no BN/running stats here to sync
+        if args.ddp_bf16_comm:
+            from torch.distributed.algorithms.ddp_comm_hooks import default_hooks
+            model.register_comm_hook(state=None, hook=default_hooks.bf16_compress_hook)
+            p0("[ddp] gradient all-reduce runs in bfloat16 (bf16_compress_hook)", flush=True)
+    else:
+        model = step_module
+    # gen stays the handle for state_dict / EMA / quick-val: its keys are the ones
+    # save_ckpt prefixes with "gen3dseg.", and neither FlowStep nor DDP must appear
+    # in them or eval_emissive.py would not be able to load the checkpoint.
+
     ema_state = None
-    if args.ema > 0:
+    if args.ema > 0 and rank == 0:
         ema_state = {k: v.detach().clone() for k, v in gen.state_dict().items()}
-        print(f"[ema] tracking shadow weights, decay={args.ema}", flush=True)
+        p0(f"[ema] tracking shadow weights, decay={args.ema}", flush=True)
 
     eval_models = None
-    if args.val_quick > 0:
+    if args.val_quick > 0 and rank == 0:
+        # decoders live on rank 0 only; the other ranks never run quick-val, and not
+        # loading them there leaves that much more GPU memory for training
         eval_models = load_eval_models(device)
-        print(f"[val_quick] loaded eval decoders for {args.val_quick}-sample quick-val on '{args.val_split}'", flush=True)
+        p0(f"[val_quick] loaded eval decoders for {args.val_quick}-sample quick-val on '{args.val_split}'", flush=True)
 
     sm, ss, tm, ts = load_norm_stats(device)
     opt = torch.optim.AdamW(gen.parameters(), lr=args.lr, weight_decay=0.0)
 
-    ds = EmisDataset(args.dataset, args.train_split, cond_mode=args.cond, require_mask=require_mask)
-    print(f"[data] {len(ds)} samples from '{args.train_split}' (cond={args.cond}, "
-          f"oversample={args.emis_oversample}, pos_weight={args.pos_weight}, "
-          f"balanced_pos_weight={args.balanced_pos_weight})", flush=True)
+    if is_dist:
+        # one scan on rank 0, shipped to the rest (see EmisDataset(prebuilt=...))
+        if rank == 0:
+            ds = EmisDataset(args.dataset, args.train_split, cond_mode=args.cond, require_mask=require_mask)
+            payload = [(ds.dirs, ds.fracs)]
+        else:
+            payload = [None]
+        dist.broadcast_object_list(payload, src=0)
+        if rank != 0:
+            ds = EmisDataset(args.dataset, args.train_split, cond_mode=args.cond,
+                             require_mask=require_mask, prebuilt=payload[0])
+    else:
+        ds = EmisDataset(args.dataset, args.train_split, cond_mode=args.cond, require_mask=require_mask)
+    p0(f"[data] {len(ds)} samples from '{args.train_split}' (cond={args.cond}, "
+       f"oversample={args.emis_oversample}, pos_weight={args.pos_weight}, "
+       f"balanced_pos_weight={args.balanced_pos_weight})", flush=True)
     samp_w = torch.tensor([(f + 0.1) ** args.oversample_pow for f in ds.fracs]) if args.emis_oversample else None
+
+    # per-epoch draw sizes. n_per_epoch is global; the remainder below world_size is
+    # dropped so every rank runs the same number of steps and no one hangs at a barrier.
+    n_draw_global = args.n_per_epoch or len(ds)
+    if samp_w is None:
+        # the no-oversample path draws WITHOUT replacement, so it can never hand out
+        # more indices than the split holds; clamp here or the per-rank slice below
+        # would index past the end of a short draw
+        n_draw_global = min(n_draw_global, len(ds))
+    if n_draw_global < world_size:
+        raise RuntimeError(f"--n_per_epoch resolves to {n_draw_global} shapes/epoch but "
+                           f"world_size is {world_size}: every rank needs at least one "
+                           f"shape per epoch or the ranks desynchronize. Raise "
+                           f"--n_per_epoch or run on fewer GPUs.")
+    n_per_rank = max(1, n_draw_global // world_size)
+    opt_steps_per_epoch = max(1, n_per_rank // args.grad_accum)
+    if is_dist:
+        p0(f"[data] per epoch: {n_draw_global} shapes global -> {n_per_rank}/rank -> "
+           f"{opt_steps_per_epoch} optimizer steps/epoch", flush=True)
 
     scheduler = None
     if args.lr_schedule == "cosine":
-        total_steps = max(1, args.epochs * (args.n_per_epoch or len(ds)))
+        total_steps = max(1, args.epochs * opt_steps_per_epoch)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=total_steps, eta_min=args.lr / 20.0)
-        print(f"[lr] cosine schedule: {args.lr:.2e} -> {args.lr / 20.0:.2e} over {total_steps} steps", flush=True)
+        p0(f"[lr] cosine schedule: {args.lr:.2e} -> {args.lr / 20.0:.2e} over {total_steps} steps", flush=True)
 
     log = []
     curve = []
@@ -222,13 +399,27 @@ def main():
     n_wshape_logged = 0
 
     for epoch in range(1, args.epochs + 1):
-        n_draw = args.n_per_epoch or len(ds)
+        # The epoch's draw is computed IDENTICALLY on every rank (same weights, same
+        # seeded generator) and then sliced by rank, so the oversample distribution is
+        # exactly the single-GPU one and no index has to be communicated. Interleaved
+        # rather than blocked slicing, so no rank gets a systematically distinct chunk.
+        g_draw = None
+        if args.seed is not None:
+            g_draw = torch.Generator()
+            g_draw.manual_seed(args.seed * 7919 + epoch)
+        gkw = {"generator": g_draw} if g_draw is not None else {}
         if samp_w is not None:
-            idxs = torch.multinomial(samp_w, n_draw, replacement=True).tolist()
+            gidxs = torch.multinomial(samp_w, n_draw_global, replacement=True, **gkw).tolist()
         else:
-            idxs = torch.randperm(len(ds)).tolist()[:n_draw]
+            gidxs = torch.randperm(len(ds), **gkw).tolist()[:n_draw_global]
+        my_pos = list(range(rank, n_per_rank * world_size, world_size))
+
         ep_loss = 0.0
-        for j in idxs:
+        n_local = 0
+        t_epoch = time.time()
+        opt.zero_grad(set_to_none=True)
+        for k, gpos in enumerate(my_pos):
+            j = gidxs[gpos]
             shp, itx, otx, cond, mask = ds[j]
             coords = shp["coords"].to(device)
             shp_f = (shp["feats"].to(device) - sm) / ss
@@ -236,90 +427,132 @@ def main():
             data  = (otx["feats"].to(device) - tm) / ts
             cond  = cond.to(device)
 
-            noise = torch.randn_like(data)
-            t = torch.rand(1, device=device)
+            if args.seed is None:
+                noise = torch.randn_like(data)
+                t = torch.rand(1, device=device)
+            else:
+                # keyed by POSITION IN THE GLOBAL DRAW, not by rank or local step, so a
+                # shape sees the same noise and the same t whatever the world size is
+                g_n = torch.Generator(device=device)
+                g_n.manual_seed((args.seed * 1000003 + epoch * 10007 + gpos) % (2 ** 31 - 1))
+                noise = torch.randn(data.shape, dtype=data.dtype, device=device, generator=g_n)
+                t = torch.rand(1, device=device, generator=g_n)
             x_t = t * noise + (1 - t) * data
             v_target = noise - data
-
-            x_t_st = sp.SparseTensor(x_t, coords)
-            itx_st = sp.SparseTensor(itx_f, coords)
-            shp_st = sp.SparseTensor(shp_f, coords)
             t_model = (t * 1000).expand(1)
 
-            v_pred = gen(x_t_st, itx_st, shp_st, t_model, cond, [coords.shape[0]])
-            if args.balanced_pos_weight > 0:
-                mask_dev = mask.to(device)
-                p = mask_dev.mean().clamp(min=1e-4)
-                W_shape = torch.clamp((1 - p) / p, max=args.balanced_pos_weight)
-                w = 1 + (W_shape - 1) * mask_dev
-                w = w / w.mean().clamp(min=1e-8)
-                loss = (w[:, None] * (v_pred.feats - v_target) ** 2).mean()
-                if n_wshape_logged < 3:
-                    print(f"[balanced_pos_weight] sample {j} sid={os.path.basename(ds.dirs[j])} "
-                          f"p={p.item():.4f} W_shape={W_shape.item():.2f}", flush=True)
-                    n_wshape_logged += 1
-            elif args.pos_weight != 1.0:
-                w = 1 + (args.pos_weight - 1) * mask.to(device)
-                w = w / w.mean().clamp(min=1e-8)
-                loss = (w[:, None] * (v_pred.feats - v_target) ** 2).mean()
-            else:
-                loss = nn.functional.mse_loss(v_pred.feats, v_target)
+            # DDP fuses the gradient all-reduce into the backward pass; under
+            # accumulation every rank must skip that sync (forward included, the flag
+            # is read in DDP.forward) until the step that actually calls opt.step().
+            is_sync_step = ((k + 1) % args.grad_accum == 0) or (k + 1 == len(my_pos))
+            sync_ctx = model.no_sync() if (is_dist and not is_sync_step) else contextlib.nullcontext()
+            with sync_ctx:
+                v_pred_feats = model(x_t, itx_f, shp_f, coords, t_model, cond)
+                if args.balanced_pos_weight > 0:
+                    mask_dev = mask.to(device)
+                    p = mask_dev.mean().clamp(min=1e-4)
+                    W_shape = torch.clamp((1 - p) / p, max=args.balanced_pos_weight)
+                    w = 1 + (W_shape - 1) * mask_dev
+                    w = w / w.mean().clamp(min=1e-8)
+                    loss = (w[:, None] * (v_pred_feats - v_target) ** 2).mean()
+                    if n_wshape_logged < 3 and rank == 0:
+                        print(f"[balanced_pos_weight] sample {j} sid={os.path.basename(ds.dirs[j])} "
+                              f"p={p.item():.4f} W_shape={W_shape.item():.2f}", flush=True)
+                        n_wshape_logged += 1
+                elif args.pos_weight != 1.0:
+                    w = 1 + (args.pos_weight - 1) * mask.to(device)
+                    w = w / w.mean().clamp(min=1e-8)
+                    loss = (w[:, None] * (v_pred_feats - v_target) ** 2).mean()
+                else:
+                    loss = nn.functional.mse_loss(v_pred_feats, v_target)
+                (loss / args.grad_accum).backward()
 
-            opt.zero_grad(); loss.backward()
-            torch.nn.utils.clip_grad_norm_(gen.parameters(), 1.0)
-            opt.step()
-            if scheduler is not None:
-                scheduler.step()
-            if ema_state is not None:
-                ema_update(ema_state, gen, args.ema)
             ep_loss += loss.item()
+            n_local += 1
+            if is_sync_step:
+                torch.nn.utils.clip_grad_norm_(gen.parameters(), 1.0)
+                opt.step()
+                opt.zero_grad(set_to_none=True)
+                if scheduler is not None:
+                    scheduler.step()
+                if ema_state is not None:
+                    ema_update(ema_state, gen, args.ema)
+                if args.log_step_loss:
+                    sl = torch.tensor([loss.item()], device=device)
+                    if is_dist:
+                        dist.all_reduce(sl, op=dist.ReduceOp.AVG)
+                    p0(f"[step] epoch {epoch:4d} step {(k + 1) // args.grad_accum:5d} "
+                       f"| loss {sl.item():.6f}", flush=True)
 
-        ep_loss /= max(1, len(idxs))
+        # epoch loss is the mean over ALL shapes the epoch touched, not just this
+        # rank's share, so the printed curve means the same thing at any world size
+        agg = torch.tensor([ep_loss, float(n_local)], device=device, dtype=torch.float64)
+        if is_dist:
+            dist.all_reduce(agg, op=dist.ReduceOp.SUM)
+        ep_loss = (agg[0] / agg[1].clamp(min=1)).item()
+        dt = time.time() - t_epoch
+        shapes_per_s = float(agg[1].item()) / max(dt, 1e-9)
         cur_lr = opt.param_groups[0]["lr"]
-        log.append({"epoch": epoch, "loss": ep_loss, "lr": cur_lr})
-        print(f"epoch {epoch:4d} | flow_loss {ep_loss:.5f} | lr {cur_lr:.2e}", flush=True)
+        log.append({"epoch": epoch, "loss": ep_loss, "lr": cur_lr,
+                    "epoch_sec": round(dt, 2), "shapes_per_s": round(shapes_per_s, 4),
+                    "world_size": world_size, "grad_accum": args.grad_accum})
+        p0(f"epoch {epoch:4d} | flow_loss {ep_loss:.5f} | lr {cur_lr:.2e} "
+           f"| {dt:.1f}s | {shapes_per_s:.3f} shapes/s", flush=True)
 
         if epoch % args.save_every == 0 or epoch == args.epochs:
-            save_ckpt(gen.state_dict(), os.path.join(args.out_dir, "last.ckpt"))
-            # ALSO keep per-epoch ckpts (pilot overwrote ep25 which was better than ep50 →
-            # overfitting; keep history to find the sweet spot / early-stop).
-            ep_path = os.path.join(args.out_dir, f"epoch_{epoch:04d}.ckpt")
-            save_ckpt(gen.state_dict(), ep_path)
-            if ema_state is not None:
-                save_ckpt(ema_state, os.path.join(args.out_dir, f"epoch_{epoch:04d}_ema.ckpt"))
-            json.dump(log, open(os.path.join(args.out_dir, "log.json"), "w"), indent=2)
+            # Saving, EMA and quick-val are rank 0's alone: the replicas hold identical
+            # weights, so N writers would only race on the same paths. The other ranks
+            # wait at the barrier below while rank 0 samples the quick-val shapes.
+            if rank == 0:
+                save_ckpt(gen.state_dict(), os.path.join(args.out_dir, "last.ckpt"))
+                # ALSO keep per-epoch ckpts (pilot overwrote ep25 which was better than ep50 →
+                # overfitting; keep history to find the sweet spot / early-stop).
+                ep_path = os.path.join(args.out_dir, f"epoch_{epoch:04d}.ckpt")
+                save_ckpt(gen.state_dict(), ep_path)
+                if ema_state is not None:
+                    save_ckpt(ema_state, os.path.join(args.out_dir, f"epoch_{epoch:04d}_ema.ckpt"))
+                json.dump(log, open(os.path.join(args.out_dir, "log.json"), "w"), indent=2)
 
-            val_iou = None
-            val_iou_all = val_iou_nonzero = None
-            per_sample = None
-            if eval_models is not None:
-                gen.eval()
-                result = evaluate_split(gen, eval_models, args.dataset, args.val_split, args.cond,
-                                        device=device, steps=12, thrs=THRS, n=args.val_quick, verbose=False)
-                gen.train()
-                val_iou_all = result["best_iou"]
-                val_iou_nonzero = result["best_iou_nonzero"]
-                val_iou = val_iou_nonzero if args.select_on == "nonzero" else val_iou_all
-                per_sample = result["per_sample"]
-                per_sample_s = " ".join(f"{p['sid'][:8]}={p['best_iou']:.3f}" for p in per_sample)
-                print(f"[val_quick] epoch {epoch:4d} | {args.val_split}[:{args.val_quick}] "
-                      f"best IoU(all)={val_iou_all:.4f}@thr={result['best_thr']} "
-                      f"best IoU(nonzero,n={result['n_nonzero']})={val_iou_nonzero:.4f}@thr={result['best_thr_nonzero']} "
-                      f"[selecting on {args.select_on}] | per-sample: {per_sample_s}", flush=True)
-                if val_iou > best_iou:
-                    best_iou = val_iou
-                    best_link = os.path.join(args.out_dir, "best.ckpt")
-                    if os.path.islink(best_link) or os.path.exists(best_link):
-                        os.remove(best_link)
-                    os.symlink(os.path.basename(ep_path), best_link)
-                    print(f"[val_quick] new best ({args.select_on}={val_iou:.4f}) → best.ckpt -> "
-                          f"{os.path.basename(ep_path)}", flush=True)
-            curve.append({"epoch": epoch, "train_loss": ep_loss, "lr": cur_lr, "val_iou": val_iou,
-                         "val_iou_all": val_iou_all, "val_iou_nonzero": val_iou_nonzero,
-                         "select_on": args.select_on, "per_sample": per_sample})
-            json.dump(curve, open(os.path.join(args.out_dir, "train_curve.json"), "w"), indent=2)
+                val_iou = None
+                val_iou_all = val_iou_nonzero = None
+                per_sample = None
+                if eval_models is not None:
+                    gen.eval()
+                    result = evaluate_split(gen, eval_models, args.dataset, args.val_split, args.cond,
+                                            device=device, steps=12, thrs=THRS, n=args.val_quick, verbose=False)
+                    gen.train()
+                    val_iou_all = result["best_iou"]
+                    val_iou_nonzero = result["best_iou_nonzero"]
+                    val_iou = val_iou_nonzero if args.select_on == "nonzero" else val_iou_all
+                    per_sample = result["per_sample"]
+                    per_sample_s = " ".join(f"{p['sid'][:8]}={p['best_iou']:.3f}" for p in per_sample)
+                    print(f"[val_quick] epoch {epoch:4d} | {args.val_split}[:{args.val_quick}] "
+                          f"best IoU(all)={val_iou_all:.4f}@thr={result['best_thr']} "
+                          f"best IoU(nonzero,n={result['n_nonzero']})={val_iou_nonzero:.4f}@thr={result['best_thr_nonzero']} "
+                          f"[selecting on {args.select_on}] | per-sample: {per_sample_s}", flush=True)
+                    if val_iou > best_iou:
+                        best_iou = val_iou
+                        best_link = os.path.join(args.out_dir, "best.ckpt")
+                        if os.path.islink(best_link) or os.path.exists(best_link):
+                            os.remove(best_link)
+                        os.symlink(os.path.basename(ep_path), best_link)
+                        print(f"[val_quick] new best ({args.select_on}={val_iou:.4f}) → best.ckpt -> "
+                              f"{os.path.basename(ep_path)}", flush=True)
+                curve.append({"epoch": epoch, "train_loss": ep_loss, "lr": cur_lr, "val_iou": val_iou,
+                             "val_iou_all": val_iou_all, "val_iou_nonzero": val_iou_nonzero,
+                             "select_on": args.select_on, "per_sample": per_sample})
+                json.dump(curve, open(os.path.join(args.out_dir, "train_curve.json"), "w"), indent=2)
+            dist_barrier(is_dist)
 
-    print("DONE", flush=True)
+    # per-rank, because peak memory is genuinely a per-rank fact: rank 0 also carries
+    # the EMA shadow copy and the quick-val decoders, so it is the one that sets the
+    # memory ceiling for the job
+    print(f"[mem] rank {rank}: peak allocated {torch.cuda.max_memory_allocated() / 2**30:.2f} GiB, "
+          f"peak reserved {torch.cuda.max_memory_reserved() / 2**30:.2f} GiB", flush=True)
+    p0("DONE", flush=True)
+    if is_dist:
+        dist.barrier()
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":
