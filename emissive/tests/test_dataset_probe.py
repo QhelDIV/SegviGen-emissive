@@ -18,7 +18,9 @@ mostly pin down: missing core slat file skips the sample silently as before,
 missing cond.pth or emis_mask.pth raises as before, and the admitted set and its
 order are untouched.
 
-Run it (no GPU, no trellis2 needed, the heavy imports are stubbed):
+Run it. No GPU and no trellis2 needed; those imports are stubbed. Real torch is
+used when the interpreter has it, and stubbed with a notice when it does not, so
+plain `python3` works too:
   python emissive/tests/test_dataset_probe.py
 
 Against a real split on the cluster, to check a known real gap end to end:
@@ -39,6 +41,46 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 
 
+def stub_torch_if_missing():
+    """Use the real torch when the interpreter has it; stub it when it does not.
+
+    train_emissive.py imports torch at module scope, before any of the stubs above
+    can matter, so on an interpreter without torch this suite died at line 37
+    rather than running. EmisDataset.__init__ touches only os and json, and torch
+    appears in the part under test solely as the base class, so a stub is enough
+    to exercise the scan. Preferring the real torch when it is importable keeps
+    the usual run honest; the stub only rescues the case that would otherwise be
+    no run at all, and it says so rather than pretending."""
+    try:
+        import torch  # noqa: F401
+        return False
+    except ImportError:
+        pass
+    print("[test] NOTE: torch is not importable here, so it is being stubbed. "
+          "EmisDataset's scan does not use torch, but this run does NOT check "
+          "anything torch-dependent. Run under an interpreter with torch for that.")
+    torch_mod = types.ModuleType("torch")
+    data_mod = types.ModuleType("torch.utils.data")
+    data_mod.Dataset = object
+    utils_mod = types.ModuleType("torch.utils")
+    utils_mod.data = data_mod
+    torch_mod.utils = utils_mod
+    nn_mod = types.ModuleType("torch.nn")
+    nn_mod.Module = object          # FlowStep subclasses it at module scope
+    parallel_mod = types.ModuleType("torch.nn.parallel")
+    parallel_mod.DistributedDataParallel = object
+    nn_mod.parallel = parallel_mod
+    torch_mod.nn = nn_mod
+    dist_mod = types.ModuleType("torch.distributed")
+    torch_mod.distributed = dist_mod
+    for name, mod in (("torch", torch_mod), ("torch.utils", utils_mod),
+                      ("torch.utils.data", data_mod), ("torch.nn", nn_mod),
+                      ("torch.nn.parallel", parallel_mod),
+                      ("torch.distributed", dist_mod)):
+        sys.modules[name] = mod
+    return True
+
+
 def load_trainer_module():
     """Import train_emissive with the heavy, GPU-bound imports stubbed.
 
@@ -51,6 +93,7 @@ def load_trainer_module():
                  "inference_full", "eval_emissive", "huggingface_hub"):
         if name not in sys.modules:
             sys.modules[name] = types.ModuleType(name)
+    stub_torch_if_missing()
     sys.modules["trellis2"].models = types.SimpleNamespace(from_pretrained=None)
     sys.modules["inference_full"].Gen3DSeg = object
     sys.modules["eval_emissive"].load_eval_models = None
