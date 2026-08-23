@@ -117,6 +117,52 @@ class FlowStep(nn.Module):
         return out.feats
 
 
+def probe_exists(path, stats):
+    """os.path.exists, except a negative is CONFIRMED before it is believed.
+
+    A cached negative dentry suppresses a lookup but cannot remove a name from a
+    readdir, so the parent's listing is the ground truth that separates the two
+    ways a file can look missing:
+
+      absent from the listing  -> really missing. No retry; the caller's original
+                                  behavior stands (skip, or hard error).
+      present in the listing   -> the lookup was wrong. Re-listing the parent has
+                                  already dropped the cached negative, so one
+                                  re-check settles it. Recovery is logged, never
+                                  swallowed.
+      present but still failing -> fits neither story. Treated as missing, i.e.
+                                  the original behavior again, but reported under
+                                  its own name so it cannot hide in either bucket.
+
+    Written after smoke job 248420 lost a multi-day scheduler slot to a cond.pth
+    that was there all along, and after a scan of excluded_v2 reported 41 shapes
+    missing cond.pth that really are missing. Both look the same to a bare
+    os.path.exists; a retry that only re-stats cannot tell them apart either, and
+    would just turn the real gap into a slower one."""
+    if os.path.exists(path):
+        return True
+    parent, name = os.path.split(path)
+    try:
+        names = os.listdir(parent)      # also drops any cached negative for parent
+    except OSError:
+        stats["absent"].append(path)
+        return False
+    if name not in names:
+        stats["absent"].append(path)
+        return False
+    if os.path.exists(path):
+        stats["recovered"].append(path)
+        print(f"[data] RECOVERED {path}: the first existence check said missing, but the "
+              f"name is in its parent's listing and re-checking after re-listing found "
+              f"it. Transient lookup miss, sample kept.", flush=True)
+        return True
+    stats["lookup_stuck"].append(path)
+    print(f"[data] LOOKUP_STUCK {path}: the name IS in its parent's listing but the "
+          f"existence check keeps failing after a re-list. Treating it as missing.",
+          flush=True)
+    return False
+
+
 class EmisDataset(torch.utils.data.Dataset):
     def __init__(self, dataset_root, split, cond_mode, require_mask=True, prebuilt=None):
         assert cond_mode in ("real", "zero")
@@ -132,23 +178,33 @@ class EmisDataset(torch.utils.data.Dataset):
             return
         sdir = os.path.join(dataset_root, split)
         core = ["shape_slat.pth", "input_tex_slat.pth", "output_tex_slat.pth"]
+        # every os.path.exists below is probe_exists instead; nothing else about the
+        # scan changes, so which shapes get admitted and in what order is untouched
+        # except that a shape is no longer lost to a transient lookup miss
+        stats = {"recovered": [], "lookup_stuck": [], "absent": []}
         for sid in sorted(os.listdir(sdir)):
             d = os.path.join(sdir, sid)
-            if not all(os.path.exists(os.path.join(d, f)) for f in core):
+            if not all(probe_exists(os.path.join(d, f), stats) for f in core):
                 continue
             # No silent fallback: a sample missing cond.pth under --cond real, or
             # missing emis_mask.pth while pos_weight is active, is a hard error — it
             # means the dataset build is incomplete, not something to quietly skip.
-            if cond_mode == "real" and not os.path.exists(os.path.join(d, "cond.pth")):
+            if cond_mode == "real" and not probe_exists(os.path.join(d, "cond.pth"), stats):
                 raise RuntimeError(f"--cond real but cond.pth missing for {d} "
                                    f"(run build_dataset.py --real_cond, or use --cond zero)")
-            if require_mask and not os.path.exists(os.path.join(d, "emis_mask.pth")):
+            if require_mask and not probe_exists(os.path.join(d, "emis_mask.pth"), stats):
                 raise RuntimeError(f"emis_mask.pth missing for {d} "
                                    f"(run make_emis_mask.py, or pass --pos_weight 1.0 to disable weighting)")
             self.dirs.append(d)
             mp = os.path.join(d, "meta.json")
-            fr = json.load(open(mp)).get("emissive_frac", 0.0) if os.path.exists(mp) else 0.0
+            # probed too: a transient miss here would quietly set emissive_frac to 0
+            # and mis-weight the sample under --emis_oversample
+            fr = json.load(open(mp)).get("emissive_frac", 0.0) if probe_exists(mp, stats) else 0.0
             self.fracs.append(float(fr))
+        print(f"[data] scan of '{split}': {len(self.dirs)} admitted, "
+              f"{len(stats['recovered'])} transient lookup misses recovered, "
+              f"{len(stats['lookup_stuck'])} lookups stuck, "
+              f"{len(stats['absent'])} files absent from their parent listing", flush=True)
 
     def __len__(self): return len(self.dirs)
 
