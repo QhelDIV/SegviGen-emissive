@@ -13,8 +13,9 @@ data directories only.
 
 ## See also
 
-`README_RUN_PINNING.md` — a long run's sbatch should copy the trainer into its own
-output directory and execute that copy. SLURM copies the sbatch at submit but not
-the code the script reads at start, so a queued job otherwise runs whatever is
-committed when it begins. The same directory then holds the log, the checkpoints,
-and the exact code that produced them.
+`README_RUN_PINNING.md` — how to know which trainer a run actually executed. SLURM
+copies the sbatch at submit but not the code the script reads at start, so a queued
+job runs whatever is committed when it begins. Each run records that fact in
+`TRAINER_AT_START.txt`. The doc also records why copying the code into the run
+directory was tried, failed in production, and reverted, and why a takeover job
+must prove it can start before it cancels the job it is replacing.

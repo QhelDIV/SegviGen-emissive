@@ -1,6 +1,6 @@
-# Pin the code a long run executes (convention, 2026-08-23)
+# Which code did this run actually execute? (convention, 2026-08-23)
 
-## The problem this exists for
+## The problem
 
 SLURM copies the **sbatch script** when you submit. It does not copy anything the
 script later reads. The trainer is an ordinary `.py` opened from the shared deploy
@@ -8,81 +8,79 @@ at job **start**, so a job that waits in the queue runs whatever is committed wh
 it *begins*, not what was there when you submitted it.
 
 On 2026-08-23 the agentic run had two trainer commits land under it between submit
-and start, from a teammate working correctly on their own brief: `b1742dc` (DDP
-support) and `76eb677` (the readdir probe). Both were improvements and neither
-changed the recipe, so nothing was harmed. Nothing detected it either. The run's
-own sbatch header still named the commit that was current at submit, which by then
-was two commits stale, and only a hash check caught it.
+and start, from a teammate working correctly on their own brief. Both were
+improvements and neither changed the recipe, so nothing was harmed. Nothing
+detected it either: the run's sbatch header still named the commit that was current
+at submit, which by then was two commits stale, and only a hash check caught it.
 
-A shared deploy plus queued multi-day jobs plus several agents committing means
-this is the normal case, not an unlucky one.
+## What we do: record the fact, do not try to control it
 
-## The convention
-
-**A long run's sbatch copies the code it needs into `$OUT_DIR/code` as its first
-action and executes that copy.** The run is then immune to anything committed
-after it starts, and the exact bytes that produced the checkpoints sit next to
-them.
-
-Copying the entry point alone is NOT enough, and this is the part that is easy to
-get wrong. `train_emissive.py` finds the repo root by walking UP from its own file
-until it sees `inference_full.py`, then puts that root on `sys.path` AHEAD of the
-script's own directory. A lone copy therefore still imports `inference_full`,
-`eval_emissive` and `trellis2` from the live deploy: you would pin the file you
-were watching and leave everything it calls unpinned. Copy the whole import
-surface under one directory so the walk-up lands on the pin instead:
-
-```bash
-OUT_DIR=/3dlg-jupiter-project/lightgen/segvigen_emissive/outputs/<run_name>
-PIN=$OUT_DIR/code
-test -n "$OUT_DIR"
-rm -rf "$PIN"
-mkdir -p "$PIN/emissive"
-cp inference_full.py "$PIN/"
-cp -r trellis2 "$PIN/"
-cp -r emissive/train emissive/eval "$PIN/emissive/"
-find "$PIN" -name __pycache__ -type d -prune -exec rm -rf {} +
-(cd "$PIN" && find . -name '*.py' | sort | xargs md5sum > MD5SUMS)
-
-python "$PIN/emissive/train/train_emissive.py" --dataset ... --out_dir "$OUT_DIR" ...
-```
-
-For a `torchrun` launch, the same pinned path goes after the launcher:
-
-```bash
-torchrun --standalone --nproc_per_node 4 "$PIN/emissive/train/train_emissive.py" ...
-```
-
-Verify the walk-up lands on the pin rather than assuming it does. From the pinned
-entry point, `os.path.dirname` upward to the first `inference_full.py` must resolve
-to `$PIN`. It does for anything under `outputs/`, and it would silently resolve to
-the deploy root if the pin were placed outside the repo with no `inference_full.py`
-above it.
-
-Measured cost: 1.9 MB and a couple of seconds at job start, nothing in the queue.
-
-**What this does not pin:** the conda environment. `torch`, `flash_attn` and the
-rest come from `trellis2` on the deploy's miniforge, and a change there would still
-reach a running job's next launch. Pinning the environment is a different and much
-heavier problem; this convention covers the repo code only, which is what changes
-day to day.
-
-## When the run is already queued
-
-You cannot fix a submitted job this way, because SLURM already took its script.
-Cancelling to re-pin costs the queue slot, which on a busy cluster is hours. The
-proportionate fallback is to record the **fact** of what ran rather than to control
-it: `capture_trainer_version.sh <out_dir> <job_id> [label]` writes
+At job start, `capture_trainer_version.sh <out_dir> <job_id> [label]` writes
 `TRAINER_AT_START.txt` into the run's output directory with the deployed file's
 md5, its git blob, and the commit that blob resolves to in the canonical checkout.
-It does not assume the deploy is a git checkout or that it matches the canonical
-repo; it hashes what is actually there and says plainly when the blob matches no
-commit. Git holds the bytes, so pinning the fact is enough to recover them.
+It does not assume the deploy is a git checkout or that it matches canonical; it
+hashes what is actually there and says plainly when the blob matches no commit,
+which is the case that would matter most. Git holds the bytes, so recording which
+bytes ran is enough to recover them later.
 
-That capture happens shortly after the job starts rather than atomically at start,
-so it is only trustworthy while trainer commits are frozen. Freezing commits is a
-coordination cost on everyone else. Self-pinning has no such cost, which is why it
-is the convention and the capture is the fallback.
+When a run must be protected from mid-flight changes, freeze trainer commits for
+the window between submit and start and say so on the board. That is a
+coordination cost on teammates, but it is honest and it works.
+
+## What we tried and REVERTED: copying the code into the run directory
+
+The obvious stronger idea is for the sbatch to copy the trainer into `$OUT_DIR`
+and execute that copy. **It was implemented, it failed in production, and it is
+not in use.** The failure is worth writing down, because the idea will occur to
+the next person too.
+
+`train_emissive.py` finds the repo root by walking UP from its own file until it
+sees `inference_full.py`, then puts that root on `sys.path`. Copying the entry
+point alone therefore pins nothing: the walk-up still lands on the deploy. Copying
+enough to move the walk-up (`inference_full.py` + `trellis2/` + `emissive/`) DOES
+move it, and that is exactly the trap. `sys.path` now points at the copy, so every
+import must be satisfied from the copy, and `inference_full.py` imports
+`data_toolkit.bpy_render` at module scope. Job 248521 died on
+`ModuleNotFoundError: No module named 'data_toolkit'` **after** it had already
+cancelled the running single-GPU job, costing 53 minutes of training.
+
+Two lessons, both paid for:
+
+- **Verifying the mechanism is not verifying the result.** The walk-up was checked
+  and confirmed to resolve to the pin. The three copied surfaces were confirmed
+  present. The pinned copy was never actually run, so the missing fourth surface
+  went unseen until it took a job down.
+- **The cost estimate was wrong by a factor of fifty.** "1.9 MB and a couple of
+  seconds" counted only what had been copied. `data_toolkit` alone is 93 MB, and
+  the reachable import set also includes `o_voxel` and `trellis`, whose provenance
+  (repo directory versus installed package) was never established. This repo's
+  import surface is not cheaply pinnable. Anyone reviving this idea should start
+  by enumerating the full transitive import set and measuring it, and should prove
+  the copy runs by executing it, not by reasoning about `sys.path`.
+
+## A takeover must prove it can start before it kills the incumbent
+
+The same incident exposed a design fault independent of pinning. The takeover
+scripts cancelled the running job as soon as they had an allocation, on the
+assumption that having a GPU means being able to train. A job that cannot import
+its own trainer holds a GPU perfectly well.
+
+Both takeover scripts now run an import guard **before** the cancel:
+
+```bash
+echo "IMPORT_GUARD_START $(date -Is)"
+python emissive/train/train_emissive.py --help > /dev/null
+echo "IMPORT_GUARD_OK $(date -Is)"
+```
+
+`--help` executes every module-level import in the job's exact interpreter, path
+and working directory, then exits 0. Under `set -e` an import fault aborts the
+takeover and the incumbent keeps running. It costs about 11 seconds, measured on
+job 248527, which is where it first ran for real, on the exact fault that had
+caused the outage four minutes earlier.
+
+Generalise it: **any job that terminates another job should first prove it can do
+the work it is taking over.** An allocation is not a capability.
 
 ## Related
 
