@@ -55,7 +55,7 @@ def parse_rows(path):
     return rows
 
 
-def summarize(rows, thr="0.5", draws=None, ddof=1):
+def summarize(rows, thr="0.5", draws=None, ddof=1, draw_ddof_correct=True):
     """The two standard errors, per the definitions agreed 2026-08-25.
 
     They answer different questions and neither is a substitute for the other:
@@ -66,7 +66,14 @@ def summarize(rows, thr="0.5", draws=None, ddof=1):
       se_unpaired_full general claim about shapes like these, against a fixed
                        constant. Between-shape variance dominates. Draw noise is
                        ALREADY inside each per-shape mean and so already inside
-                       this; adding it again double counts."""
+                       this; adding it again double counts.
+
+    draw_ddof_correct applies sqrt(K/(K-1)) to the per-shape draw stds. The stored
+    iou_std_by_thr uses np.std's default ddof=0, which over K draws biases each s_i
+    low by sqrt((K-1)/K) and so biases se_rerun toward overconfidence. Convention
+    agreed 2026-08-25 with agentic-train: leave the STORED value at ddof=0 so every
+    existing json stays comparable, and correct it in the DERIVED se. This flag
+    exists so that convention is visible and reversible rather than baked in."""
     X = [r["iou_by_thr"][thr] for r in rows if thr in r["iou_by_thr"]]
     S = [r["iou_std_by_thr"].get(thr, 0.0) for r in rows if thr in r["iou_by_thr"]]
     n = len(X)
@@ -79,7 +86,12 @@ def summarize(rows, thr="0.5", draws=None, ddof=1):
            "rms_draw_std": math.sqrt(statistics.mean(s * s for s in S))}
     if draws:
         out["draws"] = draws
-        out["se_rerun"] = out["rms_draw_std"] / math.sqrt(n * draws)
+        # ddof correction first, then rms, then /sqrt(nK). Every s_i scales by the
+        # same factor so the order does not matter numerically, but doing it here
+        # keeps the stored rms_draw_std reporting what the log literally contains.
+        bump = math.sqrt(draws / (draws - 1)) if (draw_ddof_correct and draws > 1) else 1.0
+        out["draw_ddof_correction"] = bump
+        out["se_rerun"] = bump * out["rms_draw_std"] / math.sqrt(n * draws)
         out["se_rerun_mean_form_DO_NOT_USE"] = out["draw_std_mean_form"] / math.sqrt(n * draws)
     return out
 
@@ -105,9 +117,13 @@ def main():
         print(f"   between_shape_std    {s['between_shape_std']:.4f}")
         print(f"   se_unpaired_full     {s['se_unpaired_full']:.5f}")
         if args.draws:
-            print(f"   se_rerun (rms form)  {s['se_rerun']:.5f}")
+            print(f"   se_rerun (rms, ddof-corrected x{s['draw_ddof_correction']:.3f})  {s['se_rerun']:.5f}")
+            rms_only = s["rms_draw_std"] / math.sqrt(s["n_shapes"] * args.draws)
             print(f"   se_rerun (mean form) {s['se_rerun_mean_form_DO_NOT_USE']:.5f}"
-                  f"   <- understates by {s['se_rerun']/s['se_rerun_mean_form_DO_NOT_USE']:.2f}x")
+                  f"   <- understates the agreed se_rerun by "
+                  f"{s['se_rerun']/s['se_rerun_mean_form_DO_NOT_USE']:.2f}x "
+                  f"({rms_only/s['se_rerun_mean_form_DO_NOT_USE']:.2f}x of it from mean-vs-rms, "
+                  f"{s['draw_ddof_correction']:.3f}x from ddof)")
     if args.json:
         json.dump(allrows if len(allrows) > 1 else next(iter(allrows.values())),
                   open(args.json, "w"), indent=2)
