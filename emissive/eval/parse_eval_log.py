@@ -13,9 +13,28 @@ So the whole campaign's inferential basis is recoverable from surviving logs at 
 GPU cost. This emits rows in the same shape evaluate_split builds, so a retrofitted
 point and a natively written one can be analysed by the same code.
 
-What it CANNOT recover: bucket_frac (never printed) and the raw per-draw IoUs (only
-their mean and std are printed). Rows are marked source="log" so nothing downstream
-mistakes a retrofit for a native row.
+What it CANNOT recover:
+  * bucket_frac, never printed
+  * the raw per-draw IoUs, only their mean and std are printed
+  * gt_frac and the IoUs at better than THREE DECIMALS, because that is what the
+    log prints
+
+Rows are marked source="log" so nothing downstream mistakes a retrofit for a
+native row.
+
+THE 3-DECIMAL LIMIT IS HARMLESS EXCEPT IN ONE PLACE, and that place matters.
+Rounding perturbs each value by at most 5e-4, which is nothing against IoUs
+spanning 0 to 1 and averages out across shapes: the aggregates and both standard
+errors are unaffected to well past the digits anyone quotes. But the NONZERO
+SUBSET is a threshold at exactly zero, and a shape whose true gt_frac is 3e-4
+prints as 0.000 and is then excluded. Measured on eval 249199: this parser finds
+79 shapes with gt_frac>0 where the native per_sample rows find 85. So a
+nonzero-subset comparison mixing a retrofitted arm with a native one silently
+compares different subsets.
+
+Take the nonzero mask from a native json when one exists, and when it does not,
+say which subset a retrofitted number was computed over. nonzero_rows() below
+warns rather than letting this pass quietly.
 
   python emissive/eval/parse_eval_log.py <log> [<log> ...]            # summary per log
   python emissive/eval/parse_eval_log.py --json out.json <log>        # per_sample rows
@@ -51,8 +70,24 @@ def parse_rows(path):
         best = max(iou, key=iou.get)
         rows.append({"sid": sid, "gt_frac": gt_frac, "iou_by_thr": iou,
                      "iou_std_by_thr": std, "best_iou": iou[best], "best_thr": float(best),
-                     "bucket_frac": None, "source": "log"})
+                     "bucket_frac": None, "source": "log", "gt_frac_precision": "3dp"})
     return rows
+
+
+def nonzero_rows(rows, warn=True):
+    """The gt_frac>0 subset, with a warning when the rows came from a log.
+
+    A threshold at exactly zero is the one statistic the log's 3-decimal printing
+    can change: true coverage below 5e-4 prints as 0.000 and drops out. On eval
+    249199 that is 79 shapes here against 85 from the native rows."""
+    out = [r for r in rows if r["gt_frac"] > 0]
+    if warn and any(r.get("gt_frac_precision") == "3dp" for r in rows):
+        print(f"[warn] nonzero subset taken from log-derived rows: gt_frac is rounded to "
+              f"3 decimals, so shapes with true coverage below 5e-4 are excluded here but "
+              f"included by a native json. Got {len(out)} of {len(rows)}. Use a native "
+              f"per_sample for the mask if one exists, or state which subset this is.",
+              file=sys.stderr)
+    return out
 
 
 def summarize(rows, thr="0.5", draws=None, ddof=1, draw_ddof_correct=True):
