@@ -21,7 +21,7 @@ Multi-GPU (single node, PyTorch DDP) -- see emissive/slurm/README_DDP.md:
 Launched without torchrun, WORLD_SIZE is unset and the script takes the exact
 single-GPU path it always took: no process group, no DDP wrapper, no reseeding.
 """
-import os, sys, json, argparse, glob, time, contextlib
+import os, sys, json, argparse, glob, time, contextlib, re
 from datetime import timedelta
 ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
@@ -187,6 +187,58 @@ def save_ckpt(state_dict, path):
     torch.save({"state_dict": OrderedDict([(f"gen3dseg.{k}", v) for k, v in state_dict.items()])}, path)
 
 
+# ---------------------------------------------------------- optimizer-state resume
+STATE_FORMAT = 1
+
+
+def state_path_for(ckpt_path):
+    """The state sidecar that belongs to a weights checkpoint.
+
+    Sidecar rather than extra keys inside the .ckpt, for two reasons. The weights
+    file stays BYTE-IDENTICAL in format, so every old checkpoint keeps loading and
+    eval_emissive/inference are untouched by construction rather than by care. And
+    AdamW state is roughly twice the parameter bytes (~4.9 GiB here against 2.4 GiB
+    of weights), so folding it in would have tripled the size of every per-epoch
+    checkpoint we keep forever; as a separate file it can be pruned on its own
+    (--keep_state) without touching a single weight."""
+    base = ckpt_path[:-5] if ckpt_path.endswith(".ckpt") else ckpt_path
+    return base + "_state.pt"
+
+
+def save_state(path, opt, scheduler, epoch, best_iou, args, world_size):
+    """Optimizer + scheduler + position. NOT the EMA: it is already written beside
+    this as epoch_XXXX_ema.ckpt, and duplicating 2.4 GiB per epoch to save a path
+    join would be a poor trade."""
+    torch.save({
+        "format": STATE_FORMAT,
+        "epoch": epoch,
+        "best_iou": best_iou,
+        "optimizer": opt.state_dict(),
+        "scheduler": scheduler.state_dict() if scheduler is not None else None,
+        "provenance": {"lr": args.lr, "ema": args.ema, "world_size": world_size,
+                       "grad_accum": args.grad_accum, "lr_schedule": args.lr_schedule},
+    }, path)
+
+
+def prune_states(out_dir, keep):
+    """Keep the newest `keep` sidecars. 0 keeps everything.
+
+    Resuming a chain only ever needs the latest, and each one is ~4.9 GiB, so the
+    default deliberately does not accumulate them. Only sidecars are ever removed;
+    the weights, which are the actual result, are never touched."""
+    if keep <= 0:
+        return
+    found = []
+    for f in os.listdir(out_dir):
+        m = re.fullmatch(r"epoch_(\d+)_state\.pt", f)
+        if m:
+            found.append((int(m.group(1)), os.path.join(out_dir, f)))
+    for _, path in sorted(found)[:-keep]:
+        os.remove(path)
+        print(f"[state] pruned {os.path.basename(path)} (--keep_state {keep}; "
+              f"weights untouched)", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", required=True)
@@ -243,6 +295,27 @@ def main():
                          "mean. 'all' = mean IoU over every quick-val shape (old behavior). Both "
                          "aggregates are always computed and logged regardless of which one gates "
                          "best.ckpt.")
+    ap.add_argument("--resume", default=None,
+                    help="Path to a weights checkpoint (epoch_XXXX.ckpt) to CONTINUE from, "
+                         "restoring the optimizer state, the LR schedule position, the EMA "
+                         "shadow and the epoch counter from its epoch_XXXX_state.pt sidecar. "
+                         "This is what stops a chained continuation paying the one-epoch "
+                         "resettle that a fresh AdamW costs. Errors if the sidecar is absent "
+                         "rather than quietly falling back, since a silent fallback is exactly "
+                         "the tax you were trying to avoid; use --init_ckpt for that on "
+                         "purpose. Overrides --init_ckpt. Epoch numbering continues from the "
+                         "restored position, so --epochs means epochs to run in THIS leg.")
+    ap.add_argument("--fresh_opt", action="store_true", default=False,
+                    help="With --resume: restore the position, EMA and data order, but start "
+                         "a NEW AdamW. That is the old chained-continuation behavior with the "
+                         "data order matched, which makes it the control this feature is "
+                         "measured against; it is also the flag to use if you deliberately "
+                         "want to reset the optimizer mid-chain.")
+    ap.add_argument("--keep_state", type=int, default=1,
+                    help="How many optimizer-state sidecars to retain in --out_dir (0 = all). "
+                         "Each is about twice the weight bytes, and a chain only ever resumes "
+                         "from the newest, so the default does not accumulate them. Pruning "
+                         "only ever removes sidecars, never weights.")
     ap.add_argument("--seed", type=int, default=None,
                     help="Fix the epoch sample draw AND the per-sample flow noise/timestep. "
                          "Noise and t are drawn from a generator keyed by (seed, epoch, "
@@ -294,6 +367,34 @@ def main():
         np.random.seed(args.seed + 1000 * rank)
     require_mask = args.pos_weight != 1.0 or args.balanced_pos_weight > 0
 
+    # Resolve where the weights come from and whether the optimizer comes with them.
+    # One of three modes, always announced, so a log never leaves it ambiguous which
+    # one a run took.
+    resume_state = None
+    if args.resume:
+        state_p = state_path_for(args.resume)
+        if not probe_exists(state_p):
+            raise RuntimeError(
+                f"--resume {args.resume} but its optimizer-state sidecar {state_p} is not "
+                f"there. Checkpoints written before optimizer-state saving existed have no "
+                f"sidecar. Resuming without it means a fresh AdamW and the one-epoch "
+                f"resettle, which is the thing --resume exists to avoid, so this is an error "
+                f"rather than a silent downgrade: pass --init_ckpt {args.resume} if a "
+                f"warm start with a fresh optimizer is what you actually want.")
+        resume_state = torch.load(state_p, map_location="cpu")
+        if resume_state.get("format") != STATE_FORMAT:
+            raise RuntimeError(f"{state_p} has state format {resume_state.get('format')}, "
+                               f"this trainer writes and reads {STATE_FORMAT}")
+        mode = "RESUME_FRESH_OPT" if args.fresh_opt else "RESUME_WITH_STATE"
+        if args.init_ckpt != "full_seg":
+            p0(f"[init] NOTE --init_ckpt {args.init_ckpt} is ignored because --resume was "
+               f"given; weights come from {args.resume}", flush=True)
+    else:
+        mode = "WARM_START_FRESH_OPT"
+        if args.fresh_opt:
+            raise RuntimeError("--fresh_opt only means something with --resume; without it "
+                               "the optimizer is already fresh.")
+
     if is_dist:
         # let rank 0 touch the HF cache alone first: four processes racing to populate
         # the same cache entry over NFS relies on hub file locks that are not reliable
@@ -304,8 +405,9 @@ def main():
         dist_barrier(is_dist)
 
     # model: flow + Gen3DSeg wrapper, warm-started from a SegviGen ckpt
-    init_ckpt = resolve_init_ckpt(args.init_ckpt)
-    p0(f"[init] warm-starting from {init_ckpt}", flush=True)
+    init_ckpt = args.resume if args.resume else resolve_init_ckpt(args.init_ckpt)
+    p0(f"[init] {mode} from {init_ckpt}"
+       + (f" (position: epoch {resume_state['epoch']})" if resume_state else ""), flush=True)
     flow = models.from_pretrained("microsoft/TRELLIS.2-4B/ckpts/slat_flow_imgshape2tex_dit_1_3B_512_bf16")
     # gradient checkpointing — activations dominate memory for the 1.3B sparse DiT; this
     # lets the full fine-tune fit on a 44GB GPU (l40s/a40).
@@ -347,6 +449,25 @@ def main():
     ema_state = None
     if args.ema > 0 and rank == 0:
         ema_state = {k: v.detach().clone() for k, v in gen.state_dict().items()}
+        # On resume, pick the shadow back up from the _ema.ckpt already written beside
+        # the weights. Starting it from the live weights instead would silently reset
+        # the averaging horizon, which is a quieter version of the same tax --resume
+        # exists to remove.
+        if resume_state is not None:
+            ema_p = (args.resume[:-5] if args.resume.endswith(".ckpt") else args.resume) + "_ema.ckpt"
+            if probe_exists(ema_p):
+                esd = torch.load(ema_p, map_location=device)["state_dict"]
+                esd = OrderedDict([(k.replace("gen3dseg.", ""), v) for k, v in esd.items()])
+                missing = [k for k in ema_state if k not in esd]
+                if missing:
+                    raise RuntimeError(f"{ema_p} is missing {len(missing)} keys the model has "
+                                       f"(first: {missing[:3]}); refusing to resume a partial EMA")
+                for k in ema_state:
+                    ema_state[k].copy_(esd[k])
+                p0(f"[ema] restored shadow weights from {os.path.basename(ema_p)}", flush=True)
+            else:
+                p0(f"[ema] NOTE no {os.path.basename(ema_p)} beside the resume checkpoint, so "
+                   f"the shadow restarts from the current weights", flush=True)
         p0(f"[ema] tracking shadow weights, decay={args.ema}", flush=True)
 
     eval_models = None
@@ -358,6 +479,20 @@ def main():
 
     sm, ss, tm, ts = load_norm_stats(device)
     opt = torch.optim.AdamW(gen.parameters(), lr=args.lr, weight_decay=0.0)
+    # Every rank restores: each holds its own optimizer over its own replica, and DDP
+    # keeps the replicas in step only through gradients, never through optimizer state.
+    if resume_state is not None and not args.fresh_opt:
+        opt.load_state_dict(resume_state["optimizer"])
+        prov = resume_state.get("provenance", {})
+        if prov.get("lr") is not None and abs(prov["lr"] - args.lr) > 1e-12:
+            p0(f"[resume] NOTE the saved run used lr {prov['lr']:.2e} and this leg asks for "
+               f"{args.lr:.2e}; the new value wins, AdamW's moments carry over", flush=True)
+            for g in opt.param_groups:
+                g["lr"] = args.lr
+        p0(f"[resume] optimizer state restored ({len(opt.state)} parameter slots)", flush=True)
+    elif resume_state is not None:
+        p0("[resume] --fresh_opt: position and EMA restored, optimizer starts from zero "
+           "moments (this is the behavior --resume exists to improve on)", flush=True)
 
     if is_dist:
         # one scan on rank 0, shipped to the rest (see EmisDataset(prebuilt=...))
@@ -401,13 +536,28 @@ def main():
         total_steps = max(1, args.epochs * opt_steps_per_epoch)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=total_steps, eta_min=args.lr / 20.0)
         p0(f"[lr] cosine schedule: {args.lr:.2e} -> {args.lr / 20.0:.2e} over {total_steps} steps", flush=True)
+        if resume_state is not None and not args.fresh_opt and resume_state.get("scheduler"):
+            # T_max and last_epoch travel inside the state, so the restored curve is the
+            # ORIGINAL one continued, not a fresh cosine reshaped by this leg's --epochs
+            scheduler.load_state_dict(resume_state["scheduler"])
+            p0(f"[lr] cosine position restored: step {scheduler.last_epoch} of "
+               f"{scheduler.T_max}, lr now {opt.param_groups[0]['lr']:.3e}", flush=True)
 
     log = []
     curve = []
     best_iou = -1.0
     n_wshape_logged = 0
+    # Numbering continues across a resume. That is not cosmetic: the epoch number keys
+    # the seeded per-epoch draw and the per-shape noise, so continuing it is what makes
+    # a resumed leg see the data the un-interrupted run would have seen next.
+    start_epoch = (resume_state["epoch"] + 1) if resume_state is not None else 1
+    last_epoch = start_epoch + args.epochs - 1
+    if resume_state is not None:
+        best_iou = resume_state.get("best_iou", -1.0)
+        p0(f"[resume] continuing at epoch {start_epoch}, running {args.epochs} more "
+           f"(through {last_epoch}); best_iou carried in as {best_iou:.4f}", flush=True)
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, last_epoch + 1):
         # The epoch's draw is computed IDENTICALLY on every rank (same weights, same
         # seeded generator) and then sliced by rank, so the oversample distribution is
         # exactly the single-GPU one and no index has to be communicated. Interleaved
@@ -508,7 +658,7 @@ def main():
         p0(f"epoch {epoch:4d} | flow_loss {ep_loss:.5f} | lr {cur_lr:.2e} "
            f"| {dt:.1f}s | {shapes_per_s:.3f} shapes/s", flush=True)
 
-        if epoch % args.save_every == 0 or epoch == args.epochs:
+        if epoch % args.save_every == 0 or epoch == last_epoch:
             # Saving, EMA and quick-val are rank 0's alone: the replicas hold identical
             # weights, so N writers would only race on the same paths. The other ranks
             # wait at the barrier below while rank 0 samples the quick-val shapes.
@@ -551,6 +701,13 @@ def main():
                              "val_iou_all": val_iou_all, "val_iou_nonzero": val_iou_nonzero,
                              "select_on": args.select_on, "per_sample": per_sample})
                 json.dump(curve, open(os.path.join(args.out_dir, "train_curve.json"), "w"), indent=2)
+                # Sidecar written LAST in the block: its presence then implies the
+                # weights beside it finished, and best_iou is this epoch's value rather
+                # than the previous one, so a resumed run's best.ckpt selection picks up
+                # where it left off instead of re-winning against a stale bar.
+                save_state(state_path_for(ep_path), opt, scheduler, epoch, best_iou,
+                           args, world_size)
+                prune_states(args.out_dir, args.keep_state)
             dist_barrier(is_dist)
 
     # per-rank, because peak memory is genuinely a per-rank fact: rank 0 also carries
