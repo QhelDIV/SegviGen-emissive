@@ -32,6 +32,7 @@ import trellis2.modules.sparse as sp
 from trellis2 import models
 from inference_full import Gen3DSeg, Sampler
 from huggingface_hub import hf_hub_download
+from fsprobe import probe_exists, new_stats, summary_line
 
 COND_T, COND_D = 1024, 1024
 THRS = [0.2, 0.3, 0.4, 0.5]   # sweep pred threshold (GT is white/black → fixed 0.5)
@@ -78,7 +79,7 @@ def otsu_threshold(vals, bins=256):
     return float(centers[int(np.argmax(between))])
 
 
-def bucket_frac_for(d, bucket_by):
+def bucket_frac_for(d, bucket_by, stats=None):
     """Coverage fraction used for --stratify bucketing. 'voxel' loads emis_mask.pth
     (mean coverage over the sample's 32-res latent grid, built from actual surface-voxel
     occupancy in make_emis_mask.py) — not tied to mesh tessellation. 'face' uses
@@ -88,15 +89,15 @@ def bucket_frac_for(d, bucket_by):
     Returns (frac, used_fallback)."""
     if bucket_by == "voxel":
         mp = os.path.join(d, "emis_mask.pth")
-        if os.path.exists(mp):
+        if probe_exists(mp, stats):
             return float(torch.load(mp, map_location="cpu").mean().item()), False
     mj = os.path.join(d, "meta.json")
-    frac = json.load(open(mj)).get("emissive_frac", 0.0) if os.path.exists(mj) else 0.0
+    frac = json.load(open(mj)).get("emissive_frac", 0.0) if probe_exists(mj, stats) else 0.0
     return float(frac), (bucket_by == "voxel")
 
 
 def eval_sample(gen, models_d, d, cond_mode, device, steps=12, thrs=THRS, otsu=False, dump_vis=None,
-                 sid=None, draws=1):
+                 sid=None, draws=1, stats=None):
     """Sample the flow on one sample dir `d`, decode, and score vs GT, `draws` independent
     times (fresh flow-matching noise each draw; GT/shape-decode subs are computed once and
     reused). Returns a dict with per-threshold mean+std IoU across draws (+ optional Otsu)
@@ -113,7 +114,7 @@ def eval_sample(gen, models_d, d, cond_mode, device, steps=12, thrs=THRS, otsu=F
         cond = torch.zeros(1, COND_T, COND_D, device=device)
     else:
         cond_p = os.path.join(d, "cond.pth")
-        if not os.path.exists(cond_p):
+        if not probe_exists(cond_p, stats):
             raise FileNotFoundError(f"--cond real but cond.pth missing: {cond_p}")
         cond = torch.load(cond_p, map_location=device)["cond"]
     coords = shp["coords"].to(device)
@@ -186,14 +187,15 @@ def evaluate_split(gen, models_d, dataset_root, split, cond_mode, device="cuda",
     per_sample = []   # [{sid, gt_frac, bucket_frac, best_iou, best_thr, iou_by_thr, iou_std_by_thr}, ...]
     n_eval = 0
     warned_fallback = False
+    stats = new_stats()
     for sid in sids:
         d = os.path.join(sdir, sid)
-        if not os.path.exists(os.path.join(d, "output_tex_slat.pth")):
+        if not probe_exists(os.path.join(d, "output_tex_slat.pth"), stats):
             continue
         res = eval_sample(gen, models_d, d, cond_mode, device, steps=steps, thrs=thrs,
-                          otsu=otsu, dump_vis=dump_vis, sid=sid, draws=draws)
+                          otsu=otsu, dump_vis=dump_vis, sid=sid, draws=draws, stats=stats)
         n_eval += 1
-        bucket_frac, used_fallback = bucket_frac_for(d, bucket_by)
+        bucket_frac, used_fallback = bucket_frac_for(d, bucket_by, stats)
         if used_fallback and not warned_fallback:
             print(f"[warn] emis_mask.pth missing for {sid} (bucket_by=voxel) — "
                   f"falling back to face-frac (meta.json) for bucketing", flush=True)
@@ -212,6 +214,12 @@ def evaluate_split(gen, models_d, dataset_root, split, cond_mode, device="cuda",
         per_sample.append({"sid": sid, "gt_frac": res["gt_frac"], "bucket_frac": bucket_frac,
                            "iou_by_thr": res["iou_by_thr"], "iou_std_by_thr": res["iou_std_by_thr"],
                            "best_iou": res["iou_by_thr"][s_best_thr], "best_thr": s_best_thr})
+
+    # Printed even on a clean pass. A recovered lookup miss during an eval is a
+    # number worth flagging: it means the reported IoU came within one stat call of
+    # either crashing or, at the output_tex_slat guard, silently dropping a sample
+    # and changing this metric's denominator.
+    print(summary_line(stats, f"eval scan of '{split}' ({n_eval} scored)"), flush=True)
 
     def _agg(samples):
         mbt = {t: float(np.mean([s["iou_by_thr"][t] for s in samples])) if samples else 0.0 for t in thrs}
@@ -235,7 +243,9 @@ def evaluate_split(gen, models_d, dataset_root, split, cond_mode, device="cuda",
            "best_iou_nonzero": best_iou_nz, "iou_at_5_nonzero": iou_at_5_nz,
            "threshold_sensitivity_nonzero": best_iou_nz - iou_at_5_nz,
            "n": n_eval, "n_nonzero": len(nonzero_sample), "draws": draws, "draw_std": draw_std,
-           "per_sample": per_sample}
+           "per_sample": per_sample,
+           "fs_recovered": len(stats["recovered"]), "fs_lookup_stuck": len(stats["lookup_stuck"]),
+           "fs_absent": len(stats["absent"])}
     if otsu:
         out["otsu_iou"] = float(np.mean(otsu_ious)) if otsu_ious else 0.0
     return out

@@ -39,6 +39,10 @@ import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
+# fsprobe imports nothing but the standard library, on purpose, so these tests
+# exercise the REAL probe rather than a stub of it
+sys.path.insert(0, os.path.join(REPO, "emissive", "eval"))
+import fsprobe
 
 
 def stub_torch_if_missing():
@@ -96,6 +100,8 @@ def load_trainer_module():
     stub_torch_if_missing()
     sys.modules["trellis2"].models = types.SimpleNamespace(from_pretrained=None)
     sys.modules["inference_full"].Gen3DSeg = object
+    sys.modules["inference_full"].Sampler = object
+    sys.modules["inference_full"].slat_to_glb = None
     sys.modules["eval_emissive"].load_eval_models = None
     sys.modules["eval_emissive"].evaluate_split = None
     sys.modules["eval_emissive"].THRS = ()
@@ -297,6 +303,159 @@ def test_require_mask_and_zero_cond_unchanged(M):
               err is not None and "emis_mask.pth" in err, str(err))
 
 
+
+
+# ---------------------------------------------------------------- fsprobe itself
+def test_probe_absent_from_listing(M):
+    """The real-gap case: no retry, and it is classified as absent."""
+    with tempfile.TemporaryDirectory() as tmp:
+        st = fsprobe.new_stats()
+        with captured() as buf:
+            ok = fsprobe.probe_exists(os.path.join(tmp, "nope.pth"), st)
+        check("absent file probes False", ok is False)
+        check("absent file is classified absent", len(st["absent"]) == 1 and not st["recovered"])
+        check("absent file logs nothing noisy", buf.getvalue() == "", buf.getvalue()[:120])
+
+
+def test_probe_recovers_transient(M):
+    """Name IS in the listing, first stat lies: recovered, and said out loud."""
+    with tempfile.TemporaryDirectory() as tmp:
+        target = os.path.join(tmp, "there.pth")
+        open(target, "w").close()
+        st = fsprobe.new_stats()
+        with patched_exists(FailNTimes("there.pth", 1)), captured() as buf:
+            ok = fsprobe.probe_exists(target, st)
+        check("transient miss probes True", ok is True)
+        check("transient miss is classified recovered",
+              len(st["recovered"]) == 1 and not st["absent"])
+        check("transient miss prints RECOVERED", "RECOVERED" in buf.getvalue())
+
+
+def test_probe_lookup_stuck(M):
+    """Name in the listing, stat never recovers: its own class, treated as missing."""
+    with tempfile.TemporaryDirectory() as tmp:
+        target = os.path.join(tmp, "there.pth")
+        open(target, "w").close()
+        st = fsprobe.new_stats()
+        with patched_exists(FailNTimes("there.pth", 99)), captured() as buf:
+            ok = fsprobe.probe_exists(target, st)
+        check("stuck lookup probes False", ok is False)
+        check("stuck lookup is its own class",
+              len(st["lookup_stuck"]) == 1 and not st["absent"] and not st["recovered"])
+        check("stuck lookup prints LOOKUP_STUCK", "LOOKUP_STUCK" in buf.getvalue())
+
+
+def test_probe_missing_parent(M):
+    """A directory that is not there at all must not raise out of the probe."""
+    st = fsprobe.new_stats()
+    with captured():
+        ok = fsprobe.probe_exists("/definitely/not/a/real/path/x.pth", st)
+    check("probe on a missing parent returns False rather than raising", ok is False)
+    check("probe on a missing parent counts as absent", len(st["absent"]) == 1)
+
+
+def test_probe_works_without_stats(M):
+    """stats is optional; callers that do not aggregate still get the loud line."""
+    with tempfile.TemporaryDirectory() as tmp:
+        target = os.path.join(tmp, "there.pth")
+        open(target, "w").close()
+        with patched_exists(FailNTimes("there.pth", 1)), captured() as buf:
+            ok = fsprobe.probe_exists(target)
+        check("probe without stats still recovers", ok is True)
+        check("probe without stats still logs", "RECOVERED" in buf.getvalue())
+
+
+# ------------------------------------------------------------------- eval path
+def test_eval_path_has_no_bare_exists(M):
+    """Regression guard. Every one of these four sites cost a job or corrupted a
+    number: cond.pth (killed eval job 248718 fourteen minutes in, mid-generation),
+    output_tex_slat.pth (silently drops a sample and changes the IoU denominator),
+    emis_mask.pth and meta.json (silently mis-stratify). A new bare os.path.exists
+    in this file is how the next one gets in."""
+    src = open(os.path.join(REPO, "emissive", "eval", "eval_emissive.py")).read()
+    code = "\n".join(l.split("#")[0] for l in src.splitlines())
+    check("eval_emissive.py has no bare os.path.exists left",
+          "os.path.exists" not in code,
+          "found: " + str([l.strip() for l in code.splitlines() if "os.path.exists" in l]))
+    check("eval_emissive.py imports the shared probe", "from fsprobe import probe_exists" in src)
+
+
+def test_trainer_uses_shared_probe(M):
+    """The trainer must not carry its own copy; one definition, one behavior."""
+    src = open(os.path.join(REPO, "emissive", "train", "train_emissive.py")).read()
+    check("trainer imports probe from fsprobe", "from fsprobe import probe_exists" in src)
+    check("trainer defines no second copy of probe_exists",
+          "def probe_exists" not in src)
+    # strip comments first: the scan carries a comment that names os.path.exists to
+    # explain why it is gone, and a prose mention is not a call site
+    scan = src.split("class EmisDataset")[1].split("def __len__")[0]
+    code = "\n".join(l.split("#")[0] for l in scan.splitlines())
+    check("trainer scan has no bare os.path.exists call", "os.path.exists" not in code,
+          "found: " + str([l.strip() for l in code.splitlines() if "os.path.exists" in l]))
+
+
+
+
+
+def load_eval_module():
+    """Import eval_emissive with the same stubs. This is the test that would have
+    caught a broken sibling import: `from fsprobe import ...` inside eval_emissive
+    resolves only because every consumer puts emissive/eval on sys.path, and that
+    is an assumption worth pinning rather than reasoning about."""
+    load_trainer_module()          # installs the stubs (incl. an eval_emissive stub)
+    import importlib
+    # drop the stub so the REAL eval_emissive is imported. train_emissive is already
+    # cached with the names it needed, so replacing the entry now affects nothing else.
+    sys.modules.pop("eval_emissive", None)
+    return importlib.import_module("eval_emissive")
+
+
+def test_eval_module_imports_with_shared_probe(M):
+    """eval_emissive must import, and must be using the shared probe."""
+    try:
+        EE = load_eval_module()
+    except Exception as e:
+        check("eval_emissive imports", False, f"{type(e).__name__}: {e}")
+        return
+    check("eval_emissive imports", True)
+    check("eval_emissive got probe_exists from fsprobe",
+          getattr(EE, "probe_exists", None) is fsprobe.probe_exists)
+    import inspect
+    check("eval_sample takes an optional stats kwarg",
+          inspect.signature(EE.eval_sample).parameters.get("stats") is not None
+          and inspect.signature(EE.eval_sample).parameters["stats"].default is None)
+    check("bucket_frac_for takes an optional stats kwarg",
+          inspect.signature(EE.bucket_frac_for).parameters.get("stats") is not None)
+
+
+def test_eval_bucket_frac_recovers_transient_meta(M):
+    """An eval-path site exercised for real: a transient miss on meta.json used to
+    give frac 0.0 and silently mis-stratify the sample."""
+    try:
+        EE = load_eval_module()
+    except Exception as e:
+        check("eval_emissive imports for bucket_frac test", False, str(e))
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        d = os.path.join(tmp, "aaa")
+        os.makedirs(d)
+        json.dump({"emissive_frac": 0.6}, open(os.path.join(d, "meta.json"), "w"))
+        with patched_exists(FailNTimes("aaa/meta.json", 1)), captured() as buf:
+            frac, fallback = EE.bucket_frac_for(d, "face")
+        check("transient meta.json miss no longer zeroes the eval bucket frac",
+              abs(frac - 0.6) < 1e-9, f"got {frac}")
+        check("eval-side recovery is logged", "RECOVERED" in buf.getvalue())
+
+    with tempfile.TemporaryDirectory() as tmp:
+        d = os.path.join(tmp, "bbb")
+        os.makedirs(d)
+        with captured():
+            frac, fallback = EE.bucket_frac_for(d, "face")
+        check("genuinely absent meta.json still falls back to 0.0",
+              frac == 0.0, f"got {frac}")
+
+
+
 def run_real_split(M, root, split):
     """Point the real scan at a real split. excluded_v2 is the known real-gap case:
     41 of 286 shapes have no cond.pth, absent from their parent listings."""
@@ -321,7 +480,13 @@ def main():
     for fn in (test_transient_cond_miss_recovers, test_real_gap_cond_raises,
                test_real_gap_core_skips, test_lookup_stuck_falls_back_to_original,
                test_transient_core_miss_recovers, test_transient_meta_miss_keeps_frac,
-               test_clean_split_unchanged, test_require_mask_and_zero_cond_unchanged):
+               test_clean_split_unchanged, test_require_mask_and_zero_cond_unchanged,
+               test_probe_absent_from_listing, test_probe_recovers_transient,
+               test_probe_lookup_stuck, test_probe_missing_parent,
+               test_probe_works_without_stats,
+               test_eval_path_has_no_bare_exists, test_trainer_uses_shared_probe,
+               test_eval_module_imports_with_shared_probe,
+               test_eval_bucket_frac_recovers_transient_meta):
         print(f"\n{fn.__name__}:")
         fn(M)
 
