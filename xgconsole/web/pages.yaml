@@ -28,36 +28,76 @@
 # as "no upstream", so double-check the build's warning output after
 # editing this file.
 pages:
+  - name: _preview/sample56_latest
+    shortname: sample56_latest
+    tags: [results, workspace]
+    important: true
+    blurb: >
+      5 sampled draws from the newest checkpoint (epoch 6 of the agentic run) on 56 shapes
+      the owner hand-picked during dataset filtering work. 34 of the 56 are the team's
+      shared 381-shape evaluation set, which already has epoch-8 warm-start samples on
+      hand, enabling a real controlled A/B: same shapes, same seeds, only the checkpoint
+      differs. Mean IoU@0.5 more than triples (0.076 to 0.238), mostly because the warm
+      start over-predicted emission coverage by roughly 2.7x on average and the latest
+      checkpoint is close to calibrated; 21 of 34 shapes improve, 13 get worse, with a few
+      named, draw-by-draw-verified regressions shown honestly rather than smoothed into
+      the mean. The other 22 shapes turned out to sit in test_72k, a third held-out split
+      this project had never evaluated before, not unprocessed orphans as first suspected;
+      mean IoU there (0.262) is comparable to the 34 tracked shapes, so the improvement
+      generalizes to a split the model has genuinely never been measured against.
+
+  - name: _preview/agentic_gt_masks
+    shortname: agentic_gt_masks
+    tags: [diagnostic, workspace]
+    important: true
+    blurb: >
+      Is the processed binary emission target the agentic training farm (36,226 shapes)
+      actually trains on the same signal as the authored asset it was built from? Traces
+      the exact derivation (build_dataset_direct.py binarizes Dongchen's raw ovoxels and
+      bakes the result into output.vxz's base color; make_emis_mask.py's threshold on
+      read-back reproduces it exactly, matching meta.json's emissive_frac to 6 decimals on
+      every shape checked) and renders the real on-disk mask next to the authored
+      emit-only multiview for 136 shapes total (16 individually inspected plus 120 more
+      stratified across the full population), on top of a 2,000-shape distribution showing
+      most training masks are small (9 of 2,000 sampled shapes carry zero emission after
+      processing, only 205 exceed a fifth of the shape). 132 of 136 checked pairs match
+      cleanly, 3 are angle-ambiguous (a ring or disc emitter seen edge-on by the mask's
+      zoom camera, a known rendering limitation, not a data problem), 1 is inconclusive
+      because both render angles happen to view that shape edge-on, and 0 are confirmed
+      mismatches.
+
   - name: _preview/target_check
     tags: [diagnostic, workspace]
     important: false
     blurb: >
-      Decode check on the actual training/eval target: does <code>output_tex_slat.pth</code>
-      hold the binary emission mask it should, or (as the owner's albedo-glow observation
-      suggested) the shape's own PBR albedo, swapped in by a dataset-builder bug? Decodes
-      the real on-disk file through the TRELLIS.2 tex_decoder on 5 shapes (ct10, the
-      single-shape control, train_72k) and compares against the raw pre-encode ground
-      truth still on disk. Verdict: REFUTED &mdash; the stored target is the emission mask
-      on every shape checked (correlation 0.94&ndash;0.999), with a positive-control decode
-      proving the pipeline isn't hiding a real leak. Not a data bug; the albedo-glow
-      symptom is downstream (model behavior or an eval/viz attribution issue).
+      Decode check on the actual training/eval target: does
+      <code>output_tex_slat.pth</code> hold the binary emission mask it should, or (as the
+      owner's albedo-glow observation suggested) the shape's own PBR albedo, swapped in by
+      a dataset-builder bug? Decodes the real on-disk file through the TRELLIS.2
+      tex_decoder on 5 shapes (ct10, the single-shape control, train_72k) and compares
+      against the raw pre-encode ground truth still on disk. Verdict: REFUTED, the stored
+      target is the emission mask on every shape checked (correlation 0.94&ndash;0.999),
+      with a positive-control decode proving the pipeline isn't hiding a real leak. Not a
+      data bug; the albedo-glow symptom is downstream (model behavior or an eval/viz
+      attribution issue).
 
   - name: _preview/data_compare
     upstreams: [data_pipeline]
     tags: [reference, workspace]
     important: true
     blurb: >
-      Dongchen's preprocessed 256&sup3; o-voxels vs our native 512&sup3; re-extraction, checked
-      against each other quantitatively (17,894 shapes scanned, 400 decoded in full) and
-      visually (12 shapes spanning emissive_frac 0 to 1). Occupied-voxel count scales
-      4.10&times; median 256&rarr;512, matching a surface's expected ~4&times; (not the 8&times; a
-      solid volume would give). The two occupancy sets nest almost perfectly (31% of shapes
-      have zero gap) but with a genuine long tail (31 shapes exceed 10% gap, one hits 100%).
-      Tests the brief's highest-value hypothesis directly: do emissive 256-parents yield more
-      512-children than dark parents? Only 1.0% more, pooled over 72M parent cells, too small
-      to explain the sparse-shape emissive_frac drift seen elsewhere. The key validation:
-      two independently-computed dual-grid geometries (256&sup3; vs 512&sup3; averaged down)
-      agree to 0.12 voxel widths mean with no systematic per-axis offset.
+      Dongchen's preprocessed 256&sup3; o-voxels vs our native 512&sup3; re-extraction,
+      checked against each other quantitatively (17,894 shapes scanned, 400 decoded in
+      full) and visually (12 shapes spanning emissive_frac 0 to 1). Occupied-voxel count
+      scales 4.10&times; median 256&rarr;512, matching a surface's expected ~4&times; (not
+      the 8&times; a solid volume would give). The two occupancy sets nest almost
+      perfectly (31% of shapes have zero gap) but with a genuine long tail (31 shapes
+      exceed 10% gap, one hits 100%). Tests the brief's highest-value hypothesis directly:
+      do emissive 256-parents yield more 512-children than dark parents? Only 1.0% more,
+      pooled over 72M parent cells, too small to explain the sparse-shape emissive_frac
+      drift seen elsewhere. The key validation: two independently-computed dual-grid
+      geometries (256&sup3; vs 512&sup3; averaged down) agree to 0.12 voxel widths mean
+      with no systematic per-axis offset.
 
   - name: _preview/data_pipeline
     tags: [reference, workspace]
@@ -65,17 +105,18 @@ pages:
     blurb: >
       GLB to latent explainer: makes the three resolutions (256&sup3; where Dongchen bakes
       attribute values, 512&sup3; the pretrained encoder's native grid where geometry is
-      extracted, 32&sup3; the latent the model trains on) and the file/variable flow between
-      them unambiguous at a glance. One end-to-end flow diagram with resolution lanes (GLB
-      splitting into the two independent o_voxel extractions, merging into the input.vxz /
-      output.vxz 512 pair, then the unchanged SegviGen encoder), a nesting-arithmetic diagram
-      (1 latent token = 16&sup3; of 512 cells = 8&sup3; of 256 cells), and per-stage file/
-      variable tables grounded in file:line citations. Explains the channel hijack (emission
-      binarized into the base_color slot to reuse the pretrained PBR encoder byte-identically),
-      why Dongchen's 256&sup3; bake has no geometry channel (scope, not a defect: TRELLIS.2's
-      own preprocessing calls both o_voxel functions, he only needed one), and why upsampling
-      attribute values rather than re-baking at 512&sup3; sidesteps a real, documented bug in
-      o_voxel's emissive mip sampling.
+      extracted, 32&sup3; the latent the model trains on) and the file/variable flow
+      between them unambiguous at a glance. One end-to-end flow diagram with resolution
+      lanes (GLB splitting into the two independent o_voxel extractions, merging into the
+      input.vxz / output.vxz 512 pair, then the unchanged SegviGen encoder), a
+      nesting-arithmetic diagram (1 latent token = 16&sup3; of 512 cells = 8&sup3; of 256
+      cells), and per-stage file/ variable tables grounded in file:line citations.
+      Explains the channel hijack (emission binarized into the base_color slot to reuse
+      the pretrained PBR encoder byte-identically), why Dongchen's 256&sup3; bake has no
+      geometry channel (scope, not a defect: TRELLIS.2's own preprocessing calls both
+      o_voxel functions, he only needed one), and why upsampling attribute values rather
+      than re-baking at 512&sup3; sidesteps a real, documented bug in o_voxel's emissive
+      mip sampling.
 
   - name: _preview/ovoxel_explained
     tags: [reference, workspace]
@@ -106,14 +147,14 @@ pages:
     blurb: >
       Deep-dive companion to ovoxel_explained: O-Voxel construction, dual contouring, and
       the QEF, derived from first principles for a reader who wants the machinery, not an
-      orientation. Sign classification and Hermite data on a real (point-in-polygon,
-      real segment-intersection) piecewise-linear grid; marching squares vs. dual
-      contouring on the same sharp corner; the QEF as sum-of-squared-plane-distances,
-      the normal equations, and a rank analysis of A^TA (flat patch = plane of solutions,
-      crease = line, corner = unique point) illustrated with computed isometric-cube
-      panels. Two worked numerical examples verified with numpy: an orthogonal-normal
-      corner solved exactly, and a near-parallel-normal patch whose unregularized solve
-      lands 21 cell-widths outside the voxel until regularization pulls it back to the
+      orientation. Sign classification and Hermite data on a real (point-in-polygon, real
+      segment-intersection) piecewise-linear grid; marching squares vs. dual contouring on
+      the same sharp corner; the QEF as sum-of-squared-plane-distances, the normal
+      equations, and a rank analysis of A^TA (flat patch = plane of solutions, crease =
+      line, corner = unique point) illustrated with computed isometric-cube panels. Two
+      worked numerical examples verified with numpy: an orthogonal-normal corner solved
+      exactly, and a near-parallel-normal patch whose unregularized solve lands 21
+      cell-widths outside the voxel until regularization pulls it back to the
       mean-of-crossings. Reconciles the paper's clean two-term energy (TRELLIS.2 Eq. 2)
       with the code's three C++ accumulation passes (intersect_qef/face_qef/boundry_qef)
       and its actual solve method (regularized QR + exhaustive box-boundary enumeration,
@@ -124,7 +165,7 @@ pages:
     tags: [workspace]
     blurb: >
       Research workspace landing page (advisor/collaborator-facing zone, added 2026-07-19,
-      LITE scope) — links to the current results and proposals for external readers; the
+      LITE scope), links to the current results and proposals for external readers; the
       console (internal notes, to-dos, experiment logs) lives at the site root instead.
 
   - name: updates/2026-07-19
@@ -132,16 +173,16 @@ pages:
     tags: [update]
     important: true
     blurb: >
-      Daily report — switching data generation to direct GLB → o-voxel: pivots off the
-      512² somage-bake ceiling toward TRELLIS.2's native per-voxel emission bake. Today's
-      to-do (build_dataset_direct.py, 50-shape stratified pilot, go/no-go checkpoint) plus
+      Daily report, switching data generation to direct GLB → o-voxel: pivots off the 512²
+      somage-bake ceiling toward TRELLIS.2's native per-voxel emission bake. Today's to-do
+      (build_dataset_direct.py, 50-shape stratified pilot, go/no-go checkpoint) plus
       carry-overs and two facts from yesterday's work.
 
   - name: updates/2026-07-07_2k_results
     upstreams: [results_2k_v1]
     tags: [update]
     blurb: >
-      Draft team update on the 2k emission-filtered fine-tune result (page + PDF) — the
+      Draft team update on the 2k emission-filtered fine-tune result (page + PDF), the
       clean negative result later folded into BRIEF.md's "Latest (2k run)" section.
       Feedback pending.
 
@@ -153,11 +194,11 @@ pages:
       Team explainer + proposal: today's emissive GT routes through a 512² somage bake
       (two independent voxelizations of separately-built GLBs); every fine-tune we've
       trained lands 0.32–0.43 IoU on large-glow shapes but only 0.036–0.055 on tiny-glow
-      shapes (7–9× gap, same source numbers as results_2k_v1's stratified chart).
-      Proposes voxelizing the original GLB directly instead (one voxelization, native
-      3-channel emissive, no 512² ceiling), with commit-pinned evidence that TRELLIS.2's
-      own tooling already supports emission end-to-end (just switched off in the
-      released weights), caveats, and a 50-shape diagnostic to decide.
+      shapes (7–9× gap, same source numbers as results_2k_v1's stratified chart). Proposes
+      voxelizing the original GLB directly instead (one voxelization, native 3-channel
+      emissive, no 512² ceiling), with commit-pinned evidence that TRELLIS.2's own tooling
+      already supports emission end-to-end (just switched off in the released weights),
+      caveats, and a 50-shape diagnostic to decide.
 
   - name: glb_direct_pilot_v1
     upstreams: [pipeline_glb_direct]
@@ -165,14 +206,14 @@ pages:
     important: true
     blurb: >
       GO/NO-GO verdict for the direct-GLB emissive pilot (54-shape stratified batch):
-      NO-GO on o-voxel's per-voxel emissive attribute, GO on the one-hop idea. The attr
-      is populated but WRONG — it fabricates glow on non-emissive shapes (a plush teddy
-      bear comes back 96% emissive; 7 of 18 render-black shapes painted >20%) and misses
-      genuine emission, correlating with rendered light 0.25 vs the somage GT's 0.72.
-      Root cause (factor-zeroing controlled test): a wrong texture lookup in o-voxel's
-      compiled voxelizer, which is why TRELLIS.2 deletes the attr. Corrects the
-      pipeline_glb_direct explainer's "supported but switched off" story; recommends the
-      fix — UV-sample the original GLB's emissiveTexture per-face (handling factor-only +
+      NO-GO on o-voxel's per-voxel emissive attribute, GO on the one-hop idea. The attr is
+      populated but WRONG, it fabricates glow on non-emissive shapes (a plush teddy bear
+      comes back 96% emissive; 7 of 18 render-black shapes painted >20%) and misses
+      genuine emission, correlating with rendered light 0.25 vs the somage GT's 0.72. Root
+      cause (factor-zeroing controlled test): a wrong texture lookup in o-voxel's compiled
+      voxelizer, which is why TRELLIS.2 deletes the attr. Corrects the pipeline_glb_direct
+      explainer's "supported but switched off" story; recommends the fix, UV-sample the
+      original GLB's emissiveTexture per-face (handling factor-only +
       KHR_materials_emissive_strength materials).
 
   - name: results_2k_v1
@@ -180,12 +221,12 @@ pages:
     tags: [results, workspace]
     important: true
     blurb: >
-      LATEST — 2k emission-filtered fine-tune result: a clean negative result. Bigger
-      clean data (train_2k_ef, 2,000 shapes) and balanced per-shape loss weighting both
-      fail to beat the 0.219 zero-shot SegviGen oracle; all four new checkpoints land
-      ≈0.10–0.11, tied with the old 1k model. Comparison + stratified-by-glow-size charts,
-      an honest-eval noise callout (16-sample quick-val overstated by 53%), and 8 real
-      val_96 shapes showing large-glow success vs tiny-glow failure in rendered voxel
+      LATEST, 2k emission-filtered fine-tune result: a clean negative result. Bigger clean
+      data (train_2k_ef, 2,000 shapes) and balanced per-shape loss weighting both fail to
+      beat the 0.219 zero-shot SegviGen oracle; all four new checkpoints land ≈0.10–0.11,
+      tied with the old 1k model. Comparison + stratified-by-glow-size charts, an
+      honest-eval noise callout (16-sample quick-val overstated by 53%), and 8 real val_96
+      shapes showing large-glow success vs tiny-glow failure in rendered voxel
       predictions.
 
   - name: finetune_binary_v1
@@ -198,9 +239,9 @@ pages:
   - name: training_curves_v1
     tags: [results]
     blurb: >
-      Loss + quick-val IoU curves for both Phase 4 arms (W5 and W1, 18 epochs, L40S),
-      plus overfit-1 and overfit-10 sanity-gate runs. Includes the full val_96
-      4-checkpoint results table.
+      Loss + quick-val IoU curves for both Phase 4 arms (W5 and W1, 18 epochs, L40S), plus
+      overfit-1 and overfit-10 sanity-gate runs. Includes the full val_96 4-checkpoint
+      results table.
 
   - name: dataset_gallery_v1
     upstreams: [finetune_binary_v1]
@@ -215,17 +256,16 @@ pages:
     tags: [data]
     blurb: >
       What the train split's --pbr_only filter keeps vs drops: pbrType is a tooling
-      signature (SubstancePainter vs Minecraft/voxel/AI-gen tags), not a quality
-      signal, and the dropped 45,829/80,735 shapes are MORE emissive-labeled than the
-      kept ones (86% vs 76%). 48-shape kept/dropped gallery. Companion to
-      dataset_gallery_v1.
+      signature (SubstancePainter vs Minecraft/voxel/AI-gen tags), not a quality signal,
+      and the dropped 45,829/80,735 shapes are MORE emissive-labeled than the kept ones
+      (86% vs 76%). 48-shape kept/dropped gallery. Companion to dataset_gallery_v1.
 
   - name: official_repro
     tags: [baseline]
     blurb: >
-      Exact official inference_full.py on the authors' example.glb — reproduces
-      the expected cap/body/door/window/leaves/step structure. Confirms weights,
-      env, and inference are correct.
+      Exact official inference_full.py on the authors' example.glb, reproduces the
+      expected cap/body/door/window/leaves/step structure. Confirms weights, env, and
+      inference are correct.
 
   - name: gt_vs_pred_canon10
     upstreams: [fullseg_canon10_mesh, official_repro]
@@ -239,8 +279,8 @@ pages:
     upstreams: [fullseg_canon10]
     tags: [baseline]
     blurb: >
-      Pretrained full_seg part-segmentation on the res-512 decoded mesh (paper-style,
-      no voxel coarsening). Canonical overfit_split_10. Predicted parts only.
+      Pretrained full_seg part-segmentation on the res-512 decoded mesh (paper-style, no
+      voxel coarsening). Canonical overfit_split_10. Predicted parts only.
 
   - name: fullseg_canon10
     upstreams: [fullseg_overfit10_adhoc]
@@ -253,7 +293,7 @@ pages:
     shortname: fullseg_adhoc10
     tags: [archive]
     blurb: >
-      Arbitrary 10-shape set picked during an autonomous run — NOT the team's
+      Arbitrary 10-shape set picked during an autonomous run, NOT the team's
       overfit_split_10. Kept for reference only.
 
   - name: time_cost
@@ -261,8 +301,133 @@ pages:
     blurb: >
       Where the segvigen-emissive pipeline spends its time: every stage (data processing,
       model inference, mask-to-mesh conversion, Blender rendering) measured from Solar's
-      own job accounting and logs, covering the chain run 2026-08-10 through 2026-08-11 —
-      the epoch-8 checkpoint evaluation's own job window (see ckpt8_eval; jobs 242924/242950/
-      242877 are this page's own named case studies). Rendering is the largest cost by far,
-      with three specific, fixable causes behind most of the waste elsewhere. Owner reviewed:
-      the measured statistics stand; the three proposed fixes were not adopted.
+      own job accounting and logs, covering the chain run 2026-08-10 through 2026-08-11 ,
+      the epoch-8 checkpoint evaluation's own job window (see ckpt8_eval; jobs
+      242924/242950/ 242877 are this page's own named case studies). Rendering is the
+      largest cost by far, with three specific, fixable causes behind most of the waste
+      elsewhere. Owner reviewed: the measured statistics stand; the three proposed fixes
+      were not adopted.
+
+  - name: _preview/eval5_samples
+    shortname: eval5_samples
+    tags: [results, evaluation]
+    important: true
+    blurb: >
+      Five-draw sample generation with the epoch-8 checkpoint (raw weights, real
+      conditioning) over the lightgen team's shared 381-shape evaluation set, so this
+      model can join the same head-to-head table as TEXGen, albedo&rarr;emission, and
+      pbr&rarr;emission. Split check verified live (not assumed from the 10-day-old
+      FACTSHEET_split_alignment.md): 0/381 overlap with this checkpoint's training set,
+      the old 81.6% contamination finding describes a split that has since been repaired.
+      All 381 shapes generated clean, 5 fixed seeds each, bridge-compatible npz layout.
+      Per-shape mean IoU@0.5: mean 0.209, median 0.030 (bimodal, a cluster of trivial
+      fully-lit shapes, a large mass near zero). 6/381 shapes got zero prediction on every
+      draw (2 correct dark-shape abstentions, 4 real misses, both counted rather than
+      hidden). Also documents a silent mid-sweep death and the resume/supervisor hardening
+      that followed, including a bug in the first resume-check attempt caught before it
+      wasted GPU compute, and a second bug (lost summary.json entries) caught during this
+      page's own verification pass.
+
+  - name: _preview/train_dataflow
+    shortname: train_dataflow
+    tags: [results, tooling]
+    blurb: >
+      What a training step actually reads, which function reads it, where the second per
+      shape goes, and what an epoch boundary writes, measured, not read off the code. A
+      shape costs 9.23 MB, 91% of it the single cond.pth file, and half of that file is a
+      zeros tensor the loop discards one line after reading it (266 GB an epoch). The
+      expected conclusion does not follow: reading and unpacking is about 91 ms of a 1.10
+      s shape, so packing the conditioning saves storage and shared-filesystem load but
+      under 1.5 hours of a 19.3 hour epoch. The epoch is long because it runs 63,129
+      shapes one at a time, with no DataLoader and no batching, through a 1.3B model with
+      gradient checkpointing on. Three independent measurements: the live job read from
+      outside via /proc and nvidia-smi (never signalled), a VizTracer and py-spy run of
+      the same script locally, and an strace file inventory.
+
+  - name: _preview/train_rungraph
+    shortname: train_rungraph
+    tags: [results, tooling]
+    blurb: >
+      The run graph of one real training step: every function it entered, who called it
+      and from which line, and the type, shape, dtype and device of everything passed in
+      and returned. 191,871 calls, collapsed to 212 functions and 394 call relations,
+      recorded by a call tracer while the unmodified training script ran one step locally.
+      Two facts the source does not state. The model is handed 1246 voxels for a 623-voxel
+      shape, because Gen3DSeg.forward concatenates the noised target latent and the
+      appearance latent along the voxel axis at the same coordinates, and the second half
+      of the output is dropped at the end of the forward. And the backward runs all 30
+      transformer blocks a second time, the price of the gradient checkpointing that fits
+      the fine-tune on the GPU. The page carries an interactive graph, collapsed to files
+      and expandable to functions with a signature table per call, a static one-screen
+      diagram of the whole step with shapes on the main edges, and the raw trace as JSON.
+      torchview ran too and is shown for what it cannot do: it does not follow a
+      SparseTensor, so the block chain and every block output are missing from its module
+      diagram.
+
+  - name: _preview/qc_filter_gallery
+    shortname: qc_filter_gallery
+    tags: [results, workspace]
+    important: true
+    blurb: >
+      Dongchen's agentic QC filter, run over the full 73,470-shape emissive dataset:
+      36,652 shapes survive (49.9%), most of them the agent's own calls (57,985 of the
+      dataset ever reaches the agent, 2,021 a human, 13,464 rejected first by a
+      deterministic filter). Shows the funnel by the numbers, then a random, fixed-seed
+      gallery of kept and dropped shapes for every path a verdict can take, agent, human,
+      whole-object-emission rule, albedo-copied-into-emission, zero emission coverage, no
+      atlas bake, images incomplete , using the same multiview evidence images the
+      annotators judged on. The albedo-copy and whole-object-rule rejects are visually
+      unambiguous (several whole-object rows render an almost pixel-identical full-color
+      copy of the lit view in the emit-only channel); the whole-object rule itself
+      sometimes fires on shapes that look only locally lit from the six orbit views,
+      because it measures UV-texel coverage, not on-screen visibility, stated plainly
+      rather than smoothed over.
+
+  - name: _preview/lightning_feasibility
+    shortname: lightning_feasibility
+    tags: [results, workspace]
+    important: true
+    blurb: >
+      Can SegviGen train under the team's TRELLIS.2-lightning framework? Verdict: yes, and
+      the port is smaller than it looks. Our fork's flow model differs from the
+      framework's by three comment lines; the 2N interleave lives outside the model and
+      ports as a subclass. Smoke-proven in our hands: Dongchen's own overfit config ran 30
+      steps on a solar L40S, checkpointed, and resumed cleanly. Checkpoint keys map 640 of
+      640 with full weight reuse for a SegviGen config. Three ranked port risks (silent
+      weight-load failure first), a 3 to 4 day effort estimate, a parity acceptance plan,
+      and the comparability caveat: shared trainer, still separate latent axes.
+
+  - name: _preview/render_ab_study
+    shortname: render_ab_study
+    upstreams: [sample56_latest]
+    tags: [results, workspace]
+    important: true
+    blurb: >
+      Two ways to turn a predicted per-voxel emissive mask into a picture, run on the same
+      held-out shapes with the same masks and rendered in the same dark box. The incumbent
+      writes the mask back through the original asset's authored UV layout and inherits
+      whatever is wrong with it. A targeted fix for one such layout landed while this page
+      was being written: it recovered 2 of 7 silent failures and left 5 standing across 4
+      shapes, including a phone screen at 27% mask coverage, for at least two distinct
+      reasons. The challenger computes emission in the 512 voxel grid and exports through
+      the generative stack's own exporter, renders all five, and cannot produce the
+      failure at all. It costs colour accuracy and detail smaller than a voxel, and costs
+      neither silhouette nor legible text. Recommends voxel-native as the default for
+      anything generated in bulk.
+
+  - name: _preview/ep8_voxnative
+    shortname: ep8_voxnative
+    upstreams: [sample56_latest, render_ab_study]
+    tags: [results, workspace]
+    important: true
+    blurb: >
+      The first full gallery drawn by the voxel-native renderer after the A/B study made
+      it the default: fifty five held-out shapes, ground truth and all five sampled draws
+      each, 330 panels, one pipeline, nothing hand-picked. The predictions are epoch 8 of
+      the fir run, unchanged from the sampling job, so this is a rendering result and not
+      a model result. Because it shows the whole sample rather than one draw per shape,
+      it makes the between-draw spread visible: averaged over shapes that spread is 0.315
+      against a mean score of 0.240, 32 of 55 shapes have at least one draw scoring
+      exactly zero, and 25 have a best draw worth more than twice their own average. Also
+      reports the renderer's own cost: 8.3 seconds median per panel with a factor-of-two
+      range, and a per-panel frame check whose worst case across all 330 is 0.970.
