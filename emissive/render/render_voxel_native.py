@@ -461,6 +461,9 @@ def main():
     ap.add_argument("--texture_size", type=int, default=2048)
     ap.add_argument("--decimation_target", type=int, default=100000)
     ap.add_argument("--overwrite", type=int, default=0)
+    ap.add_argument("--shard", type=int, default=0,
+                    help="take panels[shard::nshards] only, for a SLURM job array")
+    ap.add_argument("--nshards", type=int, default=1)
     ap.add_argument("--min_frame_iou", type=float, default=0.9,
                     help="reject a panel whose exported mesh does not line up with "
                          "the voxel volume it was baked from; lower only to "
@@ -475,6 +478,9 @@ def main():
     assert panels, "no panels given"
     assert bool(args.npz_dir) != bool(args.gen_root), \
         "give exactly one of --npz_dir or --gen_root"
+    if args.nshards > 1:
+        panels = panels[args.shard::args.nshards]
+        print(f"shard {args.shard}/{args.nshards}: {len(panels)} panels", flush=True)
 
     shape_decoder, tex_decoder = load_decoders()
     os.makedirs(args.out_dir, exist_ok=True)
