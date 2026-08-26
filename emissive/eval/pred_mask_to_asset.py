@@ -183,14 +183,38 @@ def rasterise_into(uv, faces, positions, size, pos_buf, valid_buf):
     bounds cross (xhi < xlo) and the face is silently skipped, so an entire tiled
     material rasterizes to zero texels and reads as unlit (a hole in the mask, GT and
     predictions equally). Fixed by wrapping each face into [0,1) with ONE consistent
-    integer offset per face (floor of its first vertex, applied to all three), which
-    preserves the triangle's shape exactly for the common case (a face fully inside one
-    tile) and only leaves a residual artifact for a face straddling a tile seam, a much
-    rarer degenerate case."""
+    integer offset per face, which preserves the triangle's shape exactly for the
+    common case (a face fully inside one tile) and only leaves a residual artifact for
+    a face straddling a tile seam, a much rarer degenerate case.
+
+    Second bug fixed here (2026-08-26, found while investigating a case
+    misdiagnosed as a multi-TEXCOORD UV-layer mismatch): the offset was
+    floor(uv[i0]), the FIRST vertex alone. A vertex sitting exactly on a tile
+    edge is, in real mesh data, essentially never EXACTLY 0.0 or 1.0 -- it
+    arrives as something like -2.98e-08 (an exact 0 corrupted by float32/64
+    conversion earlier in the pipeline), and floor() of that is -1, not 0.
+    The whole triangle then gets translated a full tile away while its OTHER
+    two corners (comfortably inside [0,1], nowhere near a boundary) do not
+    move to compensate, so the rasterised bbox collapses to a sliver at the
+    tile edge: one caught case, a digital clock's display, is exactly 2
+    triangles, both anchored on a v=1.0-exactly vertex, and both collapsed to
+    literally 1 texel out of 1024x1024 -- 100% of that material's face count,
+    total blackout, not a hole. A first-vertex anchor is fragile exactly
+    where mesh UVs are most likely to sit: clean axis-aligned edges of a UV
+    island. The fix uses the face's CENTROID instead: an interior point of a
+    non-degenerate triangle is essentially never within float noise of an
+    integer, so it floors to the intended tile even when any single corner
+    would not. A sweep of all 55 gallery shapes' raw UVs found 101,759 faces
+    across 25 shapes where the two anchors disagree -- far more than the
+    handful of "multi-TEXCOORD" shapes this was first suspected to track;
+    that correlation looks like it was coincidental, not causal (a separate,
+    JSON-only check found ZERO materials, across all 55 shapes, whose
+    baseColorTexture or emissiveTexture references any TEXCOORD index other
+    than 0, so there was never a genuine UV-layer-selection question here)."""
     H = W = size
     for f in faces:
         i0, i1, i2 = f
-        offset = np.floor(uv[i0])
+        offset = np.floor(uv[[i0, i1, i2]].mean(axis=0))
         u0, v0 = uv[i0] - offset
         u1, v1 = uv[i1] - offset
         u2, v2 = uv[i2] - offset
