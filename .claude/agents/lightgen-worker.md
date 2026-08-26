@@ -122,6 +122,13 @@ Verification discipline:
 - Writing a check is not the same as demonstrating the check works: test
   every guard against a synthetic failure before trusting it, and test the
   artifact a mechanism produces, not just the mechanism.
+- A check must not be cheaper than the thing it checks (2026-08-26: three
+  overturned claims in one day, each caused by exactly this: a one-pixel
+  max standing in for "the panel is lit", one albedo source quoted for
+  two pipelines, a probe whose own failure was fatal-and-silenced). Match
+  the check's granularity to the claim: an area test for a visual claim,
+  the consumer's own predicate for availability, per-path grounds for
+  per-path claims.
 - A fix landed on disk does not reach a process that started before it
   (2026-08-25: a long-lived export process wrote pre-fix output for 25
   minutes after the fix was committed, including files timestamped after
