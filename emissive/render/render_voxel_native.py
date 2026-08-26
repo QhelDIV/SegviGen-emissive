@@ -166,7 +166,30 @@ def decode_shape_and_pbr(shape_decoder, tex_decoder, sample_dir, timer, device="
     return meshes, tex_voxels
 
 
-def load_mask(npz_path, tex_voxels, thr=0.5, max_miss_frac=1e-3):
+def resolve_npz(panel_id, args):
+    """Where this panel's mask lives, in either of the two layouts we produce.
+
+    --npz_dir is the converted layout eval_emissive.py --dump_vis writes: one file
+    per panel, <panel_id>.npz, carrying `gt_e` (bool) and `pred_bc` (per-voxel mean
+    base color).
+
+    --gen_root is the generation job's own tree, one directory per draw:
+        <gen_root>/draw<k>/<sid>.npz  with `pred` and `gt_recon`, both (N, 3) RGB.
+    A "_gt" panel reads gt_recon out of draw0, because the ground truth is a decode
+    of the shape's own stored target and does not depend on which draw it sits next
+    to. Verified rather than assumed: on three shapes the two layouts agree on the
+    mask fraction to four decimals and their coords arrays are equal.
+    """
+    if args.gen_root:
+        sid, _, kind = panel_id.rpartition("_")
+        if kind == "gt":
+            return os.path.join(args.gen_root, "draw0", f"{sid}.npz"), "gt_recon"
+        assert kind.startswith("draw"), f"{panel_id}: not a draw or gt panel"
+        return os.path.join(args.gen_root, kind, f"{sid}.npz"), "pred"
+    return os.path.join(args.npz_dir, f"{panel_id}.npz"), None
+
+
+def load_mask(npz_path, tex_voxels, thr=0.5, max_miss_frac=2e-2, raw_key=None):
     """Read the per-voxel emissive mask and transfer it onto THIS decode's coords.
 
     The npz was written by a different process (the generation job's dump), and the
@@ -179,11 +202,24 @@ def load_mask(npz_path, tex_voxels, thr=0.5, max_miss_frac=1e-3):
     Voxels the mask does not cover are treated as non-emissive, and the miss rate is
     both returned and capped: a large miss rate means the two decodes are not the
     same shape at all, not a rounding difference.
+
+    The cap is 2%, not the 0.1% it started at. That first value was calibrated on one
+    shape whose two decodes differed by 7 voxels in 773929 and it rejected two panels
+    of the epoch-8 gallery that differ by 0.15% (601 of 389787), which is plainly the
+    same shape decoded twice. The guard is here to catch a mismatch of tens of
+    percent, the kind that means the mask belongs to a different asset; the measured
+    rate is recorded per panel either way, so a creeping increase stays visible
+    instead of being hidden by the looser bound.
     """
     d = np.load(npz_path)
     npz_coords = d["coords"].astype(np.int64)
     dec_coords = tex_voxels.coords[:, 1:].cpu().numpy().astype(np.int64)
-    if "pred_bc" in d.files and not npz_path.endswith("_gt.npz"):
+    if raw_key is not None:
+        # the generation tree's layout: (N, 3) RGB, thresholded on the channel mean,
+        # exactly as eval_emissive.py derives gt_e and pred_bc from a decode
+        vals = d[raw_key].astype(np.float32).mean(-1) > thr
+        src = f"{raw_key}.mean>{thr}"
+    elif "pred_bc" in d.files and not npz_path.endswith("_gt.npz"):
         vals = d["pred_bc"].astype(np.float32) > thr
         src = f"pred_bc>{thr}"
     else:
@@ -273,17 +309,43 @@ def align_to_source_frame(glb):
     return glb
 
 
-def verify_frame(glb, coords, panel_id, res=32, min_iou=0.7):
+def verify_frame(glb, coords, panel_id, res=32, min_iou=0.7, n_samples=200000):
     """Check the exported mesh occupies the same space as the volume it was baked from.
 
-    Both are put on a coarse grid over the same unit box and compared. A mesh in the
-    wrong frame still renders, and still renders something that looks like the shape,
-    so this is checked rather than eyeballed.
+    Both are put on a coarse grid over the same unit box, and the test is what
+    fraction of the VOLUME's cells the mesh covers, not a symmetric overlap. A mesh in
+    the wrong frame still renders, and still renders something that looks like the
+    shape, so this is checked rather than eyeballed.
+
+    Coverage rather than IoU because the exporter's remesh legitimately ADDS surface:
+    it fills holes and closes shells, so the mesh is a superset of the sparse
+    surface-voxel set. A crate in the epoch-8 gallery was falsely rejected at 0.616
+    symmetric IoU while covering every one of the volume's 2312 occupied cells and
+    adding 1440 of its own; voxel-only cells numbered zero. Coverage scores that 1.000
+    and still collapses under a genuine rotation, which is the failure this guards.
+
+    The mesh is also sampled over its SURFACE by area rather than at its vertices, so
+    a shape with few vertices and large flat faces is not undersampled.
     """
     v = np.asarray(glb.vertices, dtype=np.float64)
-    c = (v.min(0) + v.max(0)) / 2
-    sc = (v.max(0) - v.min(0)).max()
-    vi = np.clip((((v - c) / sc) + 0.5) * res, 0, res - 1).astype(int)
+    f = np.asarray(glb.faces)
+    tris = v[f]
+    area = 0.5 * np.linalg.norm(np.cross(tris[:, 1] - tris[:, 0],
+                                         tris[:, 2] - tris[:, 0]), axis=1)
+    if area.sum() > 0:
+        rng = np.random.default_rng(0)
+        pick = rng.choice(len(tris), size=n_samples, p=area / area.sum())
+        t = tris[pick]
+        u = rng.random((n_samples, 1)); w = rng.random((n_samples, 1))
+        over = (u + w) > 1
+        u[over] = 1 - u[over]; w[over] = 1 - w[over]
+        pts = t[:, 0] + u * (t[:, 1] - t[:, 0]) + w * (t[:, 2] - t[:, 0])
+    else:
+        pts = v
+
+    c = (pts.min(0) + pts.max(0)) / 2
+    sc = (pts.max(0) - pts.min(0)).max()
+    vi = np.clip((((pts - c) / sc) + 0.5) * res, 0, res - 1).astype(int)
     g_mesh = np.zeros((res, res, res), bool)
     g_mesh[vi[:, 0], vi[:, 1], vi[:, 2]] = True
 
@@ -294,26 +356,28 @@ def verify_frame(glb, coords, panel_id, res=32, min_iou=0.7):
     g_vox = np.zeros((res, res, res), bool)
     g_vox[pi[:, 0], pi[:, 1], pi[:, 2]] = True
 
-    iou = float((g_mesh & g_vox).sum()) / max(int((g_mesh | g_vox).sum()), 1)
-    assert iou >= min_iou, (
-        f"{panel_id}: the exported mesh does not line up with the voxel volume it was "
-        f"baked from (occupancy IoU {iou:.3f} at {res}^3, expected >= {min_iou}); the "
-        f"emission would be painted on a surface in a different orientation")
-    return iou
+    covered = float((g_mesh & g_vox).sum()) / max(int(g_vox.sum()), 1)
+    assert covered >= min_iou, (
+        f"{panel_id}: the exported mesh does not cover the voxel volume it was baked "
+        f"from ({covered:.3f} of the volume's occupied cells at {res}^3, expected >= "
+        f"{min_iou}); the emission would be painted on a surface in a different "
+        f"orientation")
+    return covered
 
 
 def run_panel(panel_id, args, shape_decoder, tex_decoder):
     sid = panel_id.split("_")[0]
     timer = Timer()
     sample_dir, split = find_sample_dir(args.dataset, sid)
-    npz_path = os.path.join(args.npz_dir, f"{panel_id}.npz")
+    npz_path, raw_key = resolve_npz(panel_id, args)
     assert os.path.isfile(npz_path), f"mask npz missing: {npz_path}"
 
     meshes, tex_voxels = decode_shape_and_pbr(
         shape_decoder, tex_decoder, sample_dir, timer)
     assert len(meshes) == 1, f"{panel_id}: expected one mesh, got {len(meshes)}"
 
-    mask, mask_src, miss_frac, n_mask_vox = load_mask(npz_path, tex_voxels, thr=args.thr)
+    mask, mask_src, miss_frac, n_mask_vox = load_mask(
+        npz_path, tex_voxels, thr=args.thr, raw_key=raw_key)
     pbr = tex_voxels.feats.float()
     base_color = pbr[:, PBR_LAYOUT["base_color"]]
     emission = base_color * mask[:, None].float()
@@ -342,7 +406,8 @@ def run_panel(panel_id, args, shape_decoder, tex_decoder):
     assert emis_img is not None, f"{panel_id}: exporter returned no emissive texture"
     align_to_source_frame(glb)
     stats["frame_iou_vs_volume"] = round(
-        verify_frame(glb, tex_voxels.coords[:, 1:].cpu().numpy(), panel_id), 4)
+        verify_frame(glb, tex_voxels.coords[:, 1:].cpu().numpy(), panel_id,
+                     min_iou=args.min_frame_iou), 4)
 
     stats["n_mesh_vertices_exported"] = int(len(glb.vertices))
     stats["n_mesh_faces_exported"] = int(len(glb.faces))
@@ -381,8 +446,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", required=True,
                     help="dataset_direct root (holds val_72k/test_72k/train_72k)")
-    ap.add_argument("--npz_dir", required=True,
-                    help="dir of per-voxel mask npz files (<panel>.npz)")
+    ap.add_argument("--npz_dir", default=None,
+                    help="dir of per-voxel mask npz files (<panel>.npz), the "
+                         "converted layout")
+    ap.add_argument("--gen_root", default=None,
+                    help="the generation job's own tree instead: <gen_root>/draw<k>/"
+                         "<sid>.npz with `pred` and `gt_recon`")
     ap.add_argument("--panels", default=None,
                     help="comma-separated panel ids (<sid>_gt / <sid>_draw2)")
     ap.add_argument("--panels_file", default=None, help="one panel id per line")
@@ -392,6 +461,10 @@ def main():
     ap.add_argument("--texture_size", type=int, default=2048)
     ap.add_argument("--decimation_target", type=int, default=100000)
     ap.add_argument("--overwrite", type=int, default=0)
+    ap.add_argument("--min_frame_iou", type=float, default=0.9,
+                    help="reject a panel whose exported mesh does not line up with "
+                         "the voxel volume it was baked from; lower only to "
+                         "INVESTIGATE a rejection, never to make one go away")
     args = ap.parse_args()
 
     panels = []
@@ -400,6 +473,8 @@ def main():
     if args.panels_file:
         panels += [l.strip() for l in open(args.panels_file) if l.strip()]
     assert panels, "no panels given"
+    assert bool(args.npz_dir) != bool(args.gen_root), \
+        "give exactly one of --npz_dir or --gen_root"
 
     shape_decoder, tex_decoder = load_decoders()
     os.makedirs(args.out_dir, exist_ok=True)

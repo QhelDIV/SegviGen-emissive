@@ -376,7 +376,31 @@ def main():
         # has_tex) and simply thrown away. So: take the texel path whenever the
         # material actually rasterized texels, textured or not.
         pos_buf, valid_buf = tex_bufs.get(mat, (None, None))
-        if valid_buf is not None and valid_buf.any():
+
+        # FAST REJECT (2026-08-25). Sending every untextured material down the texel
+        # path fixed the black panels but made a multi-material shape expensive: the
+        # chandelier has 9 materials, all flat, and each one was running a nearest-lit
+        # -voxel query over up to a million covered texels. Almost all of those
+        # materials are nowhere near an emissive voxel. So sample the material's
+        # surface first (4000 points, negligible) and skip the big query when it is
+        # nowhere near anything lit.
+        #
+        # The margin is deliberately huge: reject only when the CLOSEST of those 4000
+        # samples is more than 10x the tolerance away. A material with a genuinely
+        # tiny lit region is thousands of times closer than that, so this cannot turn
+        # a lit material off; it only skips materials that are obviously cold.
+        faces_pre = [(prim, li) for poly, prim, li in matched if prim["material"] == mat]
+        support_pre, n_pre = area_lit_fraction(faces_pre, tree_lit, centre, scale,
+                                               args.tol)
+        far_from_anything = False
+        if n_pre and tree_lit is not None and support_pre == 0.0:
+            tris_pre = np.array([prim["positions"][prim["faces"][li]]
+                                 for prim, li in faces_pre])
+            d_pre, _ = tree_lit.query(to_voxel(tris_pre.mean(axis=1), centre, scale), k=1)
+            far_from_anything = bool(d_pre.min() > 10 * args.tol)
+            rec["nearest_lit_voxel_distance"] = round(float(d_pre.min()), 2)
+
+        if valid_buf is not None and valid_buf.any() and not far_from_anything:
             texel_coverage = float(valid_buf.mean())
             rec["texel_coverage"] = texel_coverage
             mask = np.zeros((args.tex, args.tex), dtype=np.float32)
@@ -410,10 +434,7 @@ def main():
             # caught case: raw UVs spanning a healthy rectangle, 12.2% of its area
             # within tolerance of a lit voxel, and 0 lit texels. Measure the support
             # independently of the atlas and say so when the two disagree.
-            faces_this_mat = [(prim, li) for poly, prim, li in matched
-                              if prim["material"] == mat]
-            support, n_pts = area_lit_fraction(faces_this_mat, tree_lit, centre,
-                                               scale, args.tol)
+            faces_this_mat, support, n_pts = faces_pre, support_pre, n_pre
             rec["area_lit_frac"] = support
             if n_pts and support > 0 and int(mask.sum()) == 0:
                 print(f"MASK_SUPPORT_NOT_TRANSFERRED_WARNING mat={mat} ({name}): "
