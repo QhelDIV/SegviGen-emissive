@@ -209,3 +209,25 @@ confirms no correction is needed for the input-mesh path), face frac emissive=0.
 Not yet exercised: `--label_input_mesh` on a second, more asymmetric shape (only one shape
 tested so far) — the fix itself is anchored to source code rather than shape-specific, but
 a second shape would further confirm the KDTree-fallback behavior generalizes.
+
+---
+
+## 2026-08-25: agentic-37k checkpoint registry + run-naming convention
+
+Naming convention for new runs (owner-set): dataset first, lineage second,
+`emis_<data>_from<init>_<variant>`. Existing run dirs keep their names.
+
+- **emis_agentic37k_from72kv2_pw1b**: canonical copy (md5-verified, with
+  PROVENANCE.md) of the fir run `emis_72kv2_cond_pw1b_agentic_fir` epoch 8:
+  36,226-shape agentic split, 8 epochs on 4x H100 (fir job 56505054, dataset
+  count hard-gated), warm-started from `emis_72kv2_cond_pw1b` epoch 8.
+  Location: `outputs/emis_agentic37k_from72kv2_pw1b/` (falas).
+  This is the checkpoint handed to the team for the all-baselines eval,
+  labeled "agentic-37k (72k warm start)".
+- **emis_agentic37k_fromfullseg_pw1b**: the FAIR arm: same data, initialized
+  from the SegviGen-provided `full_seg.ckpt` (md5 `0906c3676beeacedda...`),
+  no 72k exposure. Running on fir as a 6-link chain of 12h jobs
+  (56821752-57), each link auto-resuming from the newest ckpt + optimizer
+  sidecar (`--epochs` means N MORE epochs on resume). Sbatch:
+  `env_build/fir_train_agentic_fromfullseg.sbatch` (fir).
+  The 3-day warm-start continuation 56748610 was cancelled unstarted.
