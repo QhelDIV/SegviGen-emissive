@@ -40,7 +40,17 @@ sys.path.insert(0, "/project/3dlg-hcvc/omages/xgutils/src")
 from xgutils import bpyutil
 import bpy
 
-sys.path.insert(0, "/3dlg-jupiter-project/lightgen/segvigen_emissive/code")
+# Was pointed at /3dlg-jupiter-project/lightgen/segvigen_emissive/code, an
+# orphaned pre-fork working directory that exists on only SOME compute nodes
+# (confirmed present on cs-venus-07/13, absent on cs-venus-17: a bake landing
+# there died with ModuleNotFoundError). Repointed 2026-08-25 at the canonical,
+# git-tracked fork copy under emissive/eval/, which every node mounts
+# identically -- also the only copy that gets fixes (the orphaned copy was
+# quietly carrying the pre-fix rasterise_into with the REPEAT-UV clamp bug).
+EVAL_DIR = ("/3dlg-falas/project/omages/lightgen/segvigen_emissive/emissive/eval"
+           if os.path.isdir("/3dlg-falas") else
+           "/cs/3dlg-falas/project/omages/lightgen/segvigen_emissive/emissive/eval")
+sys.path.insert(0, EVAL_DIR)
 from pred_mask_to_asset import read_glb, primitives, rasterise_into  # noqa: E402
 
 GRID = 512

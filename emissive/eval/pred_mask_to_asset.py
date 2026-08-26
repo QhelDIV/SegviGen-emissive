@@ -172,14 +172,30 @@ def primitives(gltf, bins):
 # ------------------------------------------------------------------ transfer
 def rasterise_into(uv, faces, positions, size, pos_buf, valid_buf):
     """Accumulate one primitive's surface positions into a shared (size,size,3) buffer,
-    so every primitive sharing a material composites into that material's one atlas."""
+    so every primitive sharing a material composites into that material's one atlas.
+
+    glTF REPEAT wrap mode lets UVs sit anywhere outside [0,1] (a material's faces can
+    live entirely in tile [2,3]x[1,2], say); the buffer is one atlas covering exactly
+    [0,1]x[0,1], so each face must be brought into that tile before rasterizing. Bug
+    fixed here (2026-08-25): the previous version scaled the RAW uv straight to pixel
+    space and then clamped the per-face bounding box into [0, size-1]; for a face whose
+    three vertices all sit outside [0,1] in the same direction, the clamped xhi/ylo
+    bounds cross (xhi < xlo) and the face is silently skipped, so an entire tiled
+    material rasterizes to zero texels and reads as unlit (a hole in the mask, GT and
+    predictions equally). Fixed by wrapping each face into [0,1) with ONE consistent
+    integer offset per face (floor of its first vertex, applied to all three), which
+    preserves the triangle's shape exactly for the common case (a face fully inside one
+    tile) and only leaves a residual artifact for a face straddling a tile seam, a much
+    rarer degenerate case."""
     H = W = size
-    px = uv[:, 0] * (W - 1)
-    py = (1.0 - uv[:, 1]) * (H - 1)   # glTF UV origin is bottom-left, image row 0 is top
     for f in faces:
         i0, i1, i2 = f
-        x0, x1, x2 = px[i0], px[i1], px[i2]
-        y0, y1, y2 = py[i0], py[i1], py[i2]
+        offset = np.floor(uv[i0])
+        u0, v0 = uv[i0] - offset
+        u1, v1 = uv[i1] - offset
+        u2, v2 = uv[i2] - offset
+        x0, x1, x2 = u0 * (W - 1), u1 * (W - 1), u2 * (W - 1)
+        y0, y1, y2 = (1.0 - v0) * (H - 1), (1.0 - v1) * (H - 1), (1.0 - v2) * (H - 1)  # glTF UV origin is bottom-left, image row 0 is top
         xlo = max(int(np.floor(min(x0, x1, x2))), 0); xhi = min(int(np.ceil(max(x0, x1, x2))), W - 1)
         ylo = max(int(np.floor(min(y0, y1, y2))), 0); yhi = min(int(np.ceil(max(y0, y1, y2))), H - 1)
         if xhi < xlo or yhi < ylo:
