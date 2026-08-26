@@ -34,3 +34,11 @@ belong to the team (Dongchen); read where they live, never write, never move.
 - Published web root: /project/3dlg-hcvc/omages/www/yanxg/lightgen
   (merge-copy, never delete).
 - Console, pages, jobs board: xgconsole/ in this repo.
+
+## Render pipeline default (owner-ratified 2026-08-25)
+
+Bulk emission galleries render VOXEL-NATIVE
+(emissive/render/render_voxel_native.py); the artist-UV bake
+(emissive/render/bpy_rebake.py) is reserved for hand-picked figures
+needing the asset's own color or sub-voxel detail, with the bake verified
+non-empty. Evidence: the render_ab_study page.
