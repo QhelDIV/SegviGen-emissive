@@ -347,6 +347,18 @@ def main():
     if strat_out:
         out_json["stratified"] = strat_out
         out_json["bucket_by"] = args.bucket_by
+    # PER-SHAPE ROWS, added 2026-08-25. Aggregates alone cannot support a paired
+    # comparison, and comparing two checkpoints on the SAME frozen subset is
+    # inherently paired: the between-shape variance, which dominates, cancels.
+    # Without these rows that analysis needs the eval re-run, which is hours per
+    # point, so they are always written rather than hidden behind a flag.
+    # Note what draw_std is, since it is easy to misread and was: each row's
+    # iou_std_by_thr is the std ACROSS DRAWS for that one shape, and the top-level
+    # draw_std is the MEAN of those over shapes. It is within-shape variability,
+    # NOT the standard error of the set mean; that standard error is
+    # draw_std/sqrt(n*draws) if per-shape draw noise is independent.
+    # Purely additive: no existing key changes and older jsons stay readable.
+    out_json["per_sample"] = result["per_sample"]
     json.dump(out_json, open(os.path.join(args.dataset, f"eval_{args.split}.json"), "w"))
 
 
