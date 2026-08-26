@@ -79,6 +79,7 @@ torchrun --standalone --nproc_per_node 4 \
   --val_quick 8 \
   --select_on nonzero \
   --save_every 1 \
+  --prefetch 4 \
   2>&1 | awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush() }'
 
 echo "RUN_END $(date -Is)"
