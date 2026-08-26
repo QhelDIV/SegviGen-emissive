@@ -48,10 +48,21 @@ Cluster rules (mechanics live in solar-runner and the solar-slurm skill):
 - Partitions (owner-set 2026-08-25): 3dlg-hcvc-lab-* is the default and
   the ONLY home for stateful jobs. cs-gpu-research (tier 50,
   PreemptMode=REQUEUE, ~2,100 CPUs across 21 nodes) is sanctioned
-  OVERFLOW: render/export arrays span both partitions freely (idempotent
-  tasks + result cache make a requeue cost a few panels). Training there
-  needs the preemptible pattern (--requeue + auto-resume from newest
-  ckpt+sidecar + per-epoch saves); see solar-runner for the full rule.
+  OVERFLOW in principle, BUT (measured 2026-08-26): its non-lab nodes
+  (cs-bd-01, cs-gpu1, cs-gpu3, cs-venus-01/03/06) do NOT mount /project,
+  so any job whose venv or data lives there dies on arrival
+  (STALE_MOUNT_ABORT). Using it requires staging env+data node-local,
+  vulcan-style; until someone builds that, render arrays stay on the lab
+  partitions. cs-venus-08 and cs-venus-14 have the same dead mount on
+  the LAB partition; exclude them in render arrays. Training on
+  cs-gpu-research needs the preemptible pattern (--requeue +
+  auto-resume from newest ckpt+sidecar + per-epoch saves); see
+  solar-runner for the full rule.
+- Wide render arrays: 64 cores/task is the throughput default, but when
+  usable NODES are the constraint, prefer more concurrent 16-core tasks
+  (16 cores is ~4x slower per panel; 4 nodes at 64 cores = 4 panels at
+  a time, the same nodes at 16 cores = ~5x the throughput). Optimize
+  total wall time, not per-panel time, and say which you chose.
 - Fresh mass-created trees suffer transient NFS negative-dentry misses: a
   node caches "file missing" from a cold scan and repeats it for ~minutes.
   Pre-flight any new split/farm with the CONSUMER'S OWN admission predicate,
