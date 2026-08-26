@@ -337,7 +337,21 @@ def to_glb_emissive(
     mask = mask.cpu().numpy()
     
     # Extract channels based on layout (BaseColor, Metallic, Roughness, Alpha)
-    base_color = np.clip(attrs[..., attr_layout['base_color']].cpu().numpy() * 255, 0, 255).astype(np.uint8)
+    #
+    # COLOR SPACE (bug found 2026-08-25, shape 67b4b4ef): the attribute volume
+    # stores albedo in LINEAR space (the dataset's voxel albedo equals the
+    # artist sRGB texture pushed through the sRGB->linear transfer; verified to
+    # three decimals on two materials). glTF defines baseColorTexture and
+    # emissiveTexture as sRGB-encoded, so writing the linear values straight
+    # into the PNG makes every renderer decode them a SECOND time: mid-tones
+    # collapse and hues shift toward the dominant channel (cyan bars rendered
+    # dark blue). Encode color channels to sRGB here; metallic/roughness/alpha
+    # are defined linear in glTF and must stay untouched.
+    def _lin2srgb(x):
+        return np.where(x <= 0.0031308, x * 12.92,
+                        1.055 * np.clip(x, 0.0, None) ** (1 / 2.4) - 0.055)
+
+    base_color = np.clip(_lin2srgb(attrs[..., attr_layout['base_color']].cpu().numpy()) * 255, 0, 255).astype(np.uint8)
     metallic = np.clip(attrs[..., attr_layout['metallic']].cpu().numpy() * 255, 0, 255).astype(np.uint8)
     roughness = np.clip(attrs[..., attr_layout['roughness']].cpu().numpy() * 255, 0, 255).astype(np.uint8)
     alpha = np.clip(attrs[..., attr_layout['alpha']].cpu().numpy() * 255, 0, 255).astype(np.uint8)
@@ -357,7 +371,7 @@ def to_glb_emissive(
     # where the glow is brightest.
     emissive_img = None
     if 'emissive' in attr_layout:
-        emissive = np.clip(attrs[..., attr_layout['emissive']].cpu().numpy() * 255, 0, 255).astype(np.uint8)
+        emissive = np.clip(_lin2srgb(attrs[..., attr_layout['emissive']].cpu().numpy()) * 255, 0, 255).astype(np.uint8)
         emissive = cv2.inpaint(emissive, mask_inv, 3, cv2.INPAINT_TELEA)
         emissive_img = Image.fromarray(emissive)
     # -------------------------------------------------------------------------
