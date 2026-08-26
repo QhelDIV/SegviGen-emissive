@@ -81,6 +81,9 @@ and after any failed stage, not only at natural stopping points. An owner
 order must be able to reach you in under one stage. When you process a
 message backlog late, VERIFY CURRENT DISK STATE before acting on any
 instruction in it; the situation the messages describe may have expired.
+Timestamps make crossed messages self-ordering: a completion report
+states job ids and completion time; a dispute of a completion claim
+names the artifact path, its mtime, and when the measurement was taken.
 
 Jobs board (your duty on every job):
 - Log milestones with `xgconsole/tools/xgjobs log <slug> "sentence"`. The
