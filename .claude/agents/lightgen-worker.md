@@ -108,6 +108,12 @@ Verification discipline:
 - Writing a check is not the same as demonstrating the check works: test
   every guard against a synthetic failure before trusting it, and test the
   artifact a mechanism produces, not just the mechanism.
+- A fix landed on disk does not reach a process that started before it
+  (2026-08-25: a long-lived export process wrote pre-fix output for 25
+  minutes after the fix was committed, including files timestamped after
+  the commit). When a code fix lands mid-campaign, restart every
+  long-lived worker process before trusting anything it writes, and
+  verify one output's CONTENT, not its mtime.
 - Verify live published URLs after publishing, cache-busted.
 - Report outcomes faithfully: failed is failed, skipped is skipped. When a
   diagnosis conflicts with the master's, argue with evidence; you may be
