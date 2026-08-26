@@ -54,6 +54,8 @@ sys.path.insert(0, EVAL_DIR)
 from pred_mask_to_asset import read_glb, primitives, rasterise_into  # noqa: E402
 
 GRID = 512
+# points spread over a flat material by area when estimating its lit fraction
+FLAT_AREA_SAMPLES = 4000
 
 
 def compute_frame(gltf, bins):
@@ -67,6 +69,43 @@ def compute_frame(gltf, bins):
 
 def to_voxel(pts, centre, scale):
     return ((((pts - centre) * scale) + 0.5) * GRID) - 0.5
+
+
+def area_lit_fraction(faces_this_mat, tree_lit, centre, scale, tol, n=FLAT_AREA_SAMPLES):
+    """Fraction of a material's SURFACE AREA within `tol` voxels of a lit voxel.
+
+    Points are spread over the material in proportion to triangle area, not one per
+    triangle. The centroid test this replaces has the triangle as its resolution, so
+    it collapses on coarse meshes: the clock's display is two triangles about 249
+    voxels across, both centroids landed further than tol from the nearest lit digit,
+    and the material scored 0.0 while 12.2% of its area is in fact within tolerance.
+
+    Returns (fraction, n_points). fraction is 0.0 with n_points 0 when the material
+    has no faces or the mask has no lit voxels; callers must treat that as "not
+    measured", not as "measured zero".
+    """
+    if not faces_this_mat or tree_lit is None:
+        return 0.0, 0
+    tris = np.array([prim["positions"][prim["faces"][li]] for prim, li in faces_this_mat])
+    area = 0.5 * np.linalg.norm(np.cross(tris[:, 1] - tris[:, 0],
+                                         tris[:, 2] - tris[:, 0]), axis=1)
+    total = float(area.sum())
+    if total <= 0:
+        pts = tris.mean(axis=1)
+    else:
+        rng = np.random.default_rng(0)
+        counts = rng.multinomial(n, area / total)
+        acc = []
+        for t, c in zip(tris, counts):
+            if not c:
+                continue
+            u = rng.random((c, 1)); w = rng.random((c, 1))
+            over = (u + w) > 1
+            u[over] = 1 - u[over]; w[over] = 1 - w[over]
+            acc.append(t[0] + u * (t[1] - t[0]) + w * (t[2] - t[0]))
+        pts = np.concatenate(acc) if acc else tris.mean(axis=1)
+    d, _ = tree_lit.query(to_voxel(pts, centre, scale), k=1)
+    return float((d <= tol).mean()), int(len(pts))
 
 
 def material_albedo_const(gltf, mat_idx):
@@ -320,8 +359,24 @@ def main():
         rec = {"material_index": mat, "blender_slot": slot, "material_name": name,
                "has_base_color_texture": has_tex}
 
-        if mat in tex_bufs and has_tex:
-            pos_buf, valid_buf = tex_bufs[mat]
+        # BUG FIX (2026-08-25, the SECOND black-panel class, after the UV clamp):
+        # this used to read `if mat in tex_bufs and has_tex`, sending every
+        # material WITHOUT a base-color texture down the flat branch below. That
+        # branch can only emit uniformly over a whole material, so a localized
+        # emitter on a flat material had no representation at all and rendered
+        # black: the ring's engraved script (lit_face_frac 0.110) and the truck's
+        # lamps (0.157) were both detected and then discarded by --flat_thr 0.5.
+        #
+        # The premise was wrong. A per-texel mask on a flat material carries no
+        # VARYING albedo, but the constant baseColorFactor is a perfectly good
+        # albedo, and render_emissive_closest.py's --pred_masks path already
+        # multiplies the mask by whatever feeds Base Color, which for a flat
+        # material IS that constant. The rasterisation was already done for these
+        # materials too (tex_bufs is filled for every matched face regardless of
+        # has_tex) and simply thrown away. So: take the texel path whenever the
+        # material actually rasterized texels, textured or not.
+        pos_buf, valid_buf = tex_bufs.get(mat, (None, None))
+        if valid_buf is not None and valid_buf.any():
             texel_coverage = float(valid_buf.mean())
             rec["texel_coverage"] = texel_coverage
             mask = np.zeros((args.tex, args.tex), dtype=np.float32)
@@ -347,37 +402,62 @@ def main():
             img = np.zeros((args.tex, args.tex, 4), dtype=np.uint8)
             img[..., 0] = img[..., 1] = img[..., 2] = (mask * 255).astype(np.uint8)
             img[..., 3] = 255
+            # ANOMALY GATE (2026-08-25): a material can hold perfectly good raw UVs,
+            # sit right next to lit voxels, and still transfer nothing, because this
+            # script reads ONE globally active Blender UV layer while a glTF may
+            # carry several TEXCOORD sets per mesh (15 of the 55 shapes in the
+            # current gallery declare more than one). The clock's display is the
+            # caught case: raw UVs spanning a healthy rectangle, 12.2% of its area
+            # within tolerance of a lit voxel, and 0 lit texels. Measure the support
+            # independently of the atlas and say so when the two disagree.
+            faces_this_mat = [(prim, li) for poly, prim, li in matched
+                              if prim["material"] == mat]
+            support, n_pts = area_lit_fraction(faces_this_mat, tree_lit, centre,
+                                               scale, args.tol)
+            rec["area_lit_frac"] = support
+            if n_pts and support > 0 and int(mask.sum()) == 0:
+                print(f"MASK_SUPPORT_NOT_TRANSFERRED_WARNING mat={mat} ({name}): "
+                      f"{support:.4f} of this material's AREA is within {args.tol} "
+                      f"voxels of a lit voxel, but it rasterized {int(mask.sum())} "
+                      f"lit texels (texel_coverage={texel_coverage:.4f}). The mask is "
+                      f"not reaching the atlas. Usual cause: the asset declares more "
+                      f"than one TEXCOORD set and this script reads a single active "
+                      f"UV layer. This material will render black.", flush=True)
             png = os.path.join(args.out_dir, f"{args.sid}__mat{slot}__emis.png")
             Image.fromarray(img).save(png)
             rec["mask_png"] = png
-            rec["carrier"] = "texture"
+            rec["carrier"] = "texture" if has_tex else "texel_flat"
             # team-lead request (2026-08-11): print per-material lit-texel
             # count so a zero transfer is visible in the log, not just in a
             # stats.json field nobody is looking at.
-            print(f"MAT {mat} ({name}) carrier=texture texel_coverage={texel_coverage:.4f} "
-                  f"n_lit_texels={int(mask.sum())} lit_texel_frac_of_covered={rec['lit_texel_frac_of_covered']:.4f}",
+            print(f"MAT {mat} ({name}) carrier={rec['carrier']} texel_coverage={texel_coverage:.4f} "
+                  f"n_lit_texels={int(mask.sum())} lit_texel_frac_of_covered={rec['lit_texel_frac_of_covered']:.4f} "
+                  f"area_lit_frac={support:.4f} n_area_pts={n_pts} n_faces={len(faces_this_mat)}",
                   flush=True)
         else:
-            # FLAT-MATERIAL BRANCH: no baseColorTexture actually usable, so a
-            # per-texel mask carries no albedo regardless of rasterization
-            # quality. Decide from FACE centroids directly, bypassing the
-            # texture atlas.
+            # UNIFORM FALLBACK: this material rasterized NO texels at all, so it
+            # has no usable UV layout and a per-texel mask is impossible. The only
+            # thing left is one emission colour for the whole material, scaled by
+            # how much of it is lit. This cannot localize, which is why it is now
+            # the fallback rather than the path every untextured material took.
             faces_this_mat = [(prim, local_idx) for poly, prim, local_idx in matched
                               if prim["material"] == mat]
-            if faces_this_mat and tree_lit is not None:
-                centroids = np.array([prim["positions"][prim["faces"][li]].mean(axis=0)
-                                      for prim, li in faces_this_mat])
-                q = to_voxel(centroids, centre, scale)
-                if args.continuous:
-                    d_near, idx_near = tree_lit.query(q, k=1)
-                    within = d_near <= args.tol
-                    vals = np.where(within, pred_vals[idx_near].clip(0, 1), 0.0)
-                    lit_frac = float(vals.mean())
-                else:
-                    d_lit, _ = tree_lit.query(q, k=1)
-                    lit_frac = float((d_lit <= args.tol).mean())
-            else:
-                lit_frac = 0.0
+            # ANOMALY GATE (2026-08-25): a material with no faces matched, or no
+            # lit voxels anywhere, silently scored 0.0 here with nothing in the
+            # log saying zero faces were even considered. Say so.
+            if not faces_this_mat:
+                print(f"FLAT_NO_FACES_WARNING mat={mat} ({name}): the face "
+                      f"correspondence matched ZERO faces to this material, so its "
+                      f"lit fraction is being defaulted to 0 without measuring "
+                      f"anything. This material cannot emit.", flush=True)
+            if tree_lit is None:
+                print(f"FLAT_NO_LIT_WARNING mat={mat} ({name}): no lit voxels in the "
+                      f"source mask at all.", flush=True)
+            lit_frac, n_pts = area_lit_fraction(faces_this_mat, tree_lit, centre,
+                                                scale, args.tol)
+            if args.continuous and n_pts:
+                pass   # continuous shading is a texel-path notion; the uniform
+                       # fallback stays a binary area fraction
             rec["lit_face_frac"] = lit_frac
             rec["carrier"] = "flat" if lit_frac >= args.flat_thr else "none"
             if lit_frac >= args.flat_thr:
@@ -405,7 +485,7 @@ def main():
     # the other shapes in the same fan-out finish is worth more here than a
     # crash that would have to be re-run shape by shape.
     any_lit = int(lit.sum()) > 0
-    any_transferred = any(r.get("carrier") in ("texture", "flat") and
+    any_transferred = any(r.get("carrier") in ("texture", "texel_flat", "flat") and
                           (r.get("lit_texel_frac_of_covered", 0) > 0 or "uniform_rgb" in r)
                           for r in stats["materials"])
     if any_lit and not any_transferred:
