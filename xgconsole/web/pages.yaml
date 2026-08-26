@@ -28,6 +28,26 @@
 # as "no upstream", so double-check the build's warning output after
 # editing this file.
 pages:
+  - name: _preview/trainer_speedup
+    shortname: trainer_speedup
+    tags: [tooling, workspace]
+    important: true
+    upstreams: [ddp_trainer]
+    blurb: >
+      Tests a bottleneck analysis from Dongchen's agent (0.41s/sample blocked on a
+      synchronous file read, gradient checkpointing leaving memory to trade for speed)
+      against measurement on solar. Overlapping the read with compute gives a real 1.29x
+      once measured on shapes nothing had read that day (the first bench, on a subset
+      warmed by earlier smoke tests, showed almost no wait at all and would have wrongly
+      called the fix pointless). A slimmer conditioning file is proven byte-identical and
+      halves that file's bytes, but is not yet built at production scale. Turning off
+      gradient checkpointing OOMs a 44GB L40S in all 24 grid cells it was tried in,
+      vindicating the trainer's original default rather than overturning it; H100 is
+      untested. Parity holds across three independent baseline runs and the patched run,
+      with one single-step anomaly traced (via a byte-level checksum trace over 380+
+      further steps) to ordinary GPU floating-point noise, not corrupted or reordered
+      data, and disclosed with a production watchdog condition rather than hidden.
+
   - name: _preview/sample56_latest
     shortname: sample56_latest
     tags: [results, workspace]

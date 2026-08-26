@@ -21,7 +21,7 @@ Multi-GPU (single node, PyTorch DDP) -- see emissive/slurm/README_DDP.md:
 Launched without torchrun, WORLD_SIZE is unset and the script takes the exact
 single-GPU path it always took: no process group, no DDP wrapper, no reseeding.
 """
-import os, sys, json, argparse, glob, time, contextlib, re
+import os, sys, json, argparse, glob, time, contextlib, re, threading, queue, socket
 from datetime import timedelta
 ROOT = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isfile(os.path.join(ROOT, "inference_full.py")):
@@ -119,10 +119,16 @@ class FlowStep(nn.Module):
 
 
 class EmisDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_root, split, cond_mode, require_mask=True, prebuilt=None):
+    def __init__(self, dataset_root, split, cond_mode, require_mask=True, prebuilt=None,
+                 cond_file="cond.pth"):
         assert cond_mode in ("real", "zero")
         self.cond_mode = cond_mode
         self.require_mask = require_mask
+        # cond_file: see --cond_file help. The scan below still checks for cond.pth
+        # (the original, authoritative file) regardless of this -- a sample is only
+        # ever admitted/rejected on that check, so --cond_file never changes which
+        # shapes train, only which bytes get read for a shape that already qualifies.
+        self.cond_file = cond_file
         self.dirs = []
         self.fracs = []   # per-sample emissive fraction (for class-imbalance oversampling)
         if prebuilt is not None:
@@ -169,9 +175,94 @@ class EmisDataset(torch.utils.data.Dataset):
         if self.cond_mode == "zero":
             cond = torch.zeros(1, COND_T, COND_D)
         else:
-            cond = torch.load(os.path.join(d, "cond.pth"), map_location="cpu")["cond"]
+            cond = self._load_cond(d)
         mask = torch.load(os.path.join(d, "emis_mask.pth"), map_location="cpu") if self.require_mask else None
         return shp, itx, otx, cond, mask
+
+    def _load_cond(self, d):
+        """cond.pth (the original, --build_dataset.py --real_cond output) is a dict
+        with BOTH halves of a classifier-free-guidance pair: {"cond": ..., "neg_cond":
+        ...}, each (1,1029,1024) fp32 -- ~4.2MB apiece, ~8.4MB/file measured. Training
+        only ever reads ["cond"]; the neg half is fp32 bytes pulled over NFS and
+        immediately discarded, every sample, every epoch. --cond_file names a slim
+        per-sample sidecar (built once by build_cond_pos.py) holding just that tensor;
+        when it exists for THIS sample we read ~half the bytes. Falls back to cond.pth
+        per-sample so a partially-converted split still trains correctly, just without
+        the saving on the unconverted shapes -- never a hard requirement, never a
+        silent behavior change to what tensor gets used."""
+        if self.cond_file != "cond.pth":
+            slim_path = os.path.join(d, self.cond_file)
+            if os.path.isfile(slim_path):
+                payload = torch.load(slim_path, map_location="cpu")
+                return payload["cond"] if isinstance(payload, dict) else payload
+        return torch.load(os.path.join(d, "cond.pth"), map_location="cpu")["cond"]
+
+
+_STREAM_DONE = object()
+
+
+class _Prefetcher:
+    """One background thread walks `indices` through `ds[idx]` IN ORDER, buffering
+    up to `depth` results ahead in a FIFO queue. This is the whole mechanism -- no
+    reordering, no resampling, no second thread -- so the sequence of (index,
+    sample) pairs the training loop sees is bit-for-bit the sequence it would see
+    calling ds[idx] synchronously in the same order; only the WHEN changes (the
+    read for step k+1 starts while step k is still computing on GPU, instead of
+    after it finishes). That is what makes parity provable by construction rather
+    than by measurement: the loop's consumption order is a static list computed
+    once per epoch (idx_seq) before either code path runs.
+
+    A plain thread + queue.Queue instead of torch.utils.data.DataLoader(num_workers)
+    on purpose: DataLoader's worker processes fork a *new* CUDA-free process for
+    each worker, which is fine for the pattern it was designed for (batch collation)
+    but complicates: (a) SparseTensor dict-of-dict samples don't have a canonical
+    collate_fn here since batch size is 1 shape per step already, (b) the multi-GPU
+    path already has one process per rank; adding DataLoader workers on top adds a
+    second process-count knob whose interaction with the DDP world hasn't been
+    scoped. A thread reading files is enough: torch.load spends its time in the
+    NFS read and pickle deserialization, both of which release the GIL, so a single
+    background thread genuinely overlaps with this rank's GPU-bound main thread."""
+
+    def __init__(self, ds, indices, depth):
+        self.exc = None
+        self._q = queue.Queue(maxsize=max(1, depth))
+        self._thread = threading.Thread(
+            target=self._worker, args=(ds, indices), daemon=True)
+        self._thread.start()
+
+    def _worker(self, ds, indices):
+        try:
+            for idx in indices:
+                self._q.put((idx, ds[idx]))
+        except BaseException as e:
+            self.exc = e
+        finally:
+            self._q.put(_STREAM_DONE)
+
+    def __iter__(self):
+        while True:
+            item = self._q.get()
+            if item is _STREAM_DONE:
+                break
+            yield item
+        if self.exc is not None:
+            raise self.exc
+
+
+def make_sample_stream(ds, idx_seq, depth):
+    """Yields (index, ds[index]) for every index in idx_seq, IN ORDER.
+
+    depth <= 0 (the default, --prefetch 0): synchronous, calls ds[idx] one at a
+    time exactly as the training loop always did -- identical code path, so this
+    is a strict no-op for anyone not passing --prefetch.
+    depth > 0: overlaps those same calls, in the same order, with a background
+    thread (see _Prefetcher); the training loop still consumes them strictly in
+    idx_seq order, so which shape trains on which step is unaffected."""
+    if depth <= 0:
+        for idx in idx_seq:
+            yield idx, ds[idx]
+        return
+    yield from _Prefetcher(ds, idx_seq, depth)
 
 
 def ema_update(ema_state, model, decay):
@@ -237,6 +328,210 @@ def prune_states(out_dir, keep):
         os.remove(path)
         print(f"[state] pruned {os.path.basename(path)} (--keep_state {keep}; "
               f"weights untouched)", flush=True)
+
+
+def run_bench(args, p0, is_dist, rank, world_size, device, ds, gen, model, opt, scheduler, ema_state,
+             sm, ss, tm, ts):
+    """--bench_steps mode: the speed gate. Runs the real per-sample step body (same
+    ds/gen/model/opt/scheduler objects main() already built with THIS invocation's
+    --prefetch/--cond_file/--no_grad_ckpt live) for a fixed number of optimizer
+    steps, timing five phases per micro-step with torch.cuda.synchronize() at every
+    boundary so each phase reflects GPU-complete work, not just kernel-launch time.
+    Warmup steps run the identical code path but are excluded from every number, so
+    CUDA allocator growth / Triton autotune / AdamW's first-step state init don't
+    leak into the steady-state measurement. See --bench_steps's help for the
+    contract; this function is deliberately NOT called from the normal training
+    loop so that loop, and the parity check that exercises it, stay untouched."""
+    if args.seed is None:
+        raise RuntimeError("--bench_steps requires --seed: every bench cell must draw the "
+                           "identical shape subset or cells are not comparable to each other.")
+    n_warmup_micro = args.bench_warmup * args.grad_accum
+    n_meas_micro = args.bench_steps * args.grad_accum
+    total_micro = n_warmup_micro + n_meas_micro
+    n_draw_global = total_micro * world_size
+    if n_draw_global > len(ds):
+        raise RuntimeError(f"--bench_steps needs {n_draw_global} shapes globally "
+                           f"((warmup+steps)*grad_accum*world_size) but '{args.train_split}' "
+                           f"only has {len(ds)}; lower --bench_steps/--bench_warmup/--grad_accum "
+                           f"or point at a bigger split.")
+    # one synthetic "epoch" (fixed at 1): the SAME draw formula the real per-epoch
+    # loop uses, so a bench cell draws exactly the shapes epoch 1 of a real run with
+    # this --seed would draw
+    g_draw = torch.Generator()
+    g_draw.manual_seed(args.seed * 7919 + 1)
+    if args.emis_oversample:
+        samp_w = torch.tensor([(f + 0.1) ** args.oversample_pow for f in ds.fracs])
+        gidxs = torch.multinomial(samp_w, n_draw_global, replacement=True, generator=g_draw).tolist()
+    else:
+        gidxs = torch.randperm(len(ds), generator=g_draw).tolist()[:n_draw_global]
+    my_pos = list(range(rank, n_draw_global, world_size))
+    idx_seq = [gidxs[p] for p in my_pos]
+    stream = iter(make_sample_stream(ds, idx_seq, args.prefetch))
+
+    phases = {"data_wait": [], "h2d": [], "forward": [], "backward": [], "optimizer": [], "sync_wait": []}
+    opt.zero_grad(set_to_none=True)
+
+    def micro_step(k, measure):
+        gpos = my_pos[k]
+        t_req = time.time()
+        j, (shp, itx, otx, cond, mask) = next(stream)
+        t_got = time.time()
+
+        t0 = time.time()
+        coords = shp["coords"].to(device)
+        shp_f = (shp["feats"].to(device) - sm) / ss
+        itx_f = (itx["feats"].to(device) - tm) / ts
+        data = (otx["feats"].to(device) - tm) / ts
+        cond_dev = cond.to(device)
+        torch.cuda.synchronize(device)
+        t1 = time.time()
+
+        g_n = torch.Generator(device=device)
+        g_n.manual_seed((args.seed * 1000003 + 1 * 10007 + gpos) % (2 ** 31 - 1))
+        noise = torch.randn(data.shape, dtype=data.dtype, device=device, generator=g_n)
+        t = torch.rand(1, device=device, generator=g_n)
+        x_t = t * noise + (1 - t) * data
+        v_target = noise - data
+        t_model = (t * 1000).expand(1)
+
+        is_sync_step = ((k + 1) % args.grad_accum == 0) or (k + 1 == total_micro)
+        sync_ctx = model.no_sync() if (is_dist and not is_sync_step) else contextlib.nullcontext()
+        with sync_ctx:
+            t2 = time.time()
+            v_pred_feats = model(x_t, itx_f, shp_f, coords, t_model, cond_dev)
+            if args.balanced_pos_weight > 0:
+                mask_dev = mask.to(device)
+                p = mask_dev.mean().clamp(min=1e-4)
+                W_shape = torch.clamp((1 - p) / p, max=args.balanced_pos_weight)
+                w = 1 + (W_shape - 1) * mask_dev
+                w = w / w.mean().clamp(min=1e-8)
+                loss = (w[:, None] * (v_pred_feats - v_target) ** 2).mean()
+            elif args.pos_weight != 1.0:
+                w = 1 + (args.pos_weight - 1) * mask.to(device)
+                w = w / w.mean().clamp(min=1e-8)
+                loss = (w[:, None] * (v_pred_feats - v_target) ** 2).mean()
+            else:
+                loss = nn.functional.mse_loss(v_pred_feats, v_target)
+            torch.cuda.synchronize(device)
+            t3 = time.time()
+
+            t4 = time.time()
+            (loss / args.grad_accum).backward()
+            torch.cuda.synchronize(device)
+            t5 = time.time()
+
+        sync_wait_ms = None
+        if is_dist and is_sync_step:
+            # straggler proxy: how much longer the SLOWEST rank's sync-step backward
+            # took than this rank's own -- the gap this rank spent blocked inside
+            # DDP's fused all-reduce waiting on the slowest rank, not computing
+            bt = torch.tensor([(t5 - t4) * 1000], device=device)
+            dist.all_reduce(bt, op=dist.ReduceOp.MAX)
+            sync_wait_ms = max(0.0, bt.item() - (t5 - t4) * 1000)
+
+        opt_ms = 0.0
+        if is_sync_step:
+            t6 = time.time()
+            torch.nn.utils.clip_grad_norm_(gen.parameters(), 1.0)
+            opt.step()
+            opt.zero_grad(set_to_none=True)
+            if scheduler is not None:
+                scheduler.step()
+            if ema_state is not None:
+                ema_update(ema_state, gen, args.ema)
+            torch.cuda.synchronize(device)
+            t7 = time.time()
+            opt_ms = (t7 - t6) * 1000
+
+        if measure:
+            phases["data_wait"].append((t_got - t_req) * 1000)
+            phases["h2d"].append((t1 - t0) * 1000)
+            phases["forward"].append((t3 - t2) * 1000)
+            phases["backward"].append((t5 - t4) * 1000)
+            if is_sync_step:
+                phases["optimizer"].append(opt_ms)
+            if sync_wait_ms is not None:
+                phases["sync_wait"].append(sync_wait_ms)
+
+    p0(f"[bench] warming up {args.bench_warmup} optimizer steps ({n_warmup_micro} micro-steps, "
+       f"excluded from the numbers)...", flush=True)
+    for k in range(n_warmup_micro):
+        micro_step(k, measure=False)
+
+    torch.cuda.synchronize(device)
+    dist_barrier(is_dist)
+    torch.cuda.reset_peak_memory_stats(device)
+    region_t0 = time.time()
+    p0(f"[bench] measuring {args.bench_steps} optimizer steps ({n_meas_micro} micro-steps)...",
+       flush=True)
+    for k in range(n_warmup_micro, total_micro):
+        micro_step(k, measure=True)
+    torch.cuda.synchronize(device)
+    dist_barrier(is_dist)
+    region_t1 = time.time()
+
+    peak_bytes = float(torch.cuda.max_memory_allocated(device))
+    measured_shapes = n_meas_micro
+    if is_dist:
+        pb = torch.tensor([peak_bytes], device=device)
+        dist.all_reduce(pb, op=dist.ReduceOp.MAX)
+        peak_bytes = pb.item()
+        mst = torch.tensor([float(measured_shapes)], device=device)
+        dist.all_reduce(mst, op=dist.ReduceOp.SUM)
+        measured_shapes_global = mst.item()
+    else:
+        measured_shapes_global = float(measured_shapes)
+    dt = region_t1 - region_t0
+    shapes_per_s = measured_shapes_global / max(dt, 1e-9)
+
+    def mean(xs):
+        return sum(xs) / len(xs) if xs else None
+
+    result = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "node": os.environ.get("SLURMD_NODENAME", socket.gethostname()),
+        "gpu": torch.cuda.get_device_name(device) if torch.cuda.is_available() else None,
+        "world_size": world_size,
+        "tag": args.bench_tag,
+        "config": {
+            "prefetch": args.prefetch,
+            "cond_file": args.cond_file,
+            "grad_ckpt": not args.no_grad_ckpt,
+            "grad_accum": args.grad_accum,
+            "cond": args.cond,
+            "emis_oversample": args.emis_oversample,
+            "seed": args.seed,
+            "dataset": args.dataset,
+            "train_split": args.train_split,
+        },
+        "bench_warmup_steps": args.bench_warmup,
+        "bench_measured_steps": args.bench_steps,
+        "measured_shapes_global": measured_shapes_global,
+        "measured_wall_s": dt,
+        "shapes_per_s": shapes_per_s,
+        "peak_vram_gb": peak_bytes / 2 ** 30,
+        "phase_ms_per_microstep": {
+            "data_wait": mean(phases["data_wait"]),
+            "h2d": mean(phases["h2d"]),
+            "forward": mean(phases["forward"]),
+            "backward": mean(phases["backward"]),
+        },
+        "phase_ms_per_optstep": {
+            "optimizer": mean(phases["optimizer"]),
+            "sync_wait": mean(phases["sync_wait"]),
+        },
+    }
+    if rank == 0:
+        out_path = args.bench_out or os.path.join(args.out_dir, "bench_results.jsonl")
+        with open(out_path, "a") as f:
+            f.write(json.dumps(result) + "\n")
+        fwd = result["phase_ms_per_microstep"]["forward"]
+        bwd = result["phase_ms_per_microstep"]["backward"]
+        optm = result["phase_ms_per_optstep"]["optimizer"]
+        p0(f"[bench] {shapes_per_s:.3f} shapes/s | peak {result['peak_vram_gb']:.2f} GiB | "
+           f"data_wait={result['phase_ms_per_microstep']['data_wait']:.1f}ms "
+           f"h2d={result['phase_ms_per_microstep']['h2d']:.1f}ms fwd={fwd:.1f}ms bwd={bwd:.1f}ms "
+           f"opt={optm:.1f}ms/optstep -> {out_path}", flush=True)
 
 
 def main():
@@ -343,6 +638,82 @@ def main():
                     help="Register DDP's bf16 gradient-compression hook: gradients are cast to "
                          "bfloat16 for the all-reduce and back afterwards, halving the bytes on "
                          "the wire at the cost of some reduction precision.")
+    ap.add_argument("--prefetch", type=int, default=0,
+                    help="Overlap sample loading with GPU compute: a background thread reads "
+                         "up to N samples ahead of what the training loop is currently working "
+                         "on (see make_sample_stream/_Prefetcher). 0 (default) = off, the "
+                         "original synchronous ds[j] call inline in the loop -- measured 321ms/"
+                         "sample of blocking NFS read on a fresh (never-cached) shape, cutting "
+                         "shapes/s from 0.696 to 0.899 (1.29x) once hidden. The consumption "
+                         "ORDER is identical at any depth: this changes only when a read starts, "
+                         "never which shape a step sees or what bytes it reads (checksummed "
+                         "byte-identical against the synchronous path over 380+ steps). KNOWN "
+                         "CAVEAT: one 200-step parity run showed a single step (1 of ~600 "
+                         "prefetch-enabled steps checked total) with a loss 17x the normal "
+                         "run-to-run noise band despite byte-identical inputs at that step; not "
+                         "reproduced in a further 380-step check. Attributed to kernel-selection "
+                         "timing sensitivity (GPU nondeterminism this project has already "
+                         "documented elsewhere, e.g. the DDP work), not data corruption -- but "
+                         "disclosed rather than hidden. Pair with --val_quick's best.ckpt "
+                         "tracking as a watchdog on any production run (a val-trajectory anomaly "
+                         "is the rollback trigger; --resume from the optimizer sidecar makes that "
+                         "loss-free). 2-4 is enough to hide a single synchronous read behind one "
+                         "step of compute; raising it further only helps if a step is faster than "
+                         "one read.")
+    ap.add_argument("--cond_file", default="cond.pth",
+                    help="Filename to read --cond real's conditioning tensor from inside each "
+                         "sample directory. cond.pth (default) is the original file: a dict with "
+                         "BOTH the pos and neg halves of a classifier-free-guidance pair "
+                         "(~8.4MB/sample measured), of which training only ever uses ['cond']. "
+                         "cond_pos.pth is a slim per-sample sidecar holding just that tensor "
+                         "(~4.2MB), built once via build_cond_pos.py; pass --cond_file "
+                         "cond_pos.pth to use it. Falls back to cond.pth per-sample when the "
+                         "slim file is missing, so a partially-converted split still trains "
+                         "correctly -- this never changes WHICH tensor is used, only how many "
+                         "bytes get read to get it. No existing cond.pth is ever modified or "
+                         "read differently by this flag; it only adds a cheaper place to look "
+                         "first.")
+    ap.add_argument("--no_grad_ckpt", action="store_true", default=False,
+                    help="Leave gradient checkpointing OFF (default: on, unconditionally, for "
+                         "every module with a use_checkpoint attribute -- activations dominate "
+                         "memory for the 1.3B sparse DiT). Checkpointing trades recompute-on-"
+                         "backward for memory; turning it off is faster per step but raises peak "
+                         "memory. MEASURE peak memory on your GPU before relying on this flag in "
+                         "a real run -- the trainer already prints '[mem] rank R: peak allocated' "
+                         "at the end of every run for exactly this check. Recommended only where "
+                         "that measured peak has real headroom below the GPU's VRAM (e.g. an "
+                         "H100's 80GB); the measured L40S number is in the trainer_speedup report.")
+    ap.add_argument("--bench_steps", type=int, default=0,
+                    help="Speed-benchmark mode (a 'unit test for training speed'): measure "
+                         "this many STEADY-STATE optimizer steps and exit, instead of running "
+                         "--epochs of real training. 0 (default) = off, normal training runs. "
+                         "Uses the exact same dataset/model/optimizer/scheduler objects a real "
+                         "run would build -- --prefetch/--cond_file/--no_grad_ckpt are already "
+                         "whichever way this invocation set them by the time bench measurement "
+                         "starts, so this measures the real path, not a stand-in. Requires "
+                         "--seed (every bench cell must draw the identical shape subset to be "
+                         "comparable). Appends one JSON line (config, shapes/s, peak VRAM, a "
+                         "per-phase ms breakdown: data wait / H2D / forward / backward / "
+                         "optimizer, plus a DDP sync-wait estimate when world_size>1) to "
+                         "--bench_out.")
+    ap.add_argument("--bench_warmup", type=int, default=10,
+                    help="Optimizer steps run before bench measurement starts and excluded "
+                         "from it (lets the CUDA caching allocator, cuDNN/Triton autotune, and "
+                         "AdamW's first-step state init settle before anything is timed). Only "
+                         "meaningful with --bench_steps > 0.")
+    ap.add_argument("--bench_out", default=None,
+                    help="Path to append this bench run's JSON line to. Default: "
+                         "<out_dir>/bench_results.jsonl.")
+    ap.add_argument("--bench_tag", default=None,
+                    help="Free-text label recorded in the bench JSON line (e.g. "
+                         "'p2_condslim_ckptoff_ga1'), so a grid sweep's results are readable "
+                         "without reconstructing the flag combination from the config block.")
+    ap.add_argument("--debug_checksum", action="store_true", default=False,
+                    help="DIAGNOSTIC ONLY, not for real runs: print a per-step checksum "
+                         "(voxel count + sum of shp_f/itx_f/data/cond) right after loading, "
+                         "in the REAL (non-bench) training loop. Added to chase a single-step "
+                         "loss anomaly seen with --prefetch on; lets a divergence be narrowed "
+                         "to the LOADED tensors vs. the model/numerics before it reaches loss.")
     args = ap.parse_args()
     is_dist, rank, world_size, local_rank = dist_setup()
 
@@ -410,12 +781,20 @@ def main():
        + (f" (position: epoch {resume_state['epoch']})" if resume_state else ""), flush=True)
     flow = models.from_pretrained("microsoft/TRELLIS.2-4B/ckpts/slat_flow_imgshape2tex_dit_1_3B_512_bf16")
     # gradient checkpointing — activations dominate memory for the 1.3B sparse DiT; this
-    # lets the full fine-tune fit on a 44GB GPU (l40s/a40).
+    # lets the full fine-tune fit on a 44GB GPU (l40s/a40). --no_grad_ckpt skips this,
+    # trading the memory headroom back for the recompute-on-backward it costs; see
+    # --no_grad_ckpt's help and the trainer_speedup report for the measured peak.
     n_ckpt = 0
-    for m in flow.modules():
-        if hasattr(m, "use_checkpoint"):
-            m.use_checkpoint = True; n_ckpt += 1
-    p0(f"[mem] enabled gradient checkpointing on {n_ckpt} modules", flush=True)
+    if not args.no_grad_ckpt:
+        for m in flow.modules():
+            if hasattr(m, "use_checkpoint"):
+                m.use_checkpoint = True; n_ckpt += 1
+        p0(f"[mem] enabled gradient checkpointing on {n_ckpt} modules", flush=True)
+    else:
+        p0("[mem] --no_grad_ckpt: gradient checkpointing left OFF. Check the "
+           "'[mem] rank R: peak allocated' line this run prints at the end against "
+           "your GPU's VRAM before trusting this on anything but a measured config.",
+           flush=True)
     gen = Gen3DSeg(flow).to(device)
     sd = torch.load(init_ckpt, map_location=device)["state_dict"]
     sd = OrderedDict([(k.replace("gen3dseg.", ""), v) for k, v in sd.items()])
@@ -497,16 +876,18 @@ def main():
     if is_dist:
         # one scan on rank 0, shipped to the rest (see EmisDataset(prebuilt=...))
         if rank == 0:
-            ds = EmisDataset(args.dataset, args.train_split, cond_mode=args.cond, require_mask=require_mask)
+            ds = EmisDataset(args.dataset, args.train_split, cond_mode=args.cond,
+                             require_mask=require_mask, cond_file=args.cond_file)
             payload = [(ds.dirs, ds.fracs)]
         else:
             payload = [None]
         dist.broadcast_object_list(payload, src=0)
         if rank != 0:
             ds = EmisDataset(args.dataset, args.train_split, cond_mode=args.cond,
-                             require_mask=require_mask, prebuilt=payload[0])
+                             require_mask=require_mask, prebuilt=payload[0], cond_file=args.cond_file)
     else:
-        ds = EmisDataset(args.dataset, args.train_split, cond_mode=args.cond, require_mask=require_mask)
+        ds = EmisDataset(args.dataset, args.train_split, cond_mode=args.cond,
+                         require_mask=require_mask, cond_file=args.cond_file)
     p0(f"[data] {len(ds)} samples from '{args.train_split}' (cond={args.cond}, "
        f"oversample={args.emis_oversample}, pos_weight={args.pos_weight}, "
        f"balanced_pos_weight={args.balanced_pos_weight})", flush=True)
@@ -543,6 +924,16 @@ def main():
             p0(f"[lr] cosine position restored: step {scheduler.last_epoch} of "
                f"{scheduler.T_max}, lr now {opt.param_groups[0]['lr']:.3e}", flush=True)
 
+    if args.bench_steps > 0:
+        # speed-benchmark mode: measure and exit, never reaching the real per-epoch
+        # training loop below (which is what the parity check exercises instead)
+        run_bench(args, p0, is_dist, rank, world_size, device, ds, gen, model, opt,
+                 scheduler, ema_state, sm, ss, tm, ts)
+        if is_dist:
+            dist.barrier()
+            dist.destroy_process_group()
+        return
+
     log = []
     curve = []
     best_iou = -1.0
@@ -572,19 +963,32 @@ def main():
         else:
             gidxs = torch.randperm(len(ds), **gkw).tolist()[:n_draw_global]
         my_pos = list(range(rank, n_per_rank * world_size, world_size))
+        # the fixed index sequence this rank will consume THIS epoch, in order --
+        # computed once, up front, so --prefetch has a static list to read ahead of
+        # rather than depending on anything the loop body does
+        idx_seq = [gidxs[gpos] for gpos in my_pos]
 
         ep_loss = 0.0
         n_local = 0
         t_epoch = time.time()
         opt.zero_grad(set_to_none=True)
-        for k, gpos in enumerate(my_pos):
-            j = gidxs[gpos]
-            shp, itx, otx, cond, mask = ds[j]
+        for k, (j, (shp, itx, otx, cond, mask)) in enumerate(make_sample_stream(ds, idx_seq, args.prefetch)):
+            gpos = my_pos[k]   # this step's position in the global draw (unchanged by --prefetch)
             coords = shp["coords"].to(device)
             shp_f = (shp["feats"].to(device) - sm) / ss
             itx_f = (itx["feats"].to(device) - tm) / ts
             data  = (otx["feats"].to(device) - tm) / ts
             cond  = cond.to(device)
+
+            if args.debug_checksum:
+                # diagnostic only (see --debug_checksum help): proves whether the
+                # LOADED tensors themselves differ between two runs at the same
+                # step, independent of the loss -- narrows a divergence to the
+                # loader vs. the model/numerics
+                p0(f"[checksum] epoch {epoch:4d} k {k:5d} sid {os.path.basename(ds.dirs[j])} "
+                   f"n_vox={coords.shape[0]} shp_sum={shp_f.sum().item():.6f} "
+                   f"itx_sum={itx_f.sum().item():.6f} data_sum={data.sum().item():.6f} "
+                   f"cond_sum={cond.sum().item():.6f}", flush=True)
 
             if args.seed is None:
                 noise = torch.randn_like(data)
@@ -640,8 +1044,14 @@ def main():
                     sl = torch.tensor([loss.item()], device=device)
                     if is_dist:
                         dist.all_reduce(sl, op=dist.ReduceOp.AVG)
+                    # sid identifies THIS rank's last micro-step in the accumulation
+                    # group (well-defined and exactly one shape/step under the
+                    # grad_accum=1, world_size=1 config the speed/parity harnesses
+                    # use); it lets a parity check diff the drawn-shape SEQUENCE
+                    # across runs programmatically instead of trusting the loss
+                    # curve alone to stand in for "same data in the same order".
                     p0(f"[step] epoch {epoch:4d} step {(k + 1) // args.grad_accum:5d} "
-                       f"| loss {sl.item():.6f}", flush=True)
+                       f"| loss {sl.item():.6f} | sid {os.path.basename(ds.dirs[j])}", flush=True)
 
         # epoch loss is the mean over ALL shapes the epoch touched, not just this
         # rank's share, so the printed curve means the same thing at any world size

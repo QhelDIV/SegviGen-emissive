@@ -3,7 +3,7 @@ executor: renderab-scout
 track: research
 status: ongoing
 started: 2026-08-25 18:38
-updated: 2026-08-26 00:07
+updated: 2026-08-26 01:28
 slurm: 
 link: 
 page: ep8_voxnative
@@ -19,4 +19,5 @@ log:
 - 2026-08-25 22:30 [renderab-scout] Holding the page: a colour bug was found in the exporter after these pictures were made, so every one of them is darker and the wrong hue. The cause on my side was subtle and worth recording: the fix was on disk in time, but my export was one long running process that had loaded the old code into memory when it started, so the repair could not reach it. Verified the repair on one shape before committing to the redo, blue channel of the glowing bars goes from 0.11 to 0.43. Re-exporting all three hundred and thirty on cluster graphics cards now, then everything gets rendered again.
 - 2026-08-25 23:04 [renderab-scout] All three hundred and thirty are re-exported with the colour repair and verified: the glowing bars on the test shape now read blue-dominant and roughly three times brighter, matching the artist's own colour. Re-rendering everything. Two scheduling faults hit and were fixed: the overflow machines cannot see our shared disk at all, and a safety check I had written was itself fatal, killing three hundred and twenty five tasks silently because a probe command was allowed to abort the script.
 - 2026-08-26 00:07 [renderab-scout] Colour redo complete: all three hundred and thirty pictures re-exported and re-rendered with the repair, page republished and verified. The gallery is visibly brighter and truer: a cauldron now glows warm orange where it was muddy, a lantern shows a faint blue glow where it was pure black. Checked at four screen widths, four hundred and forty images all load.
+- 2026-08-26 01:28 [renderab-scout] Corrected one claim on this page too: it said a surface painted pure black cannot be lit by any renderer. Not true, and the colour repair is what revealed it. The old pipeline reads the asset's own paint and gives up; this one reads the shape's reconstruction, which is dim but not black, and lights both such screens. That is a second reason to prefer it for bulk work, and it had been sitting on the page as a limitation instead.
 outcome: 
